@@ -5,6 +5,8 @@
 Multi-agent orchestration engine for Claude Code.
 Two modes, one goal: **ship quality code fast**.
 
+> **[Installation Guide](./INSTALL.md)** | **[Best Practices](./BEST_PRACTICES.md)**
+
 ```
   Conductor (macro)              Guardian (micro)
   ┌──────────────────┐          ┌──────────────────┐
