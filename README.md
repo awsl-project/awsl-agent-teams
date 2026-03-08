@@ -1,3 +1,5 @@
+**English** | [中文](./README.zh-CN.md)
+
 # AWSL Agent Core
 
 Multi-agent orchestration engine for Claude Code.
@@ -432,4 +434,3 @@ awsl agents                  # List all agents
 ## License
 
 MIT
-# awsl-agent-teams

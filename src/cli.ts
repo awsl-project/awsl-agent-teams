@@ -1,0 +1,421 @@
+#!/usr/bin/env node
+/**
+ * AWSL Agent Core — CLI entry point.
+ *
+ * Hybrid mode (for CC skills — no API key needed):
+ *   CC writes PLAN.md → awsl validate → WAVES.md → CC executes → awsl verify
+ *
+ * Full pipeline (terminal use, needs API key):
+ *   awsl run "Build a REST API"
+ *
+ * Install Claude Code skills:
+ *   awsl init
+ */
+
+import * as path from "node:path";
+import { loadAgents } from "./agents.js";
+import { executeTeam } from "./orchestrator.js";
+import { type Engine, detectEngine } from "./runner.js";
+import { validatePlan } from "./validate.js";
+import { runFullVerification, runStaticReview } from "./verify.js";
+import { acquireLock, releaseLock, forceReleaseLock, checkLock, formatLockInfo } from "./lock.js";
+import { log } from "./log.js";
+import { runInstaller } from "./install.js";
+
+function usage() {
+	console.error(`
+  awsl — Multi-Agent Orchestration Engine
+  Conductor (planning & parallelism) + Guardian (TDD & quality)
+
+Commands:
+  init [--global]          Install skills into .claude/skills/
+  validate                 Validate .planning/PLAN.md → compute waves → WAVES.md
+  verify                   Run tests, lint, typecheck from PLAN.md verify fields
+  review                   Static code review (no LLM) — detect any, secrets, missing tests
+  lock                     Show current lock status
+  unlock [--force]         Release lock (--force to override others' locks)
+  run <goal>               Full pipeline (terminal, needs API key)
+  agents                   List available agents
+
+CC Hybrid Mode (no API key needed):
+  1. CC writes plan        → .planning/PLAN.md  (CC does the thinking)
+  2. awsl validate         → .planning/WAVES.md (code: parse, validate, topo-sort)
+  3. CC Agent tool         → execute tasks      (CC full power per task)
+  4. awsl verify           → .planning/VERIFICATION.md (code: run tests/lint)
+
+Options:
+  --cwd <path>             Working directory (default: .)
+  --force                  Override existing lock
+
+Terminal Full Pipeline (no API key needed with --engine claude-code):
+  run <goal>               Full autonomous pipeline — real agent teams
+  --quick                  Skip brainstorm & research
+  --model <provider:model> Default: anthropic:claude-sonnet-4-20250514
+  --concurrency <n>        Default: 2
+  --engine <type>          "claude-code" or "builtin"
+
+Examples:
+  awsl init --global
+  awsl validate
+  awsl verify
+  awsl lock
+  awsl unlock --force
+`);
+}
+
+function parseCwdAndForce(args: string[]): { cwd: string; force: boolean } {
+	let cwd = process.cwd();
+	let force = false;
+	for (let i = 1; i < args.length; i++) {
+		if (args[i] === "--cwd" && i + 1 < args.length) {
+			cwd = path.resolve(args[++i]);
+		} else if (args[i] === "--force") {
+			force = true;
+		}
+	}
+	return { cwd, force };
+}
+
+async function main() {
+	const args = process.argv.slice(2);
+
+	if (args.length === 0 || args[0] === "--help" || args[0] === "-h") {
+		usage();
+		process.exit(0);
+	}
+
+	const command = args[0];
+
+	// ── Init command ────────────────────────────────────────
+	if (command === "init") {
+		runInstaller();
+		process.exit(0);
+	}
+
+	// ── Agents command ──────────────────────────────────────
+	if (command === "agents") {
+		const cwd = process.cwd();
+		const agentsDirs = [path.join(cwd, "agents")];
+		const agents = loadAgents(agentsDirs);
+		console.log("Available agents:\n");
+		for (const a of agents) {
+			console.log(`  ${a.name} (${a.role}) [${a.source}]`);
+			console.log(`    ${a.description}`);
+			if (a.tools) console.log(`    tools: ${a.tools.join(", ")}`);
+			if (a.skills) console.log(`    skills: ${a.skills.join(", ")}`);
+			if (a.model) console.log(`    model: ${a.model}`);
+			console.log();
+		}
+		process.exit(0);
+	}
+
+	// ── Lock status command ─────────────────────────────────
+	if (command === "lock") {
+		const { cwd } = parseCwdAndForce(args);
+		const info = checkLock(cwd);
+		if (info) {
+			console.log(formatLockInfo(info));
+		} else {
+			console.log("No active lock. Project is available.");
+		}
+		process.exit(0);
+	}
+
+	// ── Unlock command ──────────────────────────────────────
+	if (command === "unlock") {
+		const { cwd, force } = parseCwdAndForce(args);
+		if (force) {
+			forceReleaseLock(cwd);
+			console.log("Lock force-released.");
+		} else {
+			const released = releaseLock(cwd);
+			if (released) {
+				console.log("Lock released.");
+			} else {
+				console.error("Could not release lock (owned by another process). Use --force.");
+				process.exit(1);
+			}
+		}
+		process.exit(0);
+	}
+
+	// ── Validate command (pure code, no API key) ────────────
+	if (command === "validate") {
+		const { cwd, force } = parseCwdAndForce(args);
+
+		// Acquire lock
+		const lockResult = acquireLock(cwd, "validate");
+		if (!lockResult.acquired) {
+			if (force) {
+				forceReleaseLock(cwd);
+				acquireLock(cwd, "validate");
+			} else if (lockResult.existingLock) {
+				console.error(formatLockInfo(lockResult.existingLock));
+				process.exit(1);
+			}
+		}
+
+		try {
+			const result = validatePlan(cwd);
+
+			console.log("\n" + "=".repeat(60));
+			if (result.success) {
+				console.log(`Validation: OK — ${result.tasks.length} tasks in ${result.waves.length} waves`);
+				for (let i = 0; i < result.waves.length; i++) {
+					console.log(`  Wave ${i + 1}: ${result.waves[i].join(", ")}`);
+				}
+			} else {
+				console.log(`Validation: FAILED`);
+				for (const e of result.errors) console.log(`  ERROR: ${e}`);
+			}
+			if (result.warnings.length > 0) {
+				for (const w of result.warnings) console.log(`  WARN: ${w}`);
+			}
+			console.log("=".repeat(60));
+
+			console.log("\n__VALIDATE_JSON_START__");
+			console.log(JSON.stringify({
+				success: result.success,
+				taskCount: result.tasks.length,
+				waveCount: result.waves.length,
+				waves: result.waves,
+				errors: result.errors,
+				warnings: result.warnings,
+			}, null, 2));
+			console.log("__VALIDATE_JSON_END__");
+
+			// Keep lock if validation succeeded (CC will execute next)
+			// Release lock if validation failed (nothing to execute)
+			if (!result.success) {
+				releaseLock(cwd);
+			}
+
+			process.exit(result.success ? 0 : 1);
+		} catch (e) {
+			releaseLock(cwd);
+			throw e;
+		}
+	}
+
+	// ── Review command (static code review, no API key) ─────
+	if (command === "review") {
+		const { cwd } = parseCwdAndForce(args);
+
+		const result = runStaticReview(cwd);
+
+		console.log("\n" + "=".repeat(60));
+		console.log(result.summary);
+		if (!result.passed) {
+			console.log("\nCritical findings:");
+			for (const f of result.findings.filter(f => f.severity === "critical")) {
+				console.log(`  ${f.file}:${f.line} [${f.rule}] ${f.message}`);
+			}
+		}
+		console.log("=".repeat(60));
+
+		console.log("\n__REVIEW_JSON_START__");
+		console.log(JSON.stringify({
+			passed: result.passed,
+			criticalCount: result.findings.filter(f => f.severity === "critical").length,
+			warningCount: result.findings.filter(f => f.severity === "warning").length,
+			findings: result.findings.slice(0, 50),
+		}, null, 2));
+		console.log("__REVIEW_JSON_END__");
+
+		process.exit(result.passed ? 0 : 1);
+	}
+
+	// ── Verify command (pure code, no API key) ──────────────
+	if (command === "verify") {
+		const { cwd } = parseCwdAndForce(args);
+
+		const result = runFullVerification(cwd);
+
+		console.log("\n" + "=".repeat(60));
+		console.log(result.summary);
+		console.log("=".repeat(60));
+
+		console.log("\n__VERIFY_JSON_START__");
+		console.log(JSON.stringify({
+			passed: result.passed,
+			items: result.items.map(i => ({ taskId: i.taskId, command: i.command, passed: i.passed })),
+			generalChecks: result.generalChecks.map(i => ({ taskId: i.taskId, command: i.command, passed: i.passed })),
+		}, null, 2));
+		console.log("__VERIFY_JSON_END__");
+
+		// Release lock after verify (end of pipeline)
+		releaseLock(cwd);
+
+		process.exit(result.passed ? 0 : 1);
+	}
+
+	// ── Run command (full pipeline, terminal use) ───────────
+	if (command !== "run") {
+		if (!command.startsWith("-")) {
+			args.unshift("run");
+		} else {
+			usage();
+			process.exit(1);
+		}
+	}
+
+	const runArgs = args.slice(1);
+
+	let model = "anthropic:claude-sonnet-4-20250514";
+	let agentsDirs: string[] = [];
+	let concurrency = 2;
+	let cwd = process.cwd();
+	let quick = false;
+	let planOnlyMode = false;
+	let executePlan = false;
+	let verify = true;
+	let autoCommit = true;
+	let force = false;
+	let engine: Engine | undefined;
+	const positional: string[] = [];
+
+	for (let i = 0; i < runArgs.length; i++) {
+		const arg = runArgs[i];
+		if (arg === "--quick") {
+			quick = true;
+		} else if (arg === "--plan-only") {
+			planOnlyMode = true;
+		} else if (arg === "--execute-plan") {
+			executePlan = true;
+		} else if (arg === "--model" && i + 1 < runArgs.length) {
+			model = runArgs[++i];
+		} else if (arg === "--agents-dir" && i + 1 < runArgs.length) {
+			agentsDirs.push(path.resolve(runArgs[++i]));
+		} else if (arg === "--concurrency" && i + 1 < runArgs.length) {
+			concurrency = parseInt(runArgs[++i], 10);
+		} else if (arg === "--cwd" && i + 1 < runArgs.length) {
+			cwd = path.resolve(runArgs[++i]);
+		} else if (arg === "--no-verify") {
+			verify = false;
+		} else if (arg === "--no-commit") {
+			autoCommit = false;
+		} else if (arg === "--force") {
+			force = true;
+		} else if (arg === "--engine" && i + 1 < runArgs.length) {
+			engine = runArgs[++i] as Engine;
+		} else if (!arg.startsWith("--")) {
+			positional.push(arg);
+		}
+	}
+
+	// Acquire lock for run command
+	const lockResult = acquireLock(cwd, positional.join(" ").slice(0, 60) || "run");
+	if (!lockResult.acquired) {
+		if (force) {
+			forceReleaseLock(cwd);
+			acquireLock(cwd, positional.join(" ").slice(0, 60) || "run");
+		} else if (lockResult.existingLock) {
+			console.error(formatLockInfo(lockResult.existingLock));
+			process.exit(1);
+		}
+	}
+
+	agentsDirs.push(path.join(cwd, "agents"));
+	const agents = loadAgents(agentsDirs);
+
+	try {
+		if (executePlan) {
+			const fs = await import("node:fs");
+			const planPath = path.join(cwd, ".planning", "PLAN.md");
+			if (!fs.existsSync(planPath)) {
+				console.error("No plan found at .planning/PLAN.md.");
+				releaseLock(cwd);
+				process.exit(1);
+			}
+			const planContent = fs.readFileSync(planPath, "utf-8");
+			const goal = `Execute the following pre-approved plan:\n\n${planContent}`;
+			const result = await executeTeam(goal, agents, cwd, model, concurrency, {
+				brainstorm: false, research: false, verify, autoCommit,
+				replan: true, qualityGate: true, engine: detectEngine(engine),
+			});
+			printResult(result);
+			releaseLock(cwd);
+			process.exit(result.success ? 0 : 1);
+		}
+
+		const goal = positional.join(" ").trim();
+		if (!goal) {
+			console.error("Please provide a goal. Example: awsl run \"Build a REST API\"");
+			releaseLock(cwd);
+			process.exit(1);
+		}
+
+		log.section(`GOAL: ${goal}`);
+		const resolvedEngine = detectEngine(engine);
+		log.info("conductor", `Engine: ${resolvedEngine} | Model: ${model} | Concurrency: ${concurrency}`);
+		log.info("conductor", `Agents: ${agents.map(a => a.name).join(", ")}`);
+
+		const result = await executeTeam(goal, agents, cwd, model, concurrency, {
+			brainstorm: !quick && !planOnlyMode,
+			research: !quick,
+			verify: !planOnlyMode && verify,
+			autoCommit: !planOnlyMode && autoCommit,
+			replan: !planOnlyMode && !quick,
+			qualityGate: !planOnlyMode,
+			engine: resolvedEngine,
+		});
+
+		printResult(result);
+
+		if (planOnlyMode) {
+			console.log("\nPlan saved to .planning/PLAN.md");
+			console.log("Run awsl run --execute-plan to proceed.\n");
+		}
+
+		releaseLock(cwd);
+		process.exit(result.success ? 0 : 1);
+	} catch (e) {
+		releaseLock(cwd);
+		throw e;
+	}
+}
+
+function printResult(result: any) {
+	console.log("\n" + "=".repeat(60));
+	console.log(`Result: ${result.success ? "SUCCESS" : "PARTIAL"}`);
+	console.log(`${result.summary}\n`);
+
+	for (const task of result.tasks) {
+		const icon = task.status === "verified" ? "[OK]" : task.status === "done" ? "[ok]" : "[FAIL]";
+		console.log(`${icon} ${task.id} (${task.assignee}): ${task.description.slice(0, 80)}`);
+		if (task.result) {
+			const preview = task.result.length > 300
+				? task.result.slice(0, 300) + "...[truncated]"
+				: task.result;
+			console.log(`  ${preview.split("\n").join("\n  ")}\n`);
+		}
+		if (task.error) {
+			console.log(`  Error: ${task.error}\n`);
+		}
+	}
+
+	const planFiles = result.planning?.list() ?? [];
+	if (planFiles.length > 0) {
+		console.log("=".repeat(60));
+		console.log(`Artifacts: .planning/ (${planFiles.length} files)`);
+	}
+}
+
+main().catch(err => {
+	console.error("Fatal:", err);
+	// Try to release lock on crash
+	try { releaseLock(process.cwd()); } catch { /* ignore */ }
+	process.exit(1);
+});
+
+// Release lock on unexpected exit
+process.on("SIGINT", () => {
+	try { releaseLock(process.cwd()); } catch { /* ignore */ }
+	process.exit(130);
+});
+if (process.platform !== "win32") {
+	process.on("SIGTERM", () => {
+		try { releaseLock(process.cwd()); } catch { /* ignore */ }
+		process.exit(143);
+	});
+}

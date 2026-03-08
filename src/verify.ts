@@ -1,0 +1,380 @@
+/**
+ * Code-based verification — runs real commands, not LLM judgment.
+ *
+ * Reads .planning/PLAN.md, extracts verify commands, runs them,
+ * and produces a structured report.
+ */
+
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { execSync } from "node:child_process";
+import { log } from "./log.js";
+
+export interface VerifyItem {
+	taskId: string;
+	command: string;
+	passed: boolean;
+	output: string;
+}
+
+export interface VerifyResult {
+	passed: boolean;
+	items: VerifyItem[];
+	generalChecks: VerifyItem[];
+	summary: string;
+}
+
+/**
+ * Parse PLAN.md to extract task verify commands.
+ */
+function extractVerifyCommands(planContent: string): { taskId: string; command: string }[] {
+	const results: { taskId: string; command: string }[] = [];
+
+	// Match ## task-id: name ... ### Verify ... (content until next ##)
+	const taskRegex = /^## ([\w-]+):\s*.+$([\s\S]*?)(?=^## |\Z)/gm;
+	let match;
+	while ((match = taskRegex.exec(planContent)) !== null) {
+		const taskId = match[1];
+		const body = match[2];
+
+		// Extract verify section
+		const verifyMatch = body.match(/### Verify\s*\n([\s\S]*?)(?=###|$)/);
+		if (verifyMatch) {
+			const verifyText = verifyMatch[1].trim();
+			// Extract commands (lines that look like shell commands)
+			const cmdLines = verifyText.split("\n")
+				.map(l => l.trim())
+				.filter(l => l && !l.startsWith("#") && !l.startsWith("-") && !l.startsWith("*"))
+				.filter(l => /^(npm |npx |node |tsc |jest |vitest |pytest |cargo |go |make |curl )/.test(l)
+					|| /^`(.+)`$/.test(l));
+
+			for (let cmd of cmdLines) {
+				// Strip backticks
+				cmd = cmd.replace(/^`|`$/g, "").trim();
+				if (cmd) results.push({ taskId, command: cmd });
+			}
+		}
+	}
+
+	return results;
+}
+
+/**
+ * Run a single command and capture result.
+ */
+function runCheck(taskId: string, command: string, cwd: string): VerifyItem {
+	try {
+		const output = execSync(command, {
+			cwd,
+			encoding: "utf-8",
+			timeout: 60000,
+			stdio: ["pipe", "pipe", "pipe"],
+		});
+		return { taskId, command, passed: true, output: output.slice(0, 2000) };
+	} catch (e: any) {
+		const output = (e.stdout ?? "") + (e.stderr ?? "");
+		return { taskId, command, passed: false, output: output.slice(0, 2000) };
+	}
+}
+
+/**
+ * Detect and run general project checks.
+ */
+function runGeneralChecks(cwd: string): VerifyItem[] {
+	const checks: VerifyItem[] = [];
+
+	// TypeScript type check
+	if (fs.existsSync(path.join(cwd, "tsconfig.json"))) {
+		log.info("verify", "Running: tsc --noEmit");
+		checks.push(runCheck("typecheck", "npx tsc --noEmit", cwd));
+	}
+
+	// npm test (if test script exists)
+	const pkgPath = path.join(cwd, "package.json");
+	if (fs.existsSync(pkgPath)) {
+		try {
+			const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
+			if (pkg.scripts?.test && pkg.scripts.test !== "echo \"Error: no test specified\" && exit 1") {
+				log.info("verify", "Running: npm test");
+				checks.push(runCheck("test", "npm test", cwd));
+			}
+		} catch { /* ignore */ }
+	}
+
+	// ESLint (if config exists)
+	const eslintConfigs = [".eslintrc", ".eslintrc.js", ".eslintrc.json", ".eslintrc.yml", "eslint.config.js", "eslint.config.mjs"];
+	if (eslintConfigs.some(c => fs.existsSync(path.join(cwd, c)))) {
+		log.info("verify", "Running: eslint");
+		checks.push(runCheck("lint", "npx eslint . --max-warnings 0", cwd));
+	}
+
+	// Git diff stats
+	try {
+		let diffCmd: string;
+		try {
+			execSync("git rev-parse HEAD~1", { cwd, stdio: "pipe", timeout: 3000 });
+			diffCmd = "git diff --stat HEAD~1";
+		} catch {
+			diffCmd = "git diff --stat";
+		}
+		const diff = execSync(diffCmd, {
+			cwd, encoding: "utf-8", timeout: 5000, stdio: ["pipe", "pipe", "pipe"],
+		}).trim();
+		if (diff) {
+			checks.push({ taskId: "git-diff", command: "git diff --stat", passed: true, output: diff });
+		}
+	} catch { /* not a git repo or no commits */ }
+
+	return checks;
+}
+
+/**
+ * Run full verification pipeline.
+ */
+export function runFullVerification(cwd: string): VerifyResult {
+	log.section("Verification (Code-Based)");
+
+	const planPath = path.join(cwd, ".planning", "PLAN.md");
+	const items: VerifyItem[] = [];
+
+	// Task-specific verify commands
+	if (fs.existsSync(planPath)) {
+		const planContent = fs.readFileSync(planPath, "utf-8");
+		const commands = extractVerifyCommands(planContent);
+
+		for (const { taskId, command } of commands) {
+			log.info("verify", `[${taskId}] Running: ${command}`);
+			items.push(runCheck(taskId, command, cwd));
+		}
+	} else {
+		log.warn("verify", "No .planning/PLAN.md found, skipping task-specific checks");
+	}
+
+	// General checks
+	const generalChecks = runGeneralChecks(cwd);
+
+	// Summary
+	const allItems = [...items, ...generalChecks];
+	const passCount = allItems.filter(i => i.passed).length;
+	const failCount = allItems.filter(i => !i.passed).length;
+	const passed = failCount === 0;
+
+	const summary = `Verification: ${passCount} passed, ${failCount} failed out of ${allItems.length} checks.`;
+	log.info("verify", summary);
+
+	// Write report
+	const report = formatReport(items, generalChecks, summary);
+	const verifyPath = path.join(cwd, ".planning", "VERIFICATION.md");
+	fs.mkdirSync(path.dirname(verifyPath), { recursive: true });
+	fs.writeFileSync(verifyPath, report);
+	log.info("verify", "Report saved to .planning/VERIFICATION.md");
+
+	return { passed, items, generalChecks, summary };
+}
+
+// ─── Static Code Review ─────────────────────────────────────
+
+export interface ReviewFinding {
+	file: string;
+	line: number;
+	severity: "critical" | "warning" | "info";
+	rule: string;
+	message: string;
+}
+
+export interface ReviewResult {
+	passed: boolean;
+	findings: ReviewFinding[];
+	summary: string;
+}
+
+/**
+ * Static code review — deterministic checks, no LLM.
+ * Catches common quality issues that agents might miss.
+ */
+export function runStaticReview(cwd: string): ReviewResult {
+	log.section("Static Code Review");
+	const findings: ReviewFinding[] = [];
+
+	// Find all TS/JS source files (exclude node_modules, dist, .planning)
+	const sourceFiles = findSourceFiles(cwd);
+	log.info("review", `Scanning ${sourceFiles.length} source files`);
+
+	for (const file of sourceFiles) {
+		const relPath = path.relative(cwd, file);
+		let content: string;
+		try {
+			content = fs.readFileSync(file, "utf-8");
+		} catch { continue; }
+
+		const lines = content.split("\n");
+
+		for (let i = 0; i < lines.length; i++) {
+			const line = lines[i];
+			const lineNum = i + 1;
+
+			// Rule: `any` type usage
+			if (/:\s*any\b/.test(line) && !line.trim().startsWith("//") && !line.trim().startsWith("*")) {
+				findings.push({
+					file: relPath, line: lineNum, severity: "warning",
+					rule: "no-any", message: "Explicit `any` type used",
+				});
+			}
+
+			// Rule: console.log in production code (not test files)
+			if (/console\.log\(/.test(line) && !relPath.includes(".test.") && !relPath.includes(".spec.") && !relPath.includes("__tests__")) {
+				findings.push({
+					file: relPath, line: lineNum, severity: "warning",
+					rule: "no-console-log", message: "console.log in production code",
+				});
+			}
+
+			// Rule: empty catch blocks
+			if (/catch\s*\([^)]*\)\s*\{\s*\}/.test(line) || (line.includes("catch") && i + 1 < lines.length && /^\s*\}\s*$/.test(lines[i + 1]))) {
+				findings.push({
+					file: relPath, line: lineNum, severity: "warning",
+					rule: "no-empty-catch", message: "Empty catch block — errors silently swallowed",
+				});
+			}
+
+			// Rule: TODO/FIXME/HACK comments
+			if (/\/\/\s*(TODO|FIXME|HACK|XXX)\b/i.test(line)) {
+				findings.push({
+					file: relPath, line: lineNum, severity: "info",
+					rule: "todo-comment", message: line.trim(),
+				});
+			}
+
+			// Rule: hardcoded secrets (basic patterns)
+			if (/(?:password|secret|api_?key|token)\s*[:=]\s*["'][^"']{8,}["']/i.test(line)
+				&& !relPath.includes(".test.") && !relPath.includes(".spec.")
+				&& !relPath.includes("__tests__") && !line.includes("process.env")) {
+				findings.push({
+					file: relPath, line: lineNum, severity: "critical",
+					rule: "no-hardcoded-secrets", message: "Possible hardcoded secret",
+				});
+			}
+		}
+
+		// Rule: file too long
+		if (lines.length > 500) {
+			findings.push({
+				file: relPath, line: 1, severity: "warning",
+				rule: "file-too-long", message: `File has ${lines.length} lines, consider splitting`,
+			});
+		}
+	}
+
+	// Check for test files existence
+	const testFiles = sourceFiles.filter(f =>
+		f.includes(".test.") || f.includes(".spec.") || f.includes("__tests__")
+	);
+	const srcFiles = sourceFiles.filter(f =>
+		!f.includes(".test.") && !f.includes(".spec.") && !f.includes("__tests__")
+	);
+
+	if (srcFiles.length > 0 && testFiles.length === 0) {
+		findings.push({
+			file: "(project)", line: 0, severity: "critical",
+			rule: "no-tests", message: "No test files found — project has no tests",
+		});
+	}
+
+	const criticalCount = findings.filter(f => f.severity === "critical").length;
+	const warningCount = findings.filter(f => f.severity === "warning").length;
+	const infoCount = findings.filter(f => f.severity === "info").length;
+	const passed = criticalCount === 0;
+
+	const summary = `Review: ${criticalCount} critical, ${warningCount} warnings, ${infoCount} info across ${sourceFiles.length} files.`;
+	log.info("review", summary);
+
+	// Write report
+	const report = formatReviewReport(findings, summary);
+	const reviewPath = path.join(cwd, ".planning", "REVIEW.md");
+	fs.mkdirSync(path.dirname(reviewPath), { recursive: true });
+	fs.writeFileSync(reviewPath, report);
+	log.info("review", "Report saved to .planning/REVIEW.md");
+
+	return { passed, findings, summary };
+}
+
+function findSourceFiles(dir: string): string[] {
+	const files: string[] = [];
+	const ignored = new Set(["node_modules", "dist", ".planning", ".git", "coverage", ".next", "build"]);
+
+	function walk(d: string) {
+		let entries: fs.Dirent[];
+		try {
+			entries = fs.readdirSync(d, { withFileTypes: true });
+		} catch { return; }
+
+		for (const entry of entries) {
+			if (ignored.has(entry.name)) continue;
+			const full = path.join(d, entry.name);
+			if (entry.isDirectory()) {
+				walk(full);
+			} else if (/\.(ts|tsx|js|jsx|mts|mjs)$/.test(entry.name) && !entry.name.endsWith(".d.ts")) {
+				files.push(full);
+			}
+		}
+	}
+
+	walk(dir);
+	return files;
+}
+
+function formatReviewReport(findings: ReviewFinding[], summary: string): string {
+	const lines = ["# Static Code Review\n", `**${summary}**\n`];
+
+	const bySeverity = { critical: [] as ReviewFinding[], warning: [] as ReviewFinding[], info: [] as ReviewFinding[] };
+	for (const f of findings) {
+		bySeverity[f.severity].push(f);
+	}
+
+	for (const [severity, items] of Object.entries(bySeverity)) {
+		if (items.length === 0) continue;
+		lines.push(`## ${severity.toUpperCase()} (${items.length})\n`);
+		for (const f of items) {
+			lines.push(`- **${f.file}:${f.line}** [${f.rule}] ${f.message}`);
+		}
+		lines.push("");
+	}
+
+	return lines.join("\n");
+}
+
+// ─── Report Formatting ──────────────────────────────────────
+
+function formatReport(items: VerifyItem[], generalChecks: VerifyItem[], summary: string): string {
+	const lines = ["# Verification Report\n", `**${summary}**\n`];
+
+	if (items.length > 0) {
+		lines.push("## Task Checks\n");
+		for (const item of items) {
+			const icon = item.passed ? "PASS" : "FAIL";
+			lines.push(`### [${icon}] ${item.taskId}: \`${item.command}\``);
+			if (item.output) {
+				lines.push("```");
+				lines.push(item.output.slice(0, 500));
+				lines.push("```");
+			}
+			lines.push("");
+		}
+	}
+
+	if (generalChecks.length > 0) {
+		lines.push("## General Checks\n");
+		for (const item of generalChecks) {
+			const icon = item.passed ? "PASS" : "FAIL";
+			lines.push(`### [${icon}] ${item.taskId}: \`${item.command}\``);
+			if (item.output) {
+				lines.push("```");
+				lines.push(item.output.slice(0, 500));
+				lines.push("```");
+			}
+			lines.push("");
+		}
+	}
+
+	return lines.join("\n");
+}
