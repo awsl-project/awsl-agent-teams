@@ -170,7 +170,7 @@ This automatically runs:
 
 ## Step 5: Fix & Re-verify
 
-Read \`.planning/VERIFICATION.md\`. If any checks FAILED:
+Read \`.planning/VERIFICATION.md\` and \`.planning/REVIEW.md\`. If any checks FAILED:
 - Launch Agent(s) to fix the issues
 - Re-run: \`node "${cliPath}" verify\`
 
@@ -294,7 +294,8 @@ Read and present:
 2. \`.planning/PLAN.md\` — tasks
 3. \`.planning/WAVES.md\` — execution order
 4. \`.planning/VERIFICATION.md\` — test results
-5. \`.planning/DESIGN.md\` — design decisions
+5. \`.planning/REVIEW.md\` — LLM reviewer findings
+6. \`.planning/DESIGN.md\` — design decisions
 `,
 		},
 		{

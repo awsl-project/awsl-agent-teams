@@ -6,9 +6,10 @@
       "options": {
         "quick": false
       },
-      "status": "pending",
+      "status": "running",
       "scheduledAt": "2026-03-09T14:05:38.122Z",
-      "runAt": "2026-03-09T17:11:00.000Z"
+      "runAt": "2026-03-09T17:11:00.000Z",
+      "startedAt": "2026-03-09T17:11:00.005Z"
     },
     {
       "id": "q_3",
@@ -16,10 +17,15 @@
       "options": {
         "quick": false
       },
-      "status": "running",
+      "status": "done",
       "scheduledAt": "2026-03-09T14:05:47.664Z",
       "runAt": "2026-03-09T14:10:00.000Z",
-      "startedAt": "2026-03-09T14:40:00.453Z"
+      "startedAt": "2026-03-09T14:40:00.453Z",
+      "completedAt": "2026-03-09T14:48:46.050Z",
+      "result": {
+        "success": true,
+        "summary": "All 3 tasks completed.\n- task_1: ## AWSL_RESULT\n- task_2: All three files are updated correctly.\n- task_3: All checks pass. Here's the summary:"
+      }
     },
     {
       "id": "q_4",
@@ -63,5 +69,5 @@
     }
   ],
   "createdAt": "2026-03-09T10:11:39.245Z",
-  "updatedAt": "2026-03-09T14:40:00.454Z"
+  "updatedAt": "2026-03-09T17:11:00.005Z"
 }

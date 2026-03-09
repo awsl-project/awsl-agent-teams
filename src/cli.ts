@@ -48,6 +48,7 @@ CC Hybrid Mode (no API key needed):
   2. awsl validate         → .planning/WAVES.md (code: parse, validate, topo-sort)
   3. CC Agent tool         → execute tasks      (CC full power per task)
   4. awsl verify           → .planning/VERIFICATION.md (code: run tests/lint)
+  5. awsl review           → .planning/REVIEW.md (static code review)
 
 Queue Commands (sleep mode):
   queue add <goal> [opts]  Add a task to the queue (--at <time> to schedule)
