@@ -1,15 +1,21 @@
 {
-  "wave": 0,
+  "wave": 1,
   "completedTasks": [
-    "task_1"
+    "task_1",
+    "task_2",
+    "task_3",
+    "task_4"
   ],
   "taskResults": {
-    "task_1": "## AWSL_RESULT\n\n### Task Complete: Add atomicCommit to queue.ts\n\n**File modified:** `src/queue.ts`\n\n**Changes applied:**\n1. **Line 18** — Added `import { atomicCommit } from \"./planning.js\";`\n2. **Lines 359-364** — Auto-commit after task completion (success or failure), using `nextTask.id` for the commit message\n3. **Lines 402-407** — Auto-commit after task error (catch path), using `nextTask.id` for the commit message\n\nBoth calls are wrapped in `try/catch` so commit failures are logged as warnings but don't interrupt queue execution. Used `nextTask` (always in scope) instead of `freshTask` (could be undefined outside the `if` block) to avoid potential runtime errors.\n\n**Verification:** `npx tsc --noEmit` — passed with zero errors."
+    "task_1": "## AWSL_RESULT\n\n### Task Complete: Add atomicCommit to queue.ts\n\n**File modified:** `src/queue.ts`\n\n**Changes applied:**\n1. **Line 18** — Added `import { atomicCommit } from \"./planning.js\";`\n2. **Lines 359-364** — Auto-commit after task completion (success or failure), using `nextTask.id` for the commit message\n3. **Lines 402-407** — Auto-commit after task error (catch path), using `nextTask.id` for the commit message\n\nBoth calls are wrapped in `try/catch` so commit failures are logged as warnings but don't interrupt queue execution. Used `nextTask` (always in scope) instead of `freshTask` (could be undefined outside the `if` block) to avoid potential runtime errors.\n\n**Verification:** `npx tsc --noEmit` — passed with zero errors.",
+    "task_2": "Build passes. \n\n## AWSL_RESULT\n\n### Task Complete: Update documentation for queue auto-commit\n\n**Files modified:**\n\n| File | Change |\n|---|---|\n| `README.md` (line 304) | Added \"Auto-Commit\" subsection in the Task Queue section explaining that each queue task auto-commits QUEUE.json + HISTORY.json on completion |\n| `README.zh-CN.md` (line 304) | Added mirrored \"自动提交\" subsection in Chinese |\n| `BEST_PRACTICES.md` (line 1110) | Added \"自动提交\" row to the queue 注意事项 table |\n\n**Verification:** `grep -l 'auto-commit\\|自动.*commit' README.md README.zh-CN.md BEST_PRACTICES.md` — all three files match.",
+    "task_3": "Type-check passes. Here's my full review:\n\n## AWSL_RESULT\n\n### Security & Code Review: atomicCommit in queue.ts\n\n**Reviewed files:** `src/queue.ts` (lines 359-364, 402-407), `src/orchestrator.ts` (lines 582-585, 641-649), `src/planning.ts` (lines 342-390)\n\n---\n\n**1. [PASS] Error Handling: commit failures won't crash queue**\n- Severity: n/a\n- Both calls (line 360, 403) wrapped in `try/catch`, failures logged as `log.warn`. Additionally, `atomicCommit` itself has an internal `try/catch` returning `false` on failure — defense in depth.\n\n**2. [PASS] Placement: commit happens after save() and appendHistory()**\n- Severity: n/a\n- Success path: `save()` (line 330) → `appendHistory()` (line 336) → `atomicCommit()` (line 361). Correct order.\n- Failure path: `save()` (line 375) → `appendHistory()` (line 379) → `atomicCommit()` (line 404). Correct order.\n\n**3. [PASS] No duplicate commits**\n- Severity: n/a\n- The orchestrator's `autoCommit` (enabled by default, line 299) commits per-task and per-wave during `executeTeam()`. The queue's post-execution `atomicCommit` then runs — but `atomicCommit` calls `changedFiles()` first and returns `false` if nothing is dirty. So if the orchestrator already committed everything, queue's call is a safe no-op. If QUEUE.json/HISTORY.json were updated after the orchestrator's last commit, they get captured. No actual duplicates.\n\n**4. [WARN] Commit message: redundant task ID**\n- Severity: minor\n- Location: `src/queue.ts:361`, `src/queue.ts:404`\n- `atomicCommit(cwd, nextTask.id, message)` internally produces `\"${taskId}: ${message}\"`. The current message is `queue: ${nextTask.id} done — ${nextTask.goal}`, producing: `q_1: queue: q_1 done — Build auth`. Task ID appears twice.\n- **Suggestion:** Change to `queue: done — ${nextTask.goal}` and `queue: failed — ${nextTask.goal}` (let `atomicCommit` handle the ID prefix), or use `\"queue\"` as the first arg and put the full message second.\n\n**5. [PASS] Security: no injection or data leakage**\n- Severity: n/a\n- `nextTask.goal` (user-provided) flows into `atomicCommit` which uses `JSON.stringify(commitMsg)` for the `git commit -m` argument — properly escapes shell metacharacters. No command injection possible.\n- Goal text in local git commits is appropriate — user-defined content stays in user's local repo.\n\n**6. [WARN] No taskFiles passed — stages all dirty files**\n- Severity: minor\n- Location: `src/queue.ts:361`, `src/queue.ts:404`\n- The queue's `atomicCommit` calls omit the `taskFiles` parameter, causing `atomicCommit` to stage ALL dirty files (planning.ts line 364-367). This is intentional for QUEUE.json/HISTORY.json, but could accidentally capture unrelated dirty files if the user has uncommitted work.\n- **Suggestion:** Pass explicit file list: `[\".planning/QUEUE.json\", \".planning/HISTORY.json\"]` to scope the commit.\n\n**7. [PASS] TypeScript compilation**\n- `npx tsc --noEmit` — zero errors.\n\n---\n\n### Quality Gate: **PASS**\n- 0 critical findings\n- 2 minor warnings (cosmetic commit message + staging scope)\n- All functional requirements met: error-safe, correctly placed, no duplicates, traceable messages, no security issues",
+    "task_4": "All three `atomicCommit` references are in place — import (line 18), success/failure path (line 361), and catch/error path (line 404). All wrapped in `try/catch` with `log.warn` fallback.\n\n## AWSL_RESULT\n\n### Task Complete: Build & Type-Check Verification\n\n| Check | Result |\n|---|---|\n| `npx tsc --noEmit` | Passed — zero errors |\n| `npm run build` | Passed — zero errors |\n| `atomicCommit` import | Verified at line 18 |\n| Success/failure commit | Verified at line 361 |\n| Error path commit | Verified at line 404 |\n\n**Verdict:** Build succeeds with zero errors. The `atomicCommit` integration compiles correctly and all three call sites are properly placed with error handling."
   },
   "failedTasks": [],
   "taskErrors": {},
   "rateLimitRetries": 0,
-  "savedAt": "2026-03-09T19:20:50.421Z",
+  "savedAt": "2026-03-09T19:22:21.232Z",
   "memory": {
     "result:architect:session": {
       "value": "e2bf24a7-3ae2-40c2-a978-6bf09e2ee32a",
@@ -42,14 +48,39 @@
       "timestamp": 1773083963680
     },
     "result:coder:session": {
-      "value": "2de8ccb1-5370-4321-81e3-542a491a4a65",
+      "value": "cb887b30-eabb-4e5f-99f8-93911cebee26",
       "author": "coder",
-      "timestamp": 1773084049915
+      "timestamp": 1773084108764
     },
     "result:task_1": {
       "value": "## AWSL_RESULT\n\n### Task Complete: Add atomicCommit to queue.ts\n\n**File modified:** `src/queue.ts`\n\n**Changes applied:**\n1. **Line 18** — Added `import { atomicCommit } from \"./planning.js\";`\n2. **Lines 359-364** — Auto-commit after task completion (success or failure), using `nextTask.id` for the commit message\n3. **Lines 402-407** — Auto-commit after task error (catch path), using `nextTask.id` for the commit message\n\nBoth calls are wrapped in `try/catch` so commit failures are logged as warnings but don't interrupt queue execution. Used `nextTask` (always in scope) instead of `freshTask` (could be undefined outside the `if` block) to avoid potential runtime errors.\n\n**Verification:** `npx tsc --noEmit` — passed with zero errors.",
       "author": "coder",
       "timestamp": 1773084049915
+    },
+    "result:task_2": {
+      "value": "Build passes. \n\n## AWSL_RESULT\n\n### Task Complete: Update documentation for queue auto-commit\n\n**Files modified:**\n\n| File | Change |\n|---|---|\n| `README.md` (line 304) | Added \"Auto-Commit\" subsection in the Task Queue section explaining that each queue task auto-commits QUEUE.json + HISTORY.json on completion |\n| `README.zh-CN.md` (line 304) | Added mirrored \"自动提交\" subsection in Chinese |\n| `BEST_PRACTICES.md` (line 1110) | Added \"自动提交\" row to the queue 注意事项 table |\n\n**Verification:** `grep -l 'auto-commit\\|自动.*commit' README.md README.zh-CN.md BEST_PRACTICES.md` — all three files match.",
+      "author": "coder",
+      "timestamp": 1773084108764
+    },
+    "result:reviewer:session": {
+      "value": "b076f61c-f1e6-4a9f-ae86-96f4af6a5974",
+      "author": "reviewer",
+      "timestamp": 1773084136227
+    },
+    "result:task_3": {
+      "value": "Type-check passes. Here's my full review:\n\n## AWSL_RESULT\n\n### Security & Code Review: atomicCommit in queue.ts\n\n**Reviewed files:** `src/queue.ts` (lines 359-364, 402-407), `src/orchestrator.ts` (lines 582-585, 641-649), `src/planning.ts` (lines 342-390)\n\n---\n\n**1. [PASS] Error Handling: commit failures won't crash queue**\n- Severity: n/a\n- Both calls (line 360, 403) wrapped in `try/catch`, failures logged as `log.warn`. Additionally, `atomicCommit` itself has an internal `try/catch` returning `false` on failure — defense in depth.\n\n**2. [PASS] Placement: commit happens after save() and appendHistory()**\n- Severity: n/a\n- Success path: `save()` (line 330) → `appendHistory()` (line 336) → `atomicCommit()` (line 361). Correct order.\n- Failure path: `save()` (line 375) → `appendHistory()` (line 379) → `atomicCommit()` (line 404). Correct order.\n\n**3. [PASS] No duplicate commits**\n- Severity: n/a\n- The orchestrator's `autoCommit` (enabled by default, line 299) commits per-task and per-wave during `executeTeam()`. The queue's post-execution `atomicCommit` then runs — but `atomicCommit` calls `changedFiles()` first and returns `false` if nothing is dirty. So if the orchestrator already committed everything, queue's call is a safe no-op. If QUEUE.json/HISTORY.json were updated after the orchestrator's last commit, they get captured. No actual duplicates.\n\n**4. [WARN] Commit message: redundant task ID**\n- Severity: minor\n- Location: `src/queue.ts:361`, `src/queue.ts:404`\n- `atomicCommit(cwd, nextTask.id, message)` internally produces `\"${taskId}: ${message}\"`. The current message is `queue: ${nextTask.id} done — ${nextTask.goal}`, producing: `q_1: queue: q_1 done — Build auth`. Task ID appears twice.\n- **Suggestion:** Change to `queue: done — ${nextTask.goal}` and `queue: failed — ${nextTask.goal}` (let `atomicCommit` handle the ID prefix), or use `\"queue\"` as the first arg and put the full message second.\n\n**5. [PASS] Security: no injection or data leakage**\n- Severity: n/a\n- `nextTask.goal` (user-provided) flows into `atomicCommit` which uses `JSON.stringify(commitMsg)` for the `git commit -m` argument — properly escapes shell metacharacters. No command injection possible.\n- Goal text in local git commits is appropriate — user-defined content stays in user's local repo.\n\n**6. [WARN] No taskFiles passed — stages all dirty files**\n- Severity: minor\n- Location: `src/queue.ts:361`, `src/queue.ts:404`\n- The queue's `atomicCommit` calls omit the `taskFiles` parameter, causing `atomicCommit` to stage ALL dirty files (planning.ts line 364-367). This is intentional for QUEUE.json/HISTORY.json, but could accidentally capture unrelated dirty files if the user has uncommitted work.\n- **Suggestion:** Pass explicit file list: `[\".planning/QUEUE.json\", \".planning/HISTORY.json\"]` to scope the commit.\n\n**7. [PASS] TypeScript compilation**\n- `npx tsc --noEmit` — zero errors.\n\n---\n\n### Quality Gate: **PASS**\n- 0 critical findings\n- 2 minor warnings (cosmetic commit message + staging scope)\n- All functional requirements met: error-safe, correctly placed, no duplicates, traceable messages, no security issues",
+      "author": "reviewer",
+      "timestamp": 1773084136227
+    },
+    "result:tester:session": {
+      "value": "952565b7-b724-4b7d-ae11-775ee8f09d97",
+      "author": "tester",
+      "timestamp": 1773084141079
+    },
+    "result:task_4": {
+      "value": "All three `atomicCommit` references are in place — import (line 18), success/failure path (line 361), and catch/error path (line 404). All wrapped in `try/catch` with `log.warn` fallback.\n\n## AWSL_RESULT\n\n### Task Complete: Build & Type-Check Verification\n\n| Check | Result |\n|---|---|\n| `npx tsc --noEmit` | Passed — zero errors |\n| `npm run build` | Passed — zero errors |\n| `atomicCommit` import | Verified at line 18 |\n| Success/failure commit | Verified at line 361 |\n| Error path commit | Verified at line 404 |\n\n**Verdict:** Build succeeds with zero errors. The `atomicCommit` integration compiles correctly and all three call sites are properly placed with error handling.",
+      "author": "tester",
+      "timestamp": 1773084141079
     }
   },
   "goal": "每次队列后 都要commit一次"
