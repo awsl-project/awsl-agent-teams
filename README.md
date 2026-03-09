@@ -112,8 +112,12 @@ AWSL supports two modes of operation:
 ### Mode 1: CC Skills (Interactive)
 
 ```bash
+# Clone and build from source (npm package not yet published)
+git clone https://github.com/awsl-project/awsl-agent-teams.git
+cd awsl-agent-teams && npm install && npm run build
+
 # Install skills into Claude Code
-npx awsl-agent-core init --global
+node dist/cli.js init --global
 
 # In Claude Code:
 /awsl Build a REST API with auth and rate limiting
@@ -441,9 +445,9 @@ type TeamEventType =
 ## CLI Reference
 
 ```bash
-# Install Claude Code skills
-awsl init                    # Project-local (.claude/skills/)
-awsl init --global           # Global (~/.claude/skills/)
+# Install Claude Code skills (from source)
+node dist/cli.js init                    # Project-local (.claude/skills/)
+node dist/cli.js init --global           # Global (~/.claude/skills/)
 
 # Terminal mode (recommended for autonomous builds)
 awsl run "goal" --engine claude-code

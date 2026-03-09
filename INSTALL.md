@@ -1,5 +1,7 @@
 # AWSL 安装教程
 
+> **重要：** 本项目尚未发布到 npm，目前 **只能通过源码克隆编译安装**。`npm install -g awsl-agent-core` 和 `npx awsl-agent-core` 暂不可用。npm 发布计划见下方说明。
+
 ## 前置条件
 
 | 依赖 | 最低版本 | 检查命令 |
@@ -12,50 +14,7 @@
 
 ---
 
-## 方式一：npm 安装（推荐）
-
-最简单，一行命令。
-
-### Windows
-
-```powershell
-# 全局安装
-npm install -g awsl-agent-core
-
-# 安装 Skills 到 Claude Code
-awsl init --global
-```
-
-### macOS
-
-```bash
-# 全局安装
-npm install -g awsl-agent-core
-
-# 安装 Skills 到 Claude Code
-awsl init --global
-```
-
-### 验证
-
-```bash
-awsl --help                    # 显示帮助
-```
-
-打开 Claude Code，输入 `/awsl-status`，无报错即成功。
-
-### 更新
-
-```bash
-npm update -g awsl-agent-core
-awsl init --global             # 重新安装 skills
-```
-
----
-
-## 方式二：GitHub 克隆安装
-
-适合想看源码或参与开发的人。
+## 安装方式：源码克隆编译（当前唯一方式）
 
 ### Windows
 
@@ -77,8 +36,8 @@ node -v    # v18.x 或更高
 #### 2. 克隆 + 安装 + 编译
 
 ```powershell
-git clone https://github.com/你的用户名/pi-agent-teams.git
-cd pi-agent-teams
+git clone https://github.com/awsl-project/awsl-agent-teams.git
+cd awsl-agent-teams
 npm install
 npm run build
 ```
@@ -109,8 +68,8 @@ node -v    # v18.x 或更高
 #### 2. 克隆 + 安装 + 编译
 
 ```bash
-git clone https://github.com/你的用户名/pi-agent-teams.git
-cd pi-agent-teams
+git clone https://github.com/awsl-project/awsl-agent-teams.git
+cd awsl-agent-teams
 npm install
 npm run build
 ```
@@ -121,70 +80,14 @@ npm run build
 node dist/cli.js init --global
 ```
 
-### 更新（GitHub 方式）
+### 更新
 
 ```bash
-cd pi-agent-teams
+cd awsl-agent-teams
 git pull
 npm install
 npm run build
 node dist/cli.js init --global
-```
-
----
-
-## 发布到 npm（给项目维护者）
-
-如果你是项目维护者，想让别人能 `npm install -g awsl-agent-core`：
-
-### 1. 注册 npm 账号
-
-```bash
-npm adduser
-# 按提示输入用户名、密码、邮箱
-```
-
-### 2. 修改 package.json
-
-把 `repository.url` 改成你的实际 GitHub 地址：
-
-```json
-{
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/你的真实用户名/pi-agent-teams"
-  }
-}
-```
-
-### 3. 发布
-
-```bash
-cd pi-agent-teams
-
-# 检查将发布的文件
-npm pack --dry-run
-
-# 发布
-npm publish
-```
-
-> `prepublishOnly` 脚本会自动运行 `tsc` 编译。`files` 字段确保只发布 `dist/`、`agents/` 和文档。
-
-### 4. 后续更新版本
-
-```bash
-# 改 bug
-npm version patch    # 0.1.0 → 0.1.1
-
-# 加功能
-npm version minor    # 0.1.0 → 0.2.0
-
-# 大改
-npm version major    # 0.1.0 → 1.0.0
-
-# 发布
-npm publish
 ```
 
 ---
@@ -214,8 +117,7 @@ npm publish
 
 ### 关于路径
 
-- **npm 全局安装：** Skills 里的 CLI 路径指向全局 `node_modules` 目录，跟着 npm 走，不用管
-- **GitHub 克隆安装：** Skills 里硬编码了 `dist/cli.js` 的绝对路径。**不要移动 `pi-agent-teams` 目录**，移动后需重新 `node dist/cli.js init --global`
+Skills 里硬编码了 `dist/cli.js` 的绝对路径。**不要移动 `awsl-agent-teams` 目录**，移动后需重新运行 `node dist/cli.js init --global`。
 
 ---
 
@@ -258,15 +160,14 @@ description: 项目专属开发者
 ls ~/.claude/skills/awsl/SKILL.md
 
 # 不存在则重新安装
-awsl init --global                           # npm 方式
-node /path/to/pi-agent-teams/dist/cli.js init --global   # GitHub 方式
+node /path/to/awsl-agent-teams/dist/cli.js init --global
 ```
 
 ### `validate` 或 `verify` 报 "Cannot find module"
 
 编译产物过期，重新编译：
 ```bash
-cd pi-agent-teams
+cd awsl-agent-teams
 npm run build
 ```
 
@@ -287,29 +188,6 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 # Windows PowerShell
 $env:ANTHROPIC_API_KEY = "sk-ant-..."
-```
-
-### npm install -g 报权限错误（macOS）
-
-```bash
-# 方式 A：用 sudo
-sudo npm install -g awsl-agent-core
-
-# 方式 B：修改 npm 全局目录（推荐）
-mkdir ~/.npm-global
-npm config set prefix '~/.npm-global'
-echo 'export PATH=~/.npm-global/bin:$PATH' >> ~/.zshrc
-source ~/.zshrc
-npm install -g awsl-agent-core
-```
-
-### Windows 上 npm install -g 后 `awsl` 命令找不到
-
-确认 npm 全局 bin 在 PATH 中：
-```powershell
-npm config get prefix
-# 输出类似 C:\Users\你的用户名\AppData\Roaming\npm
-# 确认这个目录在系统 PATH 里
 ```
 
 ### 提示 "AWSL is already running on this project"
@@ -336,18 +214,9 @@ xcode-select --install
 
 ## 卸载
 
-### npm 方式
-
-```bash
-npm uninstall -g awsl-agent-core
-rm -rf ~/.claude/skills/awsl*
-```
-
-### GitHub 方式
-
 ```bash
 rm -rf ~/.claude/skills/awsl*
-rm -rf pi-agent-teams
+rm -rf awsl-agent-teams
 ```
 
 ---
@@ -356,6 +225,6 @@ rm -rf pi-agent-teams
 
 - [ ] `node -v` 显示 v18+
 - [ ] `claude --version` 显示版本号
-- [ ] `awsl --help`（npm 方式）或 `node dist/cli.js --help`（GitHub 方式）显示帮助
+- [ ] `node dist/cli.js --help` 显示帮助
 - [ ] `~/.claude/skills/awsl/SKILL.md` 存在
 - [ ] Claude Code 中 `/awsl-status` 无报错

@@ -112,8 +112,12 @@ AWSL 支持两种运行模式：
 ### 模式一：CC 技能（交互式）
 
 ```bash
+# 从源码克隆编译（尚未发布到 npm）
+git clone https://github.com/awsl-project/awsl-agent-teams.git
+cd awsl-agent-teams && npm install && npm run build
+
 # 将技能安装到 Claude Code
-npx awsl-agent-core init --global
+node dist/cli.js init --global
 
 # 在 Claude Code 中：
 /awsl 构建一个带认证和限流的 REST API
@@ -441,9 +445,9 @@ type TeamEventType =
 ## CLI 参考
 
 ```bash
-# 安装 Claude Code 技能
-awsl init                    # 项目本地（.claude/skills/）
-awsl init --global           # 全局（~/.claude/skills/）
+# 安装 Claude Code 技能（从源码）
+node dist/cli.js init                    # 项目本地（.claude/skills/）
+node dist/cli.js init --global           # 全局（~/.claude/skills/）
 
 # 终端模式（推荐用于自主构建）
 awsl run "目标" --engine claude-code
