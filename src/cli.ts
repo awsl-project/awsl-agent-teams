@@ -19,7 +19,8 @@ import { executeTeam } from "./orchestrator.js";
 import { type Engine, detectEngine } from "./runner.js";
 import { validatePlan } from "./validate.js";
 import { runFullVerification, runStaticReview } from "./verify.js";
-import { acquireLock, releaseLock, forceReleaseLock, checkLock, formatLockInfo } from "./lock.js";
+import { releaseLock, forceReleaseLock, checkLock, formatLockInfo } from "./lock.js";
+import { RunContext } from "./context.js";
 import { log } from "./log.js";
 import { runInstaller } from "./install.js";
 import { TaskQueue } from "./queue.js";
@@ -203,16 +204,13 @@ async function main() {
 	if (command === "validate") {
 		const { cwd, force } = parseCwdAndForce(args);
 
-		// Acquire lock
-		const lockResult = acquireLock(cwd, "validate");
-		if (!lockResult.acquired) {
-			if (force) {
-				forceReleaseLock(cwd);
-				acquireLock(cwd, "validate");
-			} else if (lockResult.existingLock) {
-				console.error(formatLockInfo(lockResult.existingLock));
-				process.exit(1);
-			}
+		// Acquire lock via RunContext
+		let ctx: RunContext;
+		try {
+			ctx = RunContext.acquire(cwd, { description: "validate", force });
+		} catch (e) {
+			console.error(e instanceof Error ? e.message : String(e));
+			process.exit(1);
 		}
 
 		try {
@@ -247,12 +245,12 @@ async function main() {
 			// Keep lock if validation succeeded (CC will execute next)
 			// Release lock if validation failed (nothing to execute)
 			if (!result.success) {
-				releaseLock(cwd);
+				ctx.release();
 			}
 
 			process.exit(result.success ? 0 : 1);
 		} catch (e) {
-			releaseLock(cwd);
+			ctx.release();
 			throw e;
 		}
 	}
@@ -595,14 +593,6 @@ async function main() {
 
 			console.log("Starting queue execution...\n");
 
-			// Setup SIGINT handler for graceful stop
-			process.removeAllListeners("SIGINT");
-			process.on("SIGINT", () => {
-				console.log("\nQueue interrupted. Current task will be paused.");
-				try { releaseLock(cwd); } catch { /* ignore */ }
-				process.exit(130);
-			});
-
 			await queue.start(engine);
 		}
 		else if (subCmd === "clear") {
@@ -670,16 +660,13 @@ async function main() {
 		}
 	}
 
-	// Acquire lock for run command
-	const lockResult = acquireLock(cwd, positional.join(" ").slice(0, 60) || "run");
-	if (!lockResult.acquired) {
-		if (force) {
-			forceReleaseLock(cwd);
-			acquireLock(cwd, positional.join(" ").slice(0, 60) || "run");
-		} else if (lockResult.existingLock) {
-			console.error(formatLockInfo(lockResult.existingLock));
-			process.exit(1);
-		}
+	// Acquire lock via RunContext
+	let ctx: RunContext;
+	try {
+		ctx = RunContext.acquire(cwd, { description: positional.join(" ").slice(0, 60) || "run", force });
+	} catch (e) {
+		console.error(e instanceof Error ? e.message : String(e));
+		process.exit(1);
 	}
 
 	agentsDirs.push(path.join(cwd, "agents"));
@@ -690,7 +677,7 @@ async function main() {
 			const planPath = path.join(cwd, ".planning", "PLAN.md");
 			if (!fs.existsSync(planPath)) {
 				console.error("No plan found at .planning/PLAN.md.");
-				releaseLock(cwd);
+				ctx.release();
 				process.exit(1);
 			}
 			const planContent = fs.readFileSync(planPath, "utf-8");
@@ -700,14 +687,14 @@ async function main() {
 				replan: true, qualityGate: true, engine: detectEngine(engine),
 			});
 			printResult(result);
-			releaseLock(cwd);
+			ctx.release();
 			process.exit(result.success ? 0 : 1);
 		}
 
 		const goal = positional.join(" ").trim();
 		if (!goal) {
 			console.error("Please provide a goal. Example: awsl run \"Build a REST API\"");
-			releaseLock(cwd);
+			ctx.release();
 			process.exit(1);
 		}
 
@@ -733,10 +720,10 @@ async function main() {
 			console.log("Run awsl run --execute-plan to proceed.\n");
 		}
 
-		releaseLock(cwd);
+		ctx.release();
 		process.exit(result.success ? 0 : 1);
 	} catch (e) {
-		releaseLock(cwd);
+		ctx.release();
 		throw e;
 	}
 }
@@ -769,19 +756,5 @@ function printResult(result: any) {
 
 main().catch(err => {
 	console.error("Fatal:", err);
-	// Try to release lock on crash
-	try { releaseLock(process.cwd()); } catch { /* ignore */ }
 	process.exit(1);
 });
-
-// Release lock on unexpected exit
-process.on("SIGINT", () => {
-	try { releaseLock(process.cwd()); } catch { /* ignore */ }
-	process.exit(130);
-});
-if (process.platform !== "win32") {
-	process.on("SIGTERM", () => {
-		try { releaseLock(process.cwd()); } catch { /* ignore */ }
-		process.exit(143);
-	});
-}

@@ -1,32 +1,22 @@
-# task_3: Update all three documentation files to reflect the verifica
+# task_3: Refactor queue.ts to use RunContext for per-task lock manage
 
 Assignee: coder
 Status: done
 
 ## Result
-Type-check passes.
+`execSync` was already unused before my changes — not something introduced by this task, so I'll leave it as-is.
 
 ## AWSL_RESULT
 
-Updated all three documentation files to reflect the REVIEW.md / VERIFICATION.md separation:
+### Delivered: `queue.ts` refactored to use `RunContext`
 
-### Files modified
+**File modified:** `src/queue.ts`
 
-1. **README.md** (3 changes):
-   - Pipeline Phases: Phase 3 now shows `LLM reviewer → REVIEW.md; tsc/test/eslint → VERIFICATION.md`
-   - Self-Healing Features: Auto-fix loop reads both REVIEW.md + VERIFICATION.md
-   - `.planning/` directory: Updated file descriptions (VERIFICATION.md = deterministic checks, REVIEW.md = LLM reviewer findings)
+**Changes:**
+1. **Import**: Replaced `import { acquireLock, releaseLock, checkLock } from "./lock.js"` → `import { RunContext } from "./context.js"`
+2. **Lock acquisition** (was lines 271-301): Replaced ~30 lines of manual lock management (`lockAcquired` boolean, `acquireLock`, `checkLock` stale-lock retry, double `acquireLock`) with 6-line `RunContext.tryAcquire()` + null check
+3. **Lock release** (was lines 417-422): Replaced `if (lockAcquired) releaseLock(this.cwd)` with `ctx.release()` — unconditional since `ctx` is only created on success and `release()` is idempotent
 
-2. **README.zh-CN.md** (3 changes):
-   - Same pipeline phases, self-healing, and `.planning/` directory updates in Chinese
+**Net effect:** ~20 fewer lines of lock retry logic removed. Zero references to `acquireLock`, `releaseLock`, `checkLock`, or `lockAcquired` remain.
 
-3. **BEST_PRACTICES.md** (7 changes):
-   - Architecture overview: Added LLM review → REVIEW.md and verify → VERIFICATION.md as separate steps
-   - Section 4 verify command: Added REVIEW.md vs VERIFICATION.md comparison table + rationale for separation
-   - Section 6 `.planning/` file list: Added REVIEW.md, updated VERIFICATION.md description
-   - Section 10 verify failure: Auto-fix now reads both files
-   - Benchmark data: Phase 3 label updated to "Review+Verify"
-   - `--no-verify` table: Clarified which file each phase generates
-   - Section 12 `awsl review`: Distinguished CLI static scan from LLM reviewer in pipeline
-
-**Diff stats:** 3 files changed, 38 insertions, 22 deletions. Type-check passes.
+**Verification:** `npx tsc --noEmit` passes with zero errors.
