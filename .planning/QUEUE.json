@@ -1,0 +1,80 @@
+{
+  "tasks": [
+    {
+      "id": "q_1",
+      "goal": "Timeline 有个clear 好像没有实现功能",
+      "options": {
+        "quick": false
+      },
+      "status": "failed",
+      "scheduledAt": "2026-03-09T08:42:06.008Z",
+      "startedAt": "2026-03-09T09:02:36.079Z",
+      "completedAt": "2026-03-09T09:08:19.966Z",
+      "result": {
+        "success": false,
+        "summary": "Planner produced no parseable tasks:\n## AWSL_RESULT\n\n```json\n{\n  \"summary\": \"Wire up Timeline 'Clear History' — add API endpoint POST /api/history/clear and a 'Clear All' button in the dashboard UI, following the existing Queue clear pattern\",\n  \"tasks\": [\n    {\n      \"id\": \"task_1\",\n      \"name\": \"Add history clear endpoint + UI butto"
+      },
+      "error": "Planner produced no parseable tasks:\n## AWSL_RESULT\n\n```json\n{\n  \"summary\": \"Wire up Timeline 'Clear History' — add API endpoint POST /api/history/clear and a 'Clear All' button in the dashboard UI, following the existing Queue clear pattern\",\n  \"tasks\": [\n    {\n      \"id\": \"task_1\",\n      \"name\": \"Add history clear endpoint + UI butto"
+    },
+    {
+      "id": "q_2",
+      "goal": "删除测试数据 只保留真实数据",
+      "options": {
+        "quick": false
+      },
+      "status": "failed",
+      "scheduledAt": "2026-03-09T08:42:30.736Z",
+      "startedAt": "2026-03-09T09:08:19.967Z",
+      "completedAt": "2026-03-09T09:14:57.107Z",
+      "result": {
+        "success": false,
+        "summary": "Planner produced no parseable tasks:\n"
+      },
+      "error": "Planner produced no parseable tasks:\n"
+    },
+    {
+      "id": "q_3",
+      "goal": "Timeline 有个clear 好像没有实现功能",
+      "options": {
+        "quick": false
+      },
+      "status": "failed",
+      "scheduledAt": "2026-03-09T09:28:26.639Z",
+      "startedAt": "2026-03-09T09:28:47.324Z",
+      "completedAt": "2026-03-09T09:33:55.816Z",
+      "result": {
+        "success": false,
+        "summary": "Planner produced no parseable tasks:\n"
+      },
+      "error": "Planner produced no parseable tasks:\n"
+    },
+    {
+      "id": "q_4",
+      "goal": "删除测试数据 只保留真实数据",
+      "options": {
+        "quick": false
+      },
+      "status": "failed",
+      "scheduledAt": "2026-03-09T09:28:29.749Z",
+      "startedAt": "2026-03-09T09:33:55.818Z",
+      "completedAt": "2026-03-09T09:41:22.391Z",
+      "result": {
+        "success": false,
+        "summary": "Planner produced no parseable tasks:\n## AWSL_RESULT\n\n### Plan: 删除测试数据，保留真实数据\n\n**3 tasks, 2 parallel + 1 verification**\n\n| Task | Assignee | Dependencies | Action |\n|------|----------|-------------|--------|\n| `task_1` — Clean HISTORY.json | coder | none | Remove fake entries h_1–h_11, keep real h_12–h_14 |\n| `task_2` — Delete stale fil"
+      },
+      "error": "Planner produced no parseable tasks:\n## AWSL_RESULT\n\n### Plan: 删除测试数据，保留真实数据\n\n**3 tasks, 2 parallel + 1 verification**\n\n| Task | Assignee | Dependencies | Action |\n|------|----------|-------------|--------|\n| `task_1` — Clean HISTORY.json | coder | none | Remove fake entries h_1–h_11, keep real h_12–h_14 |\n| `task_2` — Delete stale fil"
+    },
+    {
+      "id": "q_5",
+      "goal": "Timeline 有个clear 好像没有实现功能",
+      "options": {
+        "quick": false
+      },
+      "status": "running",
+      "scheduledAt": "2026-03-09T09:46:43.020Z",
+      "startedAt": "2026-03-09T09:46:47.931Z"
+    }
+  ],
+  "createdAt": "2026-03-09T08:42:06.008Z",
+  "updatedAt": "2026-03-09T09:46:47.932Z"
+}
