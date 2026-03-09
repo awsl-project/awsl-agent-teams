@@ -177,6 +177,7 @@ export class TaskQueue {
 			// Find next runnable pending task (all deps satisfied + runAt check)
 			const now = Date.now();
 			let earliestRunAt: number | null = null;
+			let hasWaitingOnDeps = false;
 
 			const nextTask = data.tasks.find((task, idx) => {
 				if (task.status !== "pending") return false;
@@ -197,15 +198,25 @@ export class TaskQueue {
 				if (task.dependsOn && task.dependsOn.length > 0) {
 					for (const dep of task.dependsOn) {
 						if (dep === "all") {
-							// All previous tasks must be done
 							const allPriorDone = data.tasks
 								.slice(0, idx)
 								.every(t => t.status === "done");
-							if (!allPriorDone) return false;
+							if (!allPriorDone) {
+								// Check if any dep is still running/pending (not a deadlock)
+								const anyStillActive = data.tasks
+									.slice(0, idx)
+									.some(t => t.status === "running" || t.status === "pending");
+								if (anyStillActive) hasWaitingOnDeps = true;
+								return false;
+							}
 						} else {
-							// Specific dependency must be done
 							const depTask = data.tasks.find(t => t.id === dep);
-							if (!depTask || depTask.status !== "done") return false;
+							if (!depTask || depTask.status !== "done") {
+								if (depTask && (depTask.status === "running" || depTask.status === "pending")) {
+									hasWaitingOnDeps = true;
+								}
+								return false;
+							}
 						}
 					}
 				}
@@ -227,10 +238,15 @@ export class TaskQueue {
 					continue;
 				}
 
-				// Pending tasks exist but none are runnable — dependency deadlock
+				// Tasks waiting on deps that are still active — not a deadlock, just wait
+				if (hasWaitingOnDeps) {
+					await new Promise(r => setTimeout(r, 5000));
+					continue;
+				}
+
+				// Genuine deadlock — all deps are failed/missing
 				const blocked = pendingTasks.map(t => `${t.id} (deps: ${t.dependsOn?.join(",") ?? "none"})`);
 				log.warn("queue", `Dependency deadlock: ${blocked.length} task(s) blocked:\n  ${blocked.join("\n  ")}`);
-				// Mark blocked tasks as failed
 				for (const t of pendingTasks) {
 					const freshData = this.load();
 					const freshTask = freshData.tasks.find(ft => ft.id === t.id);
