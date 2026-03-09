@@ -1,15 +1,21 @@
 {
-  "wave": 0,
+  "wave": 1,
   "completedTasks": [
-    "task_1"
+    "task_1",
+    "task_2",
+    "task_4",
+    "task_5"
   ],
   "taskResults": {
-    "task_1": "All 5 exports present. The file is complete and type-checks clean.\n\n## AWSL_RESULT\n\n**Created:** `src/sandbox.ts` (117 lines)\n\n**Exports:**\n1. `SandboxPolicy` interface — `writePaths: string[]`, `bash: BashPolicy`\n2. `BashPolicy` interface — `mode: 'allowlist' | 'denylist' | 'unrestricted'`, `patterns: string[]`\n3. `defaultPolicy(role, cwd)` — role-based defaults for coder/tester/reviewer/architect/planner\n4. `checkWritePath(resolvedPath, policy)` — path validation with Windows case-insensitive support\n5. `checkBashCommand(command, policy)` — allowlist (startsWith) / denylist (includes) checking\n\n**Verification:** `npx tsc --noEmit` — passes with no errors"
+    "task_1": "All 5 exports present. The file is complete and type-checks clean.\n\n## AWSL_RESULT\n\n**Created:** `src/sandbox.ts` (117 lines)\n\n**Exports:**\n1. `SandboxPolicy` interface — `writePaths: string[]`, `bash: BashPolicy`\n2. `BashPolicy` interface — `mode: 'allowlist' | 'denylist' | 'unrestricted'`, `patterns: string[]`\n3. `defaultPolicy(role, cwd)` — role-based defaults for coder/tester/reviewer/architect/planner\n4. `checkWritePath(resolvedPath, policy)` — path validation with Windows case-insensitive support\n5. `checkBashCommand(command, policy)` — allowlist (startsWith) / denylist (includes) checking\n\n**Verification:** `npx tsc --noEmit` — passes with no errors",
+    "task_2": "All changes are in place and type-check passes.\n\n## AWSL_RESULT\n\n**Modified:** `src/tools.ts`\n\n**Changes:**\n1. **Imports:** Added `SandboxPolicy` (type-only), `checkWritePath`, `checkBashCommand` from `./sandbox.js`\n2. **`createWriteTool(cwd, sandbox?)`** — checks `checkWritePath` before `fs.writeFileSync`; returns error text if blocked\n3. **`createEditTool(cwd, sandbox?)`** — same guard before `fs.writeFileSync`\n4. **`createBashTool(cwd, sandbox?)`** — checks `checkBashCommand` before `execSync`; returns error text if blocked\n5. **`ToolContext`** — added `sandbox?: SandboxPolicy` field\n6. **`TOOL_FACTORIES`** — passes `ctx.sandbox` to write, edit, bash factories\n7. **`createAgentTools()`** — added optional `sandbox?: SandboxPolicy` parameter (last arg), threaded into `ToolContext`\n\n**Backward-compatible:** all sandbox params are optional; `undefined` means no enforcement.\n\n**Verification:** `npx tsc --noEmit` — passes with no errors",
+    "task_4": "Type-check passes clean.\n\n## AWSL_RESULT\n\n**Modified files:**\n\n1. **`src/index.ts`** — Added export line for `SandboxPolicy`, `BashPolicy`, `defaultPolicy`, `checkWritePath`, `checkBashCommand` from `./sandbox.js`\n2. **`src/agents.ts`** — Added `import type { SandboxPolicy }` and optional `sandbox?: SandboxPolicy` field to `TeamAgentDef` interface\n\n**Verification:** `npx tsc --noEmit` — passes with no errors",
+    "task_5": "Type-check passes clean (no output = no errors).\n\n## AWSL_RESULT\n\n**Modified files:**\n\n1. **README.md** — Added `## Sandbox (Builtin Engine)` section (lines 477-502) between Guardian and Built-in Agents. Includes: `ExecuteOptions.sandbox` config table, role defaults table with patterns, allowlist/denylist explanation, Windows compatibility note, per-agent override mention.\n\n2. **README.zh-CN.md** — Added matching `## 沙箱（内置引擎）` section (lines 477-502) in Chinese. Same structure and content mirrored.\n\n3. **BEST_PRACTICES.md** — Added `## 9. 沙箱配置（内置引擎）` section with:\n   - Sandbox on/off/custom code example\n   - Role defaults table with Chinese explanations\n   - Per-agent custom `SandboxPolicy` TypeScript example\n   - How to disable sandbox\n   - How allowlist/denylist/write-path checking works\n   - Caveats table (builtin-only, not perfect isolation, default-on, extensible)\n   - Renumbered sections 10-18 (was 9-17)\n\n**Verification:** `npx tsc --noEmit` — passes with no errors"
   },
   "failedTasks": [],
   "taskErrors": {},
   "rateLimitRetries": 0,
-  "savedAt": "2026-03-09T20:22:35.393Z",
+  "savedAt": "2026-03-09T20:25:18.036Z",
   "memory": {
     "result:architect:session": {
       "value": "8cea564b-59e5-455f-8f51-8c30f102ad0e",
@@ -42,14 +48,29 @@
       "timestamp": 1773087690384
     },
     "result:coder:session": {
-      "value": "ab390744-4f4c-4bd5-a8ba-15e0eac8af2c",
+      "value": "f2e41113-4b28-4d5b-9cef-f0fc6821f1fe",
       "author": "coder",
-      "timestamp": 1773087754947
+      "timestamp": 1773087917812
     },
     "result:task_1": {
       "value": "All 5 exports present. The file is complete and type-checks clean.\n\n## AWSL_RESULT\n\n**Created:** `src/sandbox.ts` (117 lines)\n\n**Exports:**\n1. `SandboxPolicy` interface — `writePaths: string[]`, `bash: BashPolicy`\n2. `BashPolicy` interface — `mode: 'allowlist' | 'denylist' | 'unrestricted'`, `patterns: string[]`\n3. `defaultPolicy(role, cwd)` — role-based defaults for coder/tester/reviewer/architect/planner\n4. `checkWritePath(resolvedPath, policy)` — path validation with Windows case-insensitive support\n5. `checkBashCommand(command, policy)` — allowlist (startsWith) / denylist (includes) checking\n\n**Verification:** `npx tsc --noEmit` — passes with no errors",
       "author": "coder",
       "timestamp": 1773087754947
+    },
+    "result:task_4": {
+      "value": "Type-check passes clean.\n\n## AWSL_RESULT\n\n**Modified files:**\n\n1. **`src/index.ts`** — Added export line for `SandboxPolicy`, `BashPolicy`, `defaultPolicy`, `checkWritePath`, `checkBashCommand` from `./sandbox.js`\n2. **`src/agents.ts`** — Added `import type { SandboxPolicy }` and optional `sandbox?: SandboxPolicy` field to `TeamAgentDef` interface\n\n**Verification:** `npx tsc --noEmit` — passes with no errors",
+      "author": "coder",
+      "timestamp": 1773087796043
+    },
+    "result:task_2": {
+      "value": "All changes are in place and type-check passes.\n\n## AWSL_RESULT\n\n**Modified:** `src/tools.ts`\n\n**Changes:**\n1. **Imports:** Added `SandboxPolicy` (type-only), `checkWritePath`, `checkBashCommand` from `./sandbox.js`\n2. **`createWriteTool(cwd, sandbox?)`** — checks `checkWritePath` before `fs.writeFileSync`; returns error text if blocked\n3. **`createEditTool(cwd, sandbox?)`** — same guard before `fs.writeFileSync`\n4. **`createBashTool(cwd, sandbox?)`** — checks `checkBashCommand` before `execSync`; returns error text if blocked\n5. **`ToolContext`** — added `sandbox?: SandboxPolicy` field\n6. **`TOOL_FACTORIES`** — passes `ctx.sandbox` to write, edit, bash factories\n7. **`createAgentTools()`** — added optional `sandbox?: SandboxPolicy` parameter (last arg), threaded into `ToolContext`\n\n**Backward-compatible:** all sandbox params are optional; `undefined` means no enforcement.\n\n**Verification:** `npx tsc --noEmit` — passes with no errors",
+      "author": "coder",
+      "timestamp": 1773087846551
+    },
+    "result:task_5": {
+      "value": "Type-check passes clean (no output = no errors).\n\n## AWSL_RESULT\n\n**Modified files:**\n\n1. **README.md** — Added `## Sandbox (Builtin Engine)` section (lines 477-502) between Guardian and Built-in Agents. Includes: `ExecuteOptions.sandbox` config table, role defaults table with patterns, allowlist/denylist explanation, Windows compatibility note, per-agent override mention.\n\n2. **README.zh-CN.md** — Added matching `## 沙箱（内置引擎）` section (lines 477-502) in Chinese. Same structure and content mirrored.\n\n3. **BEST_PRACTICES.md** — Added `## 9. 沙箱配置（内置引擎）` section with:\n   - Sandbox on/off/custom code example\n   - Role defaults table with Chinese explanations\n   - Per-agent custom `SandboxPolicy` TypeScript example\n   - How to disable sandbox\n   - How allowlist/denylist/write-path checking works\n   - Caveats table (builtin-only, not perfect isolation, default-on, extensible)\n   - Renumbered sections 10-18 (was 9-17)\n\n**Verification:** `npx tsc --noEmit` — passes with no errors",
+      "author": "coder",
+      "timestamp": 1773087917812
     }
   },
   "goal": "给 builtin engine 增加最少限度的沙箱：写路径限制在项目目录内，bash 至少按 phase 或 allowlist 控制"
