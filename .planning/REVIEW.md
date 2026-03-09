@@ -1,13 +1,32 @@
 # Static Code Review
 
-**Review: 0 critical, 77 warnings, 1 info across 61 files.**
+**Review: 0 critical, 116 warnings, 1 info across 161 files.**
 
-## WARNING (77)
+## WARNING (116)
 
 - **bench-awsl\src\index.ts:6** [no-console-log] console.log in production code
 - **bench-awsl-complex\src\middleware\requestLogger.ts:8** [no-console-log] console.log in production code
 - **bench-awsl-complex\src\routes\auth.ts:15** [no-any] Explicit `any` type used
 - **bench-awsl-complex\src\server.ts:6** [no-console-log] console.log in production code
+- **bench-crm-awsl\src\app.ts:18** [no-console-log] console.log in production code
+- **bench-crm-awsl\src\app.ts:38** [no-any] Explicit `any` type used
+- **bench-crm-awsl\src\middleware\logger.ts:8** [no-console-log] console.log in production code
+- **bench-crm-awsl\src\middleware\middleware.test.ts:19** [no-any] Explicit `any` type used
+- **bench-crm-awsl\src\middleware\middleware.test.ts:208** [no-any] Explicit `any` type used
+- **bench-crm-awsl\src\middleware\middleware.test.ts:225** [no-any] Explicit `any` type used
+- **bench-crm-awsl\src\routes\activities.test.ts:142** [no-any] Explicit `any` type used
+- **bench-crm-awsl\src\routes\activities.test.ts:143** [no-any] Explicit `any` type used
+- **bench-crm-awsl\src\routes\contacts.test.ts:116** [no-any] Explicit `any` type used
+- **bench-crm-awsl\src\routes\dashboard.test.ts:66** [no-any] Explicit `any` type used
+- **bench-crm-awsl\src\routes\dashboard.test.ts:85** [no-any] Explicit `any` type used
+- **bench-crm-awsl\src\server.ts:6** [no-console-log] console.log in production code
+- **bench-crm-awsl\src\__tests__\activities.test.ts:144** [no-any] Explicit `any` type used
+- **bench-crm-awsl\src\__tests__\contacts.test.ts:92** [no-any] Explicit `any` type used
+- **bench-crm-awsl\src\__tests__\customers.test.ts:255** [no-any] Explicit `any` type used
+- **bench-crm-awsl\src\__tests__\opportunities.test.ts:143** [no-any] Explicit `any` type used
+- **bench-crm-native\src\middleware\logger.ts:8** [no-console-log] console.log in production code
+- **bench-crm-native\src\server.ts:6** [no-console-log] console.log in production code
+- **bench-crm-native\src\__tests__\opportunities.test.ts:1** [file-too-long] File has 659 lines, consider splitting
 - **bench-native\src\index.ts:6** [no-console-log] console.log in production code
 - **bench-native-complex\src\index.ts:6** [no-console-log] console.log in production code
 - **bench-native-complex\src\middleware\logger.ts:8** [no-console-log] console.log in production code
@@ -16,64 +35,84 @@
 - **bench-native-complex\src\routes\todos.ts:48** [no-any] Explicit `any` type used
 - **bench-native-complex\src\routes\todos.ts:76** [no-any] Explicit `any` type used
 - **bench-native-complex\src\routes\todos.ts:112** [no-any] Explicit `any` type used
-- **src\cli.ts:100** [no-console-log] console.log in production code
-- **src\cli.ts:102** [no-console-log] console.log in production code
-- **src\cli.ts:103** [no-console-log] console.log in production code
-- **src\cli.ts:104** [no-console-log] console.log in production code
-- **src\cli.ts:105** [no-console-log] console.log in production code
-- **src\cli.ts:106** [no-console-log] console.log in production code
-- **src\cli.ts:107** [no-console-log] console.log in production code
+- **bench-terminal-full\src\middleware\logger.ts:7** [no-console-log] console.log in production code
+- **bench-terminal-full\src\server.ts:6** [no-console-log] console.log in production code
+- **src\cli.ts:110** [no-console-log] console.log in production code
+- **src\cli.ts:112** [no-console-log] console.log in production code
+- **src\cli.ts:113** [no-console-log] console.log in production code
+- **src\cli.ts:114** [no-console-log] console.log in production code
+- **src\cli.ts:115** [no-console-log] console.log in production code
+- **src\cli.ts:116** [no-console-log] console.log in production code
 - **src\cli.ts:117** [no-console-log] console.log in production code
-- **src\cli.ts:119** [no-console-log] console.log in production code
+- **src\cli.ts:127** [no-console-log] console.log in production code
 - **src\cli.ts:129** [no-console-log] console.log in production code
-- **src\cli.ts:133** [no-console-log] console.log in production code
-- **src\cli.ts:161** [no-console-log] console.log in production code
-- **src\cli.ts:163** [no-console-log] console.log in production code
-- **src\cli.ts:165** [no-console-log] console.log in production code
-- **src\cli.ts:168** [no-console-log] console.log in production code
-- **src\cli.ts:169** [no-console-log] console.log in production code
-- **src\cli.ts:172** [no-console-log] console.log in production code
-- **src\cli.ts:174** [no-console-log] console.log in production code
-- **src\cli.ts:176** [no-console-log] console.log in production code
-- **src\cli.ts:177** [no-console-log] console.log in production code
-- **src\cli.ts:185** [no-console-log] console.log in production code
-- **src\cli.ts:206** [no-console-log] console.log in production code
-- **src\cli.ts:207** [no-console-log] console.log in production code
-- **src\cli.ts:209** [no-console-log] console.log in production code
-- **src\cli.ts:211** [no-console-log] console.log in production code
-- **src\cli.ts:214** [no-console-log] console.log in production code
+- **src\cli.ts:139** [no-console-log] console.log in production code
+- **src\cli.ts:143** [no-console-log] console.log in production code
+- **src\cli.ts:171** [no-console-log] console.log in production code
+- **src\cli.ts:173** [no-console-log] console.log in production code
+- **src\cli.ts:175** [no-console-log] console.log in production code
+- **src\cli.ts:178** [no-console-log] console.log in production code
+- **src\cli.ts:179** [no-console-log] console.log in production code
+- **src\cli.ts:182** [no-console-log] console.log in production code
+- **src\cli.ts:184** [no-console-log] console.log in production code
+- **src\cli.ts:186** [no-console-log] console.log in production code
+- **src\cli.ts:187** [no-console-log] console.log in production code
+- **src\cli.ts:195** [no-console-log] console.log in production code
 - **src\cli.ts:216** [no-console-log] console.log in production code
 - **src\cli.ts:217** [no-console-log] console.log in production code
-- **src\cli.ts:223** [no-console-log] console.log in production code
-- **src\cli.ts:234** [no-console-log] console.log in production code
-- **src\cli.ts:235** [no-console-log] console.log in production code
-- **src\cli.ts:236** [no-console-log] console.log in production code
-- **src\cli.ts:238** [no-console-log] console.log in production code
-- **src\cli.ts:239** [no-console-log] console.log in production code
+- **src\cli.ts:219** [no-console-log] console.log in production code
+- **src\cli.ts:221** [no-console-log] console.log in production code
+- **src\cli.ts:224** [no-console-log] console.log in production code
+- **src\cli.ts:226** [no-console-log] console.log in production code
+- **src\cli.ts:227** [no-console-log] console.log in production code
+- **src\cli.ts:233** [no-console-log] console.log in production code
 - **src\cli.ts:244** [no-console-log] console.log in production code
-- **src\cli.ts:366** [no-console-log] console.log in production code
+- **src\cli.ts:245** [no-console-log] console.log in production code
+- **src\cli.ts:246** [no-console-log] console.log in production code
+- **src\cli.ts:248** [no-console-log] console.log in production code
+- **src\cli.ts:249** [no-console-log] console.log in production code
+- **src\cli.ts:254** [no-console-log] console.log in production code
+- **src\cli.ts:321** [no-console-log] console.log in production code
+- **src\cli.ts:322** [no-console-log] console.log in production code
+- **src\cli.ts:323** [no-console-log] console.log in production code
+- **src\cli.ts:324** [no-console-log] console.log in production code
+- **src\cli.ts:329** [no-console-log] console.log in production code
+- **src\cli.ts:331** [no-console-log] console.log in production code
+- **src\cli.ts:332** [no-console-log] console.log in production code
+- **src\cli.ts:333** [no-console-log] console.log in production code
+- **src\cli.ts:337** [no-console-log] console.log in production code
+- **src\cli.ts:338** [no-console-log] console.log in production code
+- **src\cli.ts:339** [no-console-log] console.log in production code
+- **src\cli.ts:341** [no-console-log] console.log in production code
+- **src\cli.ts:352** [no-console-log] console.log in production code
 - **src\cli.ts:367** [no-console-log] console.log in production code
-- **src\cli.ts:378** [no-any] Explicit `any` type used
-- **src\cli.ts:379** [no-console-log] console.log in production code
-- **src\cli.ts:380** [no-console-log] console.log in production code
+- **src\cli.ts:372** [no-console-log] console.log in production code
 - **src\cli.ts:381** [no-console-log] console.log in production code
-- **src\cli.ts:385** [no-console-log] console.log in production code
-- **src\cli.ts:390** [no-console-log] console.log in production code
-- **src\cli.ts:393** [no-console-log] console.log in production code
-- **src\cli.ts:399** [no-console-log] console.log in production code
-- **src\cli.ts:400** [no-console-log] console.log in production code
+- **src\cli.ts:504** [no-console-log] console.log in production code
+- **src\cli.ts:505** [no-console-log] console.log in production code
+- **src\cli.ts:516** [no-any] Explicit `any` type used
+- **src\cli.ts:517** [no-console-log] console.log in production code
+- **src\cli.ts:518** [no-console-log] console.log in production code
+- **src\cli.ts:519** [no-console-log] console.log in production code
+- **src\cli.ts:523** [no-console-log] console.log in production code
+- **src\cli.ts:528** [no-console-log] console.log in production code
+- **src\cli.ts:531** [no-console-log] console.log in production code
+- **src\cli.ts:537** [no-console-log] console.log in production code
+- **src\cli.ts:538** [no-console-log] console.log in production code
+- **src\cli.ts:1** [file-too-long] File has 560 lines, consider splitting
 - **src\install.ts:344** [no-console-log] console.log in production code
 - **src\install.ts:359** [no-console-log] console.log in production code
 - **src\install.ts:375** [no-console-log] console.log in production code
 - **src\install.ts:378** [no-console-log] console.log in production code
 - **src\lock.ts:85** [no-any] Explicit `any` type used
 - **src\lock.ts:163** [no-any] Explicit `any` type used
-- **src\orchestrator.ts:135** [no-empty-catch] Empty catch block — errors silently swallowed
-- **src\orchestrator.ts:1** [file-too-long] File has 827 lines, consider splitting
-- **src\planning.ts:122** [no-any] Explicit `any` type used
-- **src\runner.ts:249** [no-any] Explicit `any` type used
-- **src\runner.ts:267** [no-any] Explicit `any` type used
-- **src\runner.ts:269** [no-any] Explicit `any` type used
+- **src\orchestrator.ts:146** [no-empty-catch] Empty catch block — errors silently swallowed
+- **src\orchestrator.ts:1** [file-too-long] File has 945 lines, consider splitting
+- **src\planning.ts:123** [no-any] Explicit `any` type used
+- **src\queue.ts:253** [no-any] Explicit `any` type used
+- **src\runner.ts:315** [no-any] Explicit `any` type used
+- **src\runner.ts:333** [no-any] Explicit `any` type used
+- **src\runner.ts:335** [no-any] Explicit `any` type used
 - **src\tools.ts:40** [no-any] Explicit `any` type used
 - **src\tools.ts:62** [no-any] Explicit `any` type used
 - **src\tools.ts:89** [no-any] Explicit `any` type used

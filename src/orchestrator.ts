@@ -19,7 +19,7 @@ import type { TeamAgentDef } from "./agents.js";
 import { SharedMemory } from "./memory.js";
 import { log } from "./log.js";
 import { type RunResult, type Engine, runAgent, runParallel, detectEngine } from "./runner.js";
-import { createPlanningDir, parseStructuredTasks, atomicCommit, type StructuredTask, type PlanningDir } from "./planning.js";
+import { createPlanningDir, parseStructuredTasks, atomicCommit, saveCheckpoint, loadCheckpoint, clearCheckpoint, type StructuredTask, type PlanningDir, type CheckpointData } from "./planning.js";
 import { SkillRegistry } from "./skills.js";
 import { runFullVerification } from "./verify.js";
 
@@ -40,6 +40,7 @@ export type TeamEventType =
 	| "fix_done"
 	| "retry_start"
 	| "checkpoint"
+	| "rate_limit"
 	| "all_done";
 
 export interface TeamEvent {
@@ -98,6 +99,12 @@ export interface ExecuteOptions {
 	maxFixAttempts?: number;
 	/** Max retries per task before re-planning. Default 2. */
 	maxRetries?: number;
+	/** Max rate-limit retries before giving up. Default 20. */
+	maxRateLimitRetries?: number;
+	/** Custom backoff schedule in ms. Default [60000, 120000, 300000, 600000, 900000]. */
+	rateLimitBackoff?: number[];
+	/** Resume from checkpoint if available. Default true. */
+	resumeFromCheckpoint?: boolean;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────
@@ -112,7 +119,11 @@ function buildRoster(agents: TeamAgentDef[]): string {
 function topologicalSort(tasks: Task[]): Task[][] {
 	const waves: Task[][] = [];
 	const done = new Set<string>();
-	let remaining = tasks.filter(t => t.status !== "failed");
+	// Seed already-completed tasks into the done set for dependency resolution
+	for (const t of tasks) {
+		if (t.status === "done" || t.status === "verified") done.add(t.id);
+	}
+	let remaining = tasks.filter(t => t.status !== "failed" && t.status !== "done" && t.status !== "verified");
 
 	while (remaining.length > 0) {
 		const wave = remaining.filter(t => t.dependencies.every(d => done.has(d)));
@@ -187,6 +198,14 @@ function parseReviewFindings(raw: string): ReviewFinding[] {
 	return findings;
 }
 
+// ─── Rate Limit Backoff ──────────────────────────────────────
+
+const DEFAULT_RATE_LIMIT_BACKOFF = [60_000, 120_000, 300_000, 600_000, 900_000];
+
+function getRateLimitDelay(attempt: number, schedule: number[]): number {
+	return schedule[Math.min(attempt, schedule.length - 1)];
+}
+
 // ─── Main Orchestrator ───────────────────────────────────────
 
 export async function executeTeam(
@@ -207,6 +226,9 @@ export async function executeTeam(
 	const engine = detectEngine(options?.engine);
 	const maxFixAttempts = options?.maxFixAttempts ?? 3;
 	const maxRetries = options?.maxRetries ?? 2;
+	const maxRateLimitRetries = options?.maxRateLimitRetries ?? 20;
+	const rateLimitBackoff = options?.rateLimitBackoff ?? DEFAULT_RATE_LIMIT_BACKOFF;
+	let rateLimitRetryCount = 0;
 	const memory = new SharedMemory();
 	const roster = buildRoster(agents);
 	const planning = createPlanningDir(cwd);
@@ -362,7 +384,37 @@ Call the report tool with your JSON plan:
 	await emit(hooks, { type: "plan_ready", tasks, memory });
 
 	// ── Phase 2: Execute ──────────────────────────────────────
-	const waves = topologicalSort(tasks);
+	let waves = topologicalSort(tasks);
+
+	// Checkpoint resume: restore completed/failed tasks from prior run
+	if (options?.resumeFromCheckpoint !== false) {
+		const checkpoint = loadCheckpoint(cwd);
+		if (checkpoint) {
+			// Restore completed tasks
+			for (const taskId of checkpoint.completedTasks) {
+				const task = tasks.find(t => t.id === taskId);
+				if (task) {
+					task.status = "done";
+					task.result = checkpoint.taskResults[taskId] ?? "(restored from checkpoint)";
+					memory.set(`result:${task.id}`, task.result, task.assignee);
+				}
+			}
+			// Restore failed tasks
+			for (const taskId of checkpoint.failedTasks) {
+				const task = tasks.find(t => t.id === taskId);
+				if (task) {
+					task.status = "failed";
+					task.error = "Failed in previous run";
+				}
+			}
+			rateLimitRetryCount = checkpoint.rateLimitRetries;
+
+			// Recompute waves since some tasks are now done/failed
+			waves = topologicalSort(tasks);
+			log.info("conductor", `Resumed from checkpoint: ${checkpoint.completedTasks.length} tasks completed, wave ${checkpoint.wave}`);
+		}
+	}
+
 	log.section(`Phase 2: Execution (${waves.length} waves)`);
 
 	for (let wi = 0; wi < waves.length; wi++) {
@@ -421,7 +473,11 @@ Call the report tool with your JSON plan:
 			// Guardian: skills auto-activate based on agent role
 			const result = await runAgent(agentDef, prompt, cwd, memory, roster, defaultModel, 30, skills, engine);
 
-			if (result.status === "done" || result.status === "no_report") {
+			if (result.status === "rate_limited") {
+				task.status = "pending"; // Reset to pending for retry
+				task.error = result.error ?? "Rate limited";
+				log.warn("conductor", `${task.id}: Rate limited`);
+			} else if (result.status === "done" || result.status === "no_report") {
 				task.status = "done";
 				task.result = result.result;
 				memory.set(`result:${task.id}`, result.result, task.assignee);
@@ -444,6 +500,54 @@ Call the report tool with your JSON plan:
 
 			return result;
 		});
+
+		// Check for rate-limited tasks in this wave
+		const rateLimitedTasks = wave.filter(t => t.status === "pending" && t.error?.includes("Rate limited"));
+		if (rateLimitedTasks.length > 0) {
+			rateLimitRetryCount++;
+			if (rateLimitRetryCount > maxRateLimitRetries) {
+				// Exhausted retries — mark as failed
+				for (const t of rateLimitedTasks) {
+					t.status = "failed";
+					t.error = "Rate limit retries exhausted";
+				}
+				log.warn("conductor", `Rate limit retries exhausted (${maxRateLimitRetries})`);
+			} else {
+				// Save checkpoint
+				const completedTasks = tasks.filter(t => t.status === "done" || t.status === "verified").map(t => t.id);
+				const taskResults: Record<string, string> = {};
+				for (const t of tasks.filter(t => t.status === "done" || t.status === "verified")) {
+					taskResults[t.id] = t.result ?? "";
+				}
+				const failedTasks = tasks.filter(t => t.status === "failed").map(t => t.id);
+				saveCheckpoint(cwd, {
+					wave: wi,
+					completedTasks,
+					taskResults,
+					failedTasks,
+					rateLimitRetries: rateLimitRetryCount,
+					savedAt: new Date().toISOString(),
+				});
+
+				await emit(hooks, { type: "rate_limit", wave: wi, tasks: rateLimitedTasks, memory });
+
+				const delay = getRateLimitDelay(rateLimitRetryCount - 1, rateLimitBackoff);
+				const delayMin = Math.floor(delay / 60000);
+				const delaySec = Math.floor((delay % 60000) / 1000);
+				log.info("conductor", `Rate limited. Waiting ${delayMin}m ${delaySec}s before retry (attempt ${rateLimitRetryCount}/${maxRateLimitRetries})`);
+
+				await new Promise(resolve => setTimeout(resolve, delay));
+
+				// Clear rate limit error for retry
+				for (const t of rateLimitedTasks) {
+					t.error = undefined;
+				}
+
+				// Retry this wave
+				wi--;
+				continue;
+			}
+		}
 
 		await emit(hooks, { type: "wave_end", wave: wi, tasks: wave, memory });
 
@@ -629,6 +733,9 @@ Call the report tool with your JSON plan:
 			}
 		}
 	}
+
+	// Clear checkpoint on completion
+	clearCheckpoint(cwd);
 
 	// ── Update State ──────────────────────────────────────────
 	const doneCount = tasks.filter(t => t.status === "done" || t.status === "verified").length;

@@ -194,6 +194,8 @@ awsl run "目标" --engine claude-code [选项]
 | **文件冲突检测** | 同波次任务共享文件 → 自动分配到不同波次 |
 | **Git 检查点** | 每个成功波次后原子提交（可二分查找） |
 | **跨波次上下文** | 第 N+1 波次的智能体可看到第 N 波次的实际文件内容 |
+| **限额自动恢复** | Token 限额 → 保存检查点 → 指数退避等待（1m→2m→5m→10m→15m）→ 自动重试（最多 20 次） |
+| **任务队列（睡前模式）** | 排队多个目标 → `awsl queue start` → 无人值守顺序执行，自带限额恢复 |
 
 ### 输出示例
 
@@ -226,6 +228,64 @@ awsl lock              # 查看当前锁状态
 awsl unlock [--force]  # 释放锁
 awsl agents            # 列出可用智能体
 ```
+
+## 任务队列（睡前模式）
+
+排队多个目标，让 AWSL 通宵执行 — 完全无人值守，自带限额自动恢复。
+
+### 用法
+
+```bash
+# 添加任务到队列
+awsl queue add "构建用户认证模块" --engine claude-code
+awsl queue add "添加支付集成" --depends-on q_1
+awsl queue add "写端到端测试" --depends-on all  # 等待所有前置任务完成
+
+# 查看队列
+awsl queue list
+
+# 开始执行（前台守护进程）
+awsl queue start
+```
+
+### 队列选项
+
+| 选项 | 说明 |
+|--------|-------------|
+| `--quick` | 跳过头脑风暴和调研 |
+| `--engine <type>` | 执行引擎（claude-code 或 builtin） |
+| `--concurrency <n>` | 最大并行智能体数 |
+| `--model <model>` | 覆盖默认模型 |
+| `--depends-on <ids>` | 逗号分隔的任务 ID，或 `all` |
+
+### 限额自动恢复
+
+执行过程中遇到 token 限额时：
+
+1. **检测** — 模式匹配 stderr/stdout（429、"rate limit"、"overloaded" 等）
+2. **检查点** — 保存进度到 `.planning/CHECKPOINT.json`（已完成任务、结果、波次位置）
+3. **退避** — 指数延迟等待：1 分钟 → 2 分钟 → 5 分钟 → 10 分钟 → 15 分钟（上限）
+4. **重试** — 恢复当前波次，跳过已完成的任务
+5. **限制** — 最多 20 次限额重试（可通过 `maxRateLimitRetries` 配置）
+
+检查点是人类可读的 JSON。下次运行时，AWSL 自动检测并从检查点恢复。
+
+## 睡前模式仪表盘
+
+像素风复古仪表盘，可视化你的通宵构建历史。
+
+```bash
+awsl dashboard              # 在 http://localhost:3120 打开
+awsl dashboard --port 8080  # 自定义端口
+```
+
+功能：
+- **RPG 风格状态栏** — 完成/失败计数、总耗时、成功率（像素进度条）
+- **日历热力图** — GitHub 贡献图风格，展示每日活动（最近 90 天）
+- **时间线** — 按日期分组的运行记录，支持按项目筛选
+- **项目侧边栏** — 所有项目列表，彩色徽章 + 任务计数
+- **队列监控** — 当前队列状态实时刷新（30 秒间隔）
+- **像素艺术风格** — Press Start 2P 字体、CRT 扫描线、霓虹辉光、复古动画
 
 ## 架构
 
@@ -348,6 +408,9 @@ model: anthropic:claude-sonnet-4-20250514
 ├── research/
 │   ├── architecture.md   # 代码库分析
 │   └── conventions.md    # 代码风格分析
+├── CHECKPOINT.json       # 限额恢复检查点（自动管理）
+├── QUEUE.json            # 任务队列（自动管理）
+├── HISTORY.json          # 睡前模式执行历史（自动管理）
 └── task_*-SUMMARY.md     # 每任务结果
 ```
 
@@ -400,6 +463,7 @@ CC 模式与终端模式在相同复杂任务上的真实基准对比：
 | 最高代码质量 | 终端模式（审查者循环） |
 | 最快交付 | CC 模式 |
 | Bug 修复 | CC 模式（`/awsl-quick`） |
+| 通宵多项目构建 | 任务队列（`awsl queue start`） |
 
 ## 库 API
 
@@ -423,6 +487,9 @@ const result = await executeTeam(
     engine: "claude-code", // 或 "builtin"
     maxFixAttempts: 3,     // 自动修复重试上限
     maxRetries: 2,         // 任务重试上限
+    maxRateLimitRetries: 20, // 限额重试上限
+    rateLimitBackoff: [60000, 120000, 300000, 600000, 900000],
+    resumeFromCheckpoint: true, // 从检查点恢复
     hooks: [(event) => {
       console.log(event.type, event.task?.id);
     }],
@@ -439,7 +506,8 @@ type TeamEventType =
   | "task_start" | "task_done"
   | "verify_start" | "verify_done"
   | "fix_start" | "fix_done"
-  | "retry_start" | "checkpoint";
+  | "retry_start" | "checkpoint"
+  | "rate_limit";
 ```
 
 ## CLI 参考
@@ -473,6 +541,16 @@ awsl unlock --force          # 强制释放任何锁
 
 # 智能体
 awsl agents                  # 列出所有智能体
+
+# 任务队列（睡前模式）
+awsl queue add "构建 REST API" --quick        # 添加任务
+awsl queue add "添加认证" --depends-on q_1     # 带依赖的任务
+awsl queue add "写测试" --depends-on all       # 等待所有前置任务
+awsl queue list                                # 查看队列
+awsl queue remove q_1                          # 移除任务
+awsl queue start --engine claude-code          # 开始执行
+awsl queue clear                               # 清空队列
+awsl dashboard [--port N]                      # 打开睡前模式像素风仪表盘（默认端口 3120）
 ```
 
 ## 环境变量

@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>awsl — sleep mode</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #faf9f6;
+  --bg2: #f0eeea;
+  --bg3: #e8e6e1;
+  --ink: #2c2c2c;
+  --ink2: #666;
+  --ink3: #999;
+  --ink4: #bbb;
+  --border: #d4d0c8;
+  --green: #4a9;
+  --green-bg: #e6f5ee;
+  --red: #c55;
+  --red-bg: #fce8e8;
+  --blue: #5789b8;
+  --blue-bg: #e8f0f8;
+  --orange: #c87;
+  --orange-bg: #faf0e6;
+  --purple: #8877aa;
+  --font: 'Press Start 2P', monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { background: var(--bg); color: var(--ink); }
+
+body {
+  font-family: var(--font);
+  font-size: 10px;
+  line-height: 2;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 32px 24px 60px;
+}
+
+a { color: var(--blue); text-decoration: none; }
+
+/* ─── 顶部 ──────────────────────────────────────── */
+
+.top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 32px;
+  border-bottom: 3px solid var(--ink);
+  padding-bottom: 12px;
+}
+
+.top h1 {
+  font-size: 14px;
+  letter-spacing: 1px;
+  color: var(--ink);
+}
+
+.top h1 small {
+  font-size: 8px;
+  color: var(--ink3);
+  margin-left: 8px;
+  font-weight: normal;
+}
+
+.top-right {
+  font-size: 8px;
+  color: var(--ink3);
+  text-align: right;
+}
+
+.top-right .dot {
+  display: inline-block;
+  width: 6px; height: 6px;
+  background: var(--green);
+  margin-right: 4px;
+  vertical-align: middle;
+  animation: pulse 2s ease infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+/* ─── 统计卡片 ──────────────────────────────────── */
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 28px;
+}
+
+.stat {
+  border: 2px solid var(--border);
+  padding: 12px;
+  background: #fff;
+}
+
+.stat-label {
+  font-size: 7px;
+  color: var(--ink3);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+}
+
+.stat-val {
+  font-size: 18px;
+  color: var(--ink);
+}
+
+.stat.ok .stat-val { color: var(--green); }
+.stat.bad .stat-val { color: var(--red); }
+
+.stat-bar {
+  margin-top: 6px;
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: var(--ink4);
+}
+
+.stat-bar .filled { color: var(--green); }
+
+/* ─── 热力图 ──────────────────────────────────── */
+
+.heatmap-wrap {
+  margin-bottom: 28px;
+  border: 2px solid var(--border);
+  background: #fff;
+  padding: 16px;
+}
+
+.heatmap-wrap h2 {
+  font-size: 8px;
+  color: var(--ink2);
+  margin-bottom: 12px;
+  font-weight: normal;
+}
+
+.heatmap-months {
+  display: flex;
+  font-size: 7px;
+  color: var(--ink3);
+  margin-left: 24px;
+  margin-bottom: 2px;
+}
+
+.heatmap-months span {
+  display: inline-block;
+  overflow: hidden;
+}
+
+.heatmap-row {
+  display: flex;
+  align-items: flex-start;
+}
+
+.heatmap-labels {
+  display: flex;
+  flex-direction: column;
+  width: 20px;
+  font-size: 7px;
+  color: var(--ink4);
+}
+
+.heatmap-labels span {
+  height: 11px;
+  line-height: 11px;
+}
+
+.heatmap-grid {
+  display: flex;
+  gap: 2px;
+}
+
+.heatmap-week {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.heatmap-cell {
+  width: 9px;
+  height: 9px;
+  background: var(--bg2);
+}
+
+.heatmap-cell[data-level="1"] { background: #c6e4c0; }
+.heatmap-cell[data-level="2"] { background: #82c97e; }
+.heatmap-cell[data-level="3"] { background: #4a9; }
+.heatmap-cell[data-level="4"] { background: #2d7a4f; }
+.heatmap-cell[data-level="fail"] { background: var(--red); }
+
+.heatmap-cell:hover { outline: 1px solid var(--ink); }
+
+.heatmap-tip {
+  position: fixed;
+  font-family: var(--font);
+  font-size: 7px;
+  background: var(--ink);
+  color: #fff;
+  padding: 4px 8px;
+  display: none;
+  pointer-events: none;
+  z-index: 100;
+  white-space: nowrap;
+}
+
+/* ─── 两栏布局 ──────────────────────────────────── */
+
+.cols {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  gap: 16px;
+  margin-bottom: 28px;
+}
+
+@media (max-width: 700px) {
+  .stats { grid-template-columns: repeat(2, 1fr); }
+  .cols { grid-template-columns: 1fr; }
+}
+
+/* ─── 项目侧边栏 ──────────────────────────────── */
+
+.sidebar {
+  border: 2px solid var(--border);
+  background: #fff;
+  padding: 12px;
+  align-self: start;
+  position: sticky;
+  top: 16px;
+}
+
+.sidebar h2 {
+  font-size: 8px;
+  color: var(--ink2);
+  margin-bottom: 10px;
+  font-weight: normal;
+}
+
+.proj-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 6px;
+  cursor: pointer;
+  font-size: 7px;
+  color: var(--ink2);
+  border: 1px solid transparent;
+  margin-bottom: 2px;
+}
+
+.proj-item:hover { background: var(--bg2); }
+
+.proj-item.active {
+  border-color: var(--ink);
+  background: var(--bg2);
+  color: var(--ink);
+}
+
+.proj-dot {
+  width: 8px; height: 8px;
+  flex-shrink: 0;
+}
+
+.proj-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.proj-count {
+  color: var(--ink4);
+  font-size: 7px;
+}
+
+/* ─── 时间线 ──────────────────────────────────── */
+
+.timeline {
+  min-height: 200px;
+}
+
+.timeline h2 {
+  font-size: 8px;
+  color: var(--ink2);
+  margin-bottom: 10px;
+  font-weight: normal;
+}
+
+.filter-bar {
+  font-size: 7px;
+  color: var(--ink3);
+  margin-bottom: 10px;
+  display: none;
+}
+
+.filter-bar.show { display: block; }
+.filter-bar span { cursor: pointer; color: var(--red); text-decoration: underline; }
+
+.date-head {
+  font-size: 8px;
+  color: var(--ink3);
+  margin: 16px 0 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--bg3);
+}
+
+.date-head:first-child { margin-top: 0; }
+
+.entry {
+  border: 2px solid var(--border);
+  background: #fff;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  border-left-width: 4px;
+}
+
+.entry.done { border-left-color: var(--green); }
+.entry.failed { border-left-color: var(--red); }
+
+.entry-row1 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.entry-status {
+  font-size: 9px;
+}
+
+.entry-status.done { color: var(--green); }
+.entry-status.failed { color: var(--red); }
+
+.entry-proj {
+  font-size: 7px;
+  padding: 1px 6px;
+  color: #fff;
+  display: inline-block;
+}
+
+.entry-dur {
+  font-size: 7px;
+  color: var(--ink3);
+  margin-left: auto;
+}
+
+.entry-time {
+  font-size: 7px;
+  color: var(--ink4);
+}
+
+.entry-goal {
+  font-size: 8px;
+  color: var(--ink);
+  line-height: 1.8;
+  margin-bottom: 4px;
+}
+
+.entry-tasks {
+  font-size: 7px;
+  color: var(--ink3);
+}
+
+.entry-tasks .bar { color: var(--green); letter-spacing: 1px; }
+.entry.failed .entry-tasks .bar { color: var(--red); }
+
+.entry-summary {
+  font-size: 7px;
+  color: var(--ink4);
+  margin-top: 4px;
+  line-height: 1.6;
+}
+
+/* ─── 队列 ──────────────────────────────────── */
+
+.queue-wrap {
+  border: 2px solid var(--border);
+  background: #fff;
+  padding: 16px;
+}
+
+.queue-wrap h2 {
+  font-size: 8px;
+  color: var(--ink2);
+  margin-bottom: 10px;
+  font-weight: normal;
+}
+
+.q-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 7px;
+}
+
+.q-table th {
+  text-align: left;
+  color: var(--ink3);
+  padding: 4px 8px;
+  border-bottom: 2px solid var(--border);
+  font-weight: normal;
+}
+
+.q-table td {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--bg2);
+  color: var(--ink2);
+}
+
+.q-table .running td { color: var(--ink); }
+.q-table .done td { color: var(--ink4); }
+.q-table .failed td { color: var(--red); }
+.q-table .pending td { color: var(--ink3); }
+
+.q-running { color: var(--blue); animation: pulse 1.5s ease infinite; }
+.q-done { color: var(--green); }
+.q-failed { color: var(--red); }
+
+/* ─── 空状态 ──────────────────────────────────── */
+
+.empty {
+  text-align: center;
+  padding: 60px 20px;
+  display: none;
+}
+
+.empty-icon {
+  font-size: 32px;
+  color: var(--ink4);
+  margin-bottom: 16px;
+  letter-spacing: 8px;
+}
+
+.empty-text {
+  font-size: 9px;
+  color: var(--ink3);
+  margin-bottom: 8px;
+}
+
+.empty-hint {
+  font-size: 7px;
+  color: var(--ink4);
+}
+
+.empty-hint code {
+  background: var(--bg2);
+  padding: 2px 6px;
+  color: var(--ink2);
+}
+
+/* ─── 离线 ──────────────────────────────────── */
+
+.offline {
+  text-align: center;
+  padding: 12px;
+  background: var(--red-bg);
+  border: 2px solid var(--red);
+  font-size: 8px;
+  color: var(--red);
+  margin-bottom: 20px;
+  display: none;
+}
+
+/* ─── 加载 ──────────────────────────────────── */
+
+.loading {
+  text-align: center;
+  padding: 60px;
+  font-size: 8px;
+  color: var(--ink3);
+}
+
+.loading .dots::after {
+  content: '';
+  animation: dots 1.5s step-end infinite;
+}
+
+@keyframes dots {
+  0%   { content: '.'; }
+  33%  { content: '..'; }
+  66%  { content: '...'; }
+}
+
+/* ─── footer ──────────────────────────────────── */
+
+.foot {
+  margin-top: 40px;
+  padding-top: 12px;
+  border-top: 1px solid var(--bg3);
+  font-size: 7px;
+  color: var(--ink4);
+  text-align: center;
+}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <h1>awsl<small>sleep mode</small></h1>
+  <div class="top-right">
+    <span class="dot" id="liveDot"></span><span id="clock"></span>
+  </div>
+</div>
+
+<div class="offline" id="offline">can't reach server</div>
+
+<div class="loading" id="loading">loading<span class="dots"></span></div>
+
+<div id="app" style="display:none">
+  <!-- 统计 -->
+  <div class="stats" id="stats">
+    <div class="stat ok">
+      <div class="stat-label">done</div>
+      <div class="stat-val" id="sDone">0</div>
+    </div>
+    <div class="stat bad">
+      <div class="stat-label">failed</div>
+      <div class="stat-val" id="sFail">0</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">total time</div>
+      <div class="stat-val" id="sTime">-</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">success rate</div>
+      <div class="stat-val" id="sRate">-</div>
+      <div class="stat-bar" id="sBar"></div>
+    </div>
+  </div>
+
+  <!-- 热力图 -->
+  <div class="heatmap-wrap">
+    <h2>last 90 days</h2>
+    <div id="hmMonths" class="heatmap-months"></div>
+    <div class="heatmap-row">
+      <div class="heatmap-labels" id="hmLabels"></div>
+      <div class="heatmap-grid" id="hmGrid"></div>
+    </div>
+  </div>
+  <div class="heatmap-tip" id="hmTip"></div>
+
+  <!-- 两栏 -->
+  <div class="cols">
+    <aside class="sidebar">
+      <h2>projects</h2>
+      <div id="projList"></div>
+    </aside>
+    <div class="timeline">
+      <h2>timeline</h2>
+      <div class="filter-bar" id="filterBar">
+        showing: <strong id="filterName"></strong> &nbsp;<span id="filterClear">[x]</span>
+      </div>
+      <div id="tl"></div>
+    </div>
+  </div>
+
+  <!-- 队列 -->
+  <div class="queue-wrap" id="queueWrap">
+    <h2>queue</h2>
+    <div id="queueContent"></div>
+  </div>
+</div>
+
+<!-- 空状态 -->
+<div class="empty" id="empty">
+  <div class="empty-icon">z z z</div>
+  <div class="empty-text">no runs yet</div>
+  <div class="empty-hint">try <code>awsl queue add "goal"</code> then <code>awsl queue start</code></div>
+</div>
+
+<div class="foot">awsl sleep mode dashboard &middot; auto-refresh 30s</div>
+
+<script>
+var hist = null, queue = null, filterProj = null;
+
+function hc(s) {
+  var h = 0;
+  for (var i = 0; i < s.length; i++) h = s.charCodeAt(i) + ((h << 5) - h);
+  var cs = ['#5789b8','#4a9','#c87','#8877aa','#b85757','#57a5a5','#7a8b5c','#a0729b'];
+  return cs[Math.abs(h) % cs.length];
+}
+
+function fmt(ms) {
+  if (!ms || ms <= 0) return '0m';
+  var h = Math.floor(ms / 3600000), m = Math.floor((ms % 3600000) / 60000);
+  return h > 0 ? h + 'h ' + m + 'm' : m + 'm';
+}
+
+function bar(n, t, w) {
+  w = w || 10;
+  var r = t > 0 ? n / t : 0, f = Math.round(r * w);
+  return '<span class="filled">' + '\u2588'.repeat(f) + '</span>' + '\u2591'.repeat(w - f);
+}
+
+function dn(d) { return ['SUN','MON','TUE','WED','THU','FRI','SAT'][d.getDay()]; }
+function esc(s) { var d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+function trunc(s, n) { return !s ? '' : s.length > (n||80) ? s.slice(0, n||80) + '...' : s; }
+
+function clock() {
+  var n = new Date();
+  document.getElementById('clock').textContent =
+    n.getFullYear() + '-' + String(n.getMonth()+1).padStart(2,'0') + '-' + String(n.getDate()).padStart(2,'0') +
+    ' ' + String(n.getHours()).padStart(2,'0') + ':' + String(n.getMinutes()).padStart(2,'0');
+}
+
+async function load() {
+  try {
+    var [hr, qr] = await Promise.allSettled([fetch('/api/history'), fetch('/api/queue')]);
+    if (hr.status === 'fulfilled' && hr.value.ok) hist = await hr.value.json();
+    else throw 0;
+    if (qr.status === 'fulfilled' && qr.value.ok) queue = await qr.value.json();
+    else queue = { tasks: [] };
+    document.getElementById('offline').style.display = 'none';
+    return true;
+  } catch(e) {
+    document.getElementById('offline').style.display = 'block';
+    return false;
+  }
+}
+
+function stats(entries) {
+  var done = 0, fail = 0, dur = 0, byD = {}, byP = {};
+  for (var i = 0; i < entries.length; i++) {
+    var e = entries[i];
+    if (e.status === 'done') done++; else fail++;
+    dur += (e.duration || 0);
+    var dk = (e.date || e.startedAt || '').slice(0, 10);
+    if (dk) { if (!byD[dk]) byD[dk] = []; byD[dk].push(e); }
+    var p = e.project || '?';
+    if (!byP[p]) byP[p] = []; byP[p].push(e);
+  }
+  return { done: done, fail: fail, dur: dur, rate: entries.length > 0 ? Math.round(done / entries.length * 100) : 0, byD: byD, byP: byP };
+}
+
+function renderStats(s) {
+  document.getElementById('sDone').textContent = s.done;
+  document.getElementById('sFail').textContent = s.fail;
+  document.getElementById('sTime').textContent = fmt(s.dur);
+  document.getElementById('sRate').textContent = s.rate + '%';
+  document.getElementById('sBar').innerHTML = bar(s.rate, 100, 10);
+}
+
+function renderHeatmap(byD) {
+  var grid = document.getElementById('hmGrid');
+  var months = document.getElementById('hmMonths');
+  var labels = document.getElementById('hmLabels');
+  grid.innerHTML = ''; months.innerHTML = ''; labels.innerHTML = '';
+
+  var dl = ['', 'M', '', 'W', '', 'F', ''];
+  for (var i = 0; i < 7; i++) { var sp = document.createElement('span'); sp.textContent = dl[i]; labels.appendChild(sp); }
+
+  var today = new Date(); today.setHours(0,0,0,0);
+  var start = new Date(today); start.setDate(start.getDate() - 89);
+  start.setDate(start.getDate() - start.getDay());
+
+  var totalDays = Math.ceil((today - start) / 86400000) + 1;
+  var weeks = Math.ceil(totalDays / 7);
+  var mpos = [], lastM = -1;
+
+  for (var w = 0; w < weeks; w++) {
+    var wk = document.createElement('div'); wk.className = 'heatmap-week';
+    for (var d = 0; d < 7; d++) {
+      var cd = new Date(start); cd.setDate(cd.getDate() + w * 7 + d);
+      var c = document.createElement('div'); c.className = 'heatmap-cell';
+      if (cd.getMonth() !== lastM && d === 0) { mpos.push({ w: w, m: cd.getMonth() }); lastM = cd.getMonth(); }
+      if (cd > today || cd < start) { c.style.opacity = '0.2'; }
+      else {
+        var k = cd.getFullYear() + '-' + String(cd.getMonth()+1).padStart(2,'0') + '-' + String(cd.getDate()).padStart(2,'0');
+        var de = byD[k] || [], cnt = de.length;
+        var allFail = cnt > 0 && de.every(function(x){return x.status==='failed';});
+        c.dataset.level = allFail ? 'fail' : cnt === 0 ? '0' : cnt === 1 ? '1' : cnt === 2 ? '2' : cnt <= 4 ? '3' : '4';
+        c.dataset.date = k; c.dataset.count = cnt;
+        c.addEventListener('mouseenter', function(ev) {
+          var t = document.getElementById('hmTip');
+          t.textContent = this.dataset.date + ': ' + this.dataset.count + ' run' + (this.dataset.count!=='1'?'s':'');
+          t.style.display = 'block'; t.style.left = (ev.clientX+10)+'px'; t.style.top = (ev.clientY-18)+'px';
+        });
+        c.addEventListener('mouseleave', function() { document.getElementById('hmTip').style.display = 'none'; });
+      }
+      wk.appendChild(c);
+    }
+    grid.appendChild(wk);
+  }
+
+  var mn = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
+  for (var m = 0; m < mpos.length; m++) {
+    var ms = document.createElement('span');
+    ms.textContent = mn[mpos[m].m];
+    ms.style.width = m < mpos.length - 1 ? ((mpos[m+1].w - mpos[m].w) * 11) + 'px' : '33px';
+    months.appendChild(ms);
+  }
+}
+
+function renderProjects(byP) {
+  var el = document.getElementById('projList'); el.innerHTML = '';
+
+  var all = document.createElement('div');
+  all.className = 'proj-item' + (filterProj === null ? ' active' : '');
+  all.innerHTML = '<span class="proj-dot" style="background:var(--ink4)"></span><span class="proj-name">all</span>';
+  all.onclick = function() { filterProj = null; render(); };
+  el.appendChild(all);
+
+  var ps = Object.keys(byP).sort(function(a,b){return byP[b].length - byP[a].length;});
+  for (var i = 0; i < ps.length; i++) {
+    (function(p) {
+      var it = document.createElement('div');
+      it.className = 'proj-item' + (filterProj === p ? ' active' : '');
+      it.innerHTML = '<span class="proj-dot" style="background:' + hc(p) + '"></span>' +
+        '<span class="proj-name">' + esc(p) + '</span><span class="proj-count">' + byP[p].length + '</span>';
+      it.onclick = function() { filterProj = p; render(); };
+      el.appendChild(it);
+    })(ps[i]);
+  }
+}
+
+function renderTimeline(entries) {
+  var el = document.getElementById('tl'); el.innerHTML = '';
+  var fb = document.getElementById('filterBar');
+  var list = entries;
+  if (filterProj) {
+    list = entries.filter(function(e){return e.project === filterProj;});
+    document.getElementById('filterName').textContent = filterProj;
+    fb.classList.add('show');
+  } else { fb.classList.remove('show'); }
+
+  if (list.length === 0) {
+    el.innerHTML = '<div style="font-size:8px;color:var(--ink4);padding:20px 0;">nothing here</div>';
+    return;
+  }
+
+  var byD = {};
+  for (var i = 0; i < list.length; i++) {
+    var dk = (list[i].date || list[i].startedAt || '').slice(0, 10);
+    if (!byD[dk]) byD[dk] = []; byD[dk].push(list[i]);
+  }
+
+  var dates = Object.keys(byD).sort().reverse();
+  for (var d = 0; d < dates.length; d++) {
+    var ds = dates[d], dt = new Date(ds + 'T00:00:00');
+    var hd = document.createElement('div'); hd.className = 'date-head';
+    hd.textContent = ds + ' ' + dn(dt);
+    el.appendChild(hd);
+
+    var items = byD[ds].sort(function(a,b){return (b.startedAt||'').localeCompare(a.startedAt||'');});
+    for (var j = 0; j < items.length; j++) {
+      var e = items[j], ok = e.status === 'done';
+      var card = document.createElement('div');
+      card.className = 'entry ' + e.status;
+      var pc = hc(e.project || '');
+      card.innerHTML =
+        '<div class="entry-row1">' +
+          '<span class="entry-status ' + e.status + '">' + (ok ? '\u2713' : '\u2717') + '</span>' +
+          '<span class="entry-proj" style="background:' + pc + '">' + esc(e.project||'?') + '</span>' +
+          '<span class="entry-dur">' + fmt(e.duration) + '</span>' +
+          '<span class="entry-time">' + esc((e.startedAt||'').slice(11,16)) + '</span>' +
+        '</div>' +
+        '<div class="entry-goal" title="' + esc(e.goal).replace(/"/g,'&quot;') + '">' + esc(trunc(e.goal, 90)) + '</div>' +
+        '<div class="entry-tasks">tasks ' + (e.tasksCompleted||0) + '/' + (e.tasksTotal||0) + ' ' + bar(e.tasksCompleted||0, e.tasksTotal||0, 8) + '</div>' +
+        (e.summary ? '<div class="entry-summary">' + esc(trunc(e.summary, 120)) + '</div>' : '');
+      el.appendChild(card);
+    }
+  }
+}
+
+function renderQueue(tasks) {
+  var el = document.getElementById('queueContent');
+  if (!tasks || tasks.length === 0) {
+    el.innerHTML = '<div style="font-size:7px;color:var(--ink4);">empty</div>';
+    return;
+  }
+  var h = '<table class="q-table"><thead><tr><th>id</th><th>goal</th><th>status</th><th>deps</th></tr></thead><tbody>';
+  for (var i = 0; i < tasks.length; i++) {
+    var t = tasks[i], st = '';
+    if (t.status === 'running') st = '<span class="q-running">\u25B6 running</span>';
+    else if (t.status === 'done') st = '<span class="q-done">\u2713 done</span>';
+    else if (t.status === 'failed') st = '<span class="q-failed">\u2717 failed</span>';
+    else st = '\u00B7 ' + (t.status || 'pending');
+    var deps = t.dependsOn && t.dependsOn.length > 0 ? esc(t.dependsOn.join(', ')) : '-';
+    h += '<tr class="' + (t.status||'pending') + '"><td>' + esc(t.id) + '</td><td title="' + esc(t.goal||'').replace(/"/g,'&quot;') + '">' + esc(trunc(t.goal,50)) + '</td><td>' + st + '</td><td>' + deps + '</td></tr>';
+  }
+  h += '</tbody></table>';
+  el.innerHTML = h;
+}
+
+function render() {
+  if (!hist) return;
+  var entries = hist.entries || [];
+  var qt = queue ? queue.tasks || [] : [];
+  if (entries.length === 0 && qt.length === 0) {
+    document.getElementById('app').style.display = 'none';
+    document.getElementById('empty').style.display = 'block';
+    return;
+  }
+  document.getElementById('empty').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  var s = stats(entries);
+  renderStats(s); renderHeatmap(s.byD); renderProjects(s.byP); renderTimeline(entries); renderQueue(qt);
+}
+
+document.getElementById('filterClear').onclick = function() { filterProj = null; render(); };
+document.addEventListener('mousemove', function(e) {
+  var t = document.getElementById('hmTip');
+  if (t.style.display === 'block') { t.style.left = (e.clientX+10)+'px'; t.style.top = (e.clientY-18)+'px'; }
+});
+
+async function init() {
+  clock(); setInterval(clock, 10000);
+  var ok = await load();
+  document.getElementById('loading').style.display = 'none';
+  if (ok) render();
+  setInterval(async function() { if (await load()) render(); }, 30000);
+}
+
+init();
+</script>
+</body>
+</html>

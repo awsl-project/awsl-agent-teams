@@ -34,7 +34,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/你的用户名/pi-agent-teams"
+    "url": "https://github.com/你的用户名/awsl-agent-teams"
   },
   "dependencies": {
     "@mariozechner/pi-agent-core": "latest",

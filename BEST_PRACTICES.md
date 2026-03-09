@@ -49,6 +49,8 @@ awsl run "goal" --engine claude-code
 只生成计划，不执行        →  awsl run "goal" --plan-only
 执行已有计划             →  awsl run --execute-plan
 检查代码质量             →  awsl review
+排队多任务，通宵执行     →  awsl queue add "goal" + awsl queue start
+查看睡前模式仪表盘        →  awsl dashboard
 ```
 
 ### 怎么选模式？
@@ -59,6 +61,7 @@ awsl run "goal" --engine claude-code
 | 大项目要审计划 | CC 模式 (`/awsl-plan` → `/awsl-go`) |
 | 睡前构建、CI/CD | 终端模式 (`--engine claude-code`) — 全自动，有自愈 |
 | 追求最高代码质量 | 终端模式 — reviewer 循环审查 + 自动修复 |
+| 通宵多项目构建 | 任务队列 (`awsl queue start`) — 排队 + 限额恢复，真正的睡前模式 |
 | 改 bug | CC 模式 (`/awsl-quick`) — 最快 |
 
 ## 2. 写好 Goal
@@ -402,7 +405,7 @@ verify 字段决定了 `awsl verify` 能否自动跑测试。**必须是可执�
 mkdir my-app && cd my-app
 git init
 # 安装 AWSL skills（只需一次）
-cd /path/to/pi-agent-teams && node dist/cli.js init --global
+cd /path/to/awsl-agent-teams && node dist/cli.js init --global
 
 # 在 Claude Code 中：
 /awsl 用 Express + TypeScript + Prisma + PostgreSQL 构建 TODO 应用，包含 CRUD API、用户认证、单元测试
@@ -544,6 +547,9 @@ AWSL 采用 **文件即状态** 的设计，所有关键信息持久化到 `.pla
 ├── PLAN.md               ← 任务 DAG（不会丢）
 ├── WAVES.md              ← 波次调度（不会丢）
 ├── task_*-SUMMARY.md     ← 已完成任务的结果（不会丢）
+├── CHECKPOINT.json       ← 限额恢复检查点（自动管理）
+├── QUEUE.json            ← 任务队列（自动管理）
+├── HISTORY.json          ← 睡前模式执行历史（自动管理）
 └── .fix-attempts         ← 自动修复计数器
 ```
 
@@ -641,3 +647,191 @@ awsl run --execute-plan --engine claude-code
 | verify 字段写自然语言 | 代码无法自动执行 | 写可执行命令：`npm test`、`tsc --noEmit` |
 | 不写测试框架 | Agent 可能选错框架 | 在 goal 里明确：用 Vitest / Jest / pytest |
 | 大项目不加集成测试 task | 单元测试通过不代表整体工作 | PLAN.md 最后加一个集成测试 task |
+
+## 15. 限额自动恢复
+
+AWSL 自动检测 token 限额错误并等待恢复，不需要手动干预。
+
+### 工作原理
+
+```
+执行中
+  │
+  ├─ claude -p 返回限额错误（429、rate limit、overloaded...）
+  │
+  ├─ 标记任务为 rate_limited（不是 failed）
+  │
+  ├─ 保存检查点 → .planning/CHECKPOINT.json
+  │   ├─ 当前波次编号
+  │   ├─ 已完成任务列表 + 结果
+  │   ├─ 失败任务列表
+  │   └─ 限额重试计数
+  │
+  ├─ 指数退避等待
+  │   1min → 2min → 5min → 10min → 15min（上限）
+  │
+  ├─ 恢复执行
+  │   ├─ 跳过已完成的任务
+  │   └─ 只重试被限额中断的任务
+  │
+  └─ 最多重试 20 次（可配置 maxRateLimitRetries）
+```
+
+### CHECKPOINT.json 格式
+
+```json
+{
+  "wave": 2,
+  "completedTasks": ["task_1", "task_2", "task_3"],
+  "taskResults": {
+    "task_1": "实现了用户模型...",
+    "task_2": "完成了认证路由...",
+    "task_3": "完成了中间件..."
+  },
+  "failedTasks": [],
+  "rateLimitRetries": 3,
+  "savedAt": "2024-01-15T22:30:00.000Z"
+}
+```
+
+### 配置选项
+
+```typescript
+await executeTeam(goal, agents, cwd, model, concurrency, {
+  maxRateLimitRetries: 20,        // 限额重试上限（默认 20）
+  rateLimitBackoff: [60000, 120000, 300000, 600000, 900000],  // 退避时间表（毫秒）
+  resumeFromCheckpoint: true,     // 从检查点恢复（默认 true）
+});
+```
+
+### 检测的错误模式
+
+以下模式会被识别为限额错误（不区分大小写）：
+- `rate limit` / `rate_limit`
+- `too many requests`
+- `quota exceeded`
+- `overloaded`
+- `token limit`
+- `429`
+- `capacity`
+- `throttl`
+
+### 注意事项
+
+- 限额重试 **不消耗** 普通任务重试次数（maxRetries）
+- 检查点在任务全部完成后自动清除
+- 崩溃后重启，检查点仍然有效 — 自动恢复
+- 退避等待期间进程保持前台运行（不要关终端！）
+
+## 16. 任务队列（睡前模式）
+
+排队多个目标，一键启动，通宵执行。每个任务自带限额恢复能力。
+
+### 基本用法
+
+```bash
+# 添加任务
+awsl queue add "构建用户认证 REST API，Express + TypeScript + JWT" --engine claude-code
+awsl queue add "在认证模块基础上添加 RBAC 权限系统" --depends-on q_1
+awsl queue add "给所有模块写集成测试" --depends-on all
+
+# 查看队列
+awsl queue list
+
+# 开始执行（前台守护进程，睡前运行）
+awsl queue start
+```
+
+### 依赖管理
+
+```bash
+# 无依赖 — 排到就执行
+awsl queue add "独立任务"
+
+# 指定依赖 — 等 q_1 完成后执行
+awsl queue add "依赖任务" --depends-on q_1
+
+# 多依赖 — 等 q_1 和 q_2 都完成后执行
+awsl queue add "多依赖任务" --depends-on q_1,q_2
+
+# 全部依赖 — 等前面所有任务完成后执行
+awsl queue add "最后执行" --depends-on all
+```
+
+### 队列选项
+
+```bash
+awsl queue add "goal" \
+  --engine claude-code \     # 执行引擎
+  --quick \                  # 跳过 brainstorm/research
+  --concurrency 3 \          # 并行度
+  --model anthropic:... \    # 模型
+  --depends-on q_1,q_2       # 依赖
+```
+
+### QUEUE.json 格式
+
+队列状态自动持久化到 `.planning/QUEUE.json`：
+
+```json
+{
+  "tasks": [
+    {
+      "id": "q_1",
+      "goal": "构建 REST API",
+      "status": "done",
+      "options": { "quick": true },
+      "scheduledAt": "2024-01-15T22:00:00.000Z",
+      "startedAt": "2024-01-15T22:00:01.000Z",
+      "completedAt": "2024-01-15T22:25:00.000Z",
+      "result": { "success": true, "summary": "10/10 tasks completed" }
+    },
+    {
+      "id": "q_2",
+      "goal": "添加认证",
+      "status": "running",
+      "dependsOn": ["q_1"],
+      "scheduledAt": "2024-01-15T22:00:05.000Z",
+      "startedAt": "2024-01-15T22:25:01.000Z"
+    }
+  ],
+  "createdAt": "2024-01-15T22:00:00.000Z",
+  "updatedAt": "2024-01-15T22:25:01.000Z"
+}
+```
+
+### 典型睡前工作流
+
+```bash
+# 1. 排好队列
+awsl queue add "用 Express+TS 构建电商 API：商品、购物车、订单、支付" --engine claude-code
+awsl queue add "添加用户系统：注册、登录、个人中心、地址管理" --depends-on q_1
+awsl queue add "添加后台管理：商品管理、订单管理、数据看板" --depends-on q_1,q_2
+awsl queue add "全面集成测试 + 性能测试" --depends-on all
+
+# 2. 确认队列
+awsl queue list
+
+# 3. 开始执行，去睡觉
+awsl queue start
+
+# 4. 第二天早上查看结果
+awsl queue list
+/awsl-status
+git log --oneline
+
+# 5. 打开像素风仪表盘查看历史
+awsl dashboard
+# 浏览器打开 http://localhost:3120
+```
+
+### 注意事项
+
+| 项目 | 说明 |
+|------|------|
+| **前台进程** | `queue start` 在前台运行，关终端会停止执行。用 `tmux` 或 `screen` 保持会话 |
+| **限额恢复** | 每个任务自动带限额恢复（指数退避 + 检查点） |
+| **锁管理** | 任务间自动交接锁，无需手动管理 |
+| **中断恢复** | Ctrl+C 中断后，已完成任务状态保留。重新 `queue start` 会跳过已完成的任务 |
+| **失败处理** | 单个任务失败不影响后续无依赖任务的执行 |
+| **日志** | 所有日志输出到 stderr，可重定向：`awsl queue start 2>queue.log` |

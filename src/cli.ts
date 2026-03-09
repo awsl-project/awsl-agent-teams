@@ -21,6 +21,8 @@ import { runFullVerification, runStaticReview } from "./verify.js";
 import { acquireLock, releaseLock, forceReleaseLock, checkLock, formatLockInfo } from "./lock.js";
 import { log } from "./log.js";
 import { runInstaller } from "./install.js";
+import { TaskQueue } from "./queue.js";
+import { startDashboard } from "./dashboard.js";
 
 function usage() {
 	console.error(`
@@ -36,12 +38,20 @@ Commands:
   unlock [--force]         Release lock (--force to override others' locks)
   run <goal>               Full pipeline (terminal, needs API key)
   agents                   List available agents
+  dashboard [--port N]     Open the sleep mode pixel dashboard (default: 3120)
 
 CC Hybrid Mode (no API key needed):
   1. CC writes plan        → .planning/PLAN.md  (CC does the thinking)
   2. awsl validate         → .planning/WAVES.md (code: parse, validate, topo-sort)
   3. CC Agent tool         → execute tasks      (CC full power per task)
   4. awsl verify           → .planning/VERIFICATION.md (code: run tests/lint)
+
+Queue Commands (sleep mode):
+  queue add <goal> [opts]  Add a task to the queue
+  queue list               List queue tasks and status
+  queue remove <id>        Remove a task from queue
+  queue start [opts]       Start executing the queue (foreground)
+  queue clear              Clear all queue tasks
 
 Options:
   --cwd <path>             Working directory (default: .)
@@ -247,6 +257,134 @@ async function main() {
 		releaseLock(cwd);
 
 		process.exit(result.passed ? 0 : 1);
+	}
+
+	// ── Dashboard command ───────────────────────────────────
+	if (command === "dashboard") {
+		const { cwd } = parseCwdAndForce(args);
+		let port = 3120;
+		for (let i = 1; i < args.length; i++) {
+			if (args[i] === "--port" && i + 1 < args.length) {
+				port = parseInt(args[++i], 10);
+			}
+		}
+		startDashboard(cwd, port);
+		// Keep server running — don't call process.exit()
+		return;
+	}
+
+	// ── Queue command (sleep mode) ─────────────────────────
+	if (command === "queue") {
+		const subCmd = args[1];
+		const { cwd } = parseCwdAndForce(args);
+		const queue = new TaskQueue(cwd);
+
+		if (subCmd === "add") {
+			// Parse options from args starting at index 2
+			let engine: Engine | undefined;
+			let quick = false;
+			let concurrency: number | undefined;
+			let model: string | undefined;
+			let dependsOn: string[] | undefined;
+			let agentsDirs: string[] | undefined;
+			const goalParts: string[] = [];
+
+			for (let i = 2; i < args.length; i++) {
+				const a = args[i];
+				if (a === "--engine" && i + 1 < args.length) { engine = args[++i] as Engine; }
+				else if (a === "--quick") { quick = true; }
+				else if (a === "--concurrency" && i + 1 < args.length) { concurrency = parseInt(args[++i], 10); }
+				else if (a === "--model" && i + 1 < args.length) { model = args[++i]; }
+				else if (a === "--depends-on" && i + 1 < args.length) { dependsOn = args[++i].split(",").map(s => s.trim()); }
+				else if (a === "--agents-dir" && i + 1 < args.length) {
+					agentsDirs = agentsDirs ?? [];
+					agentsDirs.push(path.resolve(args[++i]));
+				}
+				else if (a === "--cwd" && i + 1 < args.length) { i++; } // skip, already parsed
+				else if (a === "--force") { /* skip */ }
+				else if (!a.startsWith("--")) { goalParts.push(a); }
+			}
+
+			const goal = goalParts.join(" ").trim();
+			if (!goal) {
+				console.error("Usage: awsl queue add <goal> [--quick] [--engine <type>] [--concurrency N]");
+				process.exit(1);
+			}
+
+			const task = queue.add(goal, {
+				model,
+				concurrency,
+				quick,
+				agentsDirs,
+			}, { engine, dependsOn });
+
+			console.log(`Added: ${task.id} — "${goal}"`);
+			if (dependsOn) console.log(`  Depends on: ${dependsOn.join(", ")}`);
+			if (quick) console.log(`  Mode: quick`);
+			if (engine) console.log(`  Engine: ${engine}`);
+		}
+		else if (subCmd === "list") {
+			const tasks = queue.list();
+			if (tasks.length === 0) {
+				console.log("Queue is empty.");
+			} else {
+				console.log(`\nQueue: ${tasks.length} task(s)\n`);
+				console.log("  ID       Status    Goal");
+				console.log("  " + "-".repeat(56));
+				for (const t of tasks) {
+					const status = t.status.padEnd(9);
+					const goal = t.goal.length > 40 ? t.goal.slice(0, 37) + "..." : t.goal;
+					console.log(`  ${t.id.padEnd(8)} ${status} ${goal}`);
+					if (t.dependsOn?.length) console.log(`           deps: ${t.dependsOn.join(", ")}`);
+					if (t.error) console.log(`           error: ${t.error.slice(0, 60)}`);
+				}
+				console.log();
+			}
+		}
+		else if (subCmd === "remove") {
+			const id = args[2];
+			if (!id) {
+				console.error("Usage: awsl queue remove <id>");
+				process.exit(1);
+			}
+			const removed = queue.remove(id);
+			if (removed) {
+				console.log(`Removed: ${id}`);
+			} else {
+				console.error(`Task not found: ${id}`);
+				process.exit(1);
+			}
+		}
+		else if (subCmd === "start") {
+			// Parse --engine
+			let engine: Engine | undefined;
+			for (let i = 2; i < args.length; i++) {
+				if (args[i] === "--engine" && i + 1 < args.length) {
+					engine = args[++i] as Engine;
+				}
+			}
+
+			console.log("Starting queue execution...\n");
+
+			// Setup SIGINT handler for graceful stop
+			process.removeAllListeners("SIGINT");
+			process.on("SIGINT", () => {
+				console.log("\nQueue interrupted. Current task will be paused.");
+				try { releaseLock(cwd); } catch { /* ignore */ }
+				process.exit(130);
+			});
+
+			await queue.start(engine);
+		}
+		else if (subCmd === "clear") {
+			queue.clear();
+			console.log("Queue cleared.");
+		}
+		else {
+			console.error("Unknown queue command. Use: add, list, remove, start, clear");
+			process.exit(1);
+		}
+		process.exit(0);
 	}
 
 	// ── Run command (full pipeline, terminal use) ───────────

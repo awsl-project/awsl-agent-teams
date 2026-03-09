@@ -194,6 +194,8 @@ Phase 4:  Re-plan       on task failure → retry 2x → replan with different a
 | **File conflict detection** | Same-wave tasks sharing files → auto-split to different waves |
 | **Git checkpoints** | Atomic commit after each successful wave (bisectable) |
 | **Cross-wave context** | Wave N+1 agents see actual file contents from Wave N |
+| **Rate limit recovery** | Token limit hit → save checkpoint → exponential backoff (1m→2m→5m→10m→15m) → auto-retry (max 20) |
+| **Task queue (sleep mode)** | Queue multiple goals → `awsl queue start` → unattended sequential execution with auto rate-limit recovery |
 
 ### Example Output
 
@@ -226,6 +228,64 @@ awsl lock              # Show current lock status
 awsl unlock [--force]  # Release lock
 awsl agents            # List available agents
 ```
+
+## Task Queue (Sleep Mode)
+
+Queue multiple goals and let AWSL execute them overnight — fully unattended with automatic rate-limit recovery.
+
+### Usage
+
+```bash
+# Add tasks to the queue
+awsl queue add "Build user auth module" --engine claude-code
+awsl queue add "Add payment integration" --depends-on q_1
+awsl queue add "Write E2E tests" --depends-on all  # waits for ALL prior tasks
+
+# Review the queue
+awsl queue list
+
+# Start execution (foreground daemon)
+awsl queue start
+```
+
+### Queue Options
+
+| Option | Description |
+|--------|-------------|
+| `--quick` | Skip brainstorm & research for this task |
+| `--engine <type>` | Execution engine (claude-code or builtin) |
+| `--concurrency <n>` | Max parallel agents |
+| `--model <model>` | Override default model |
+| `--depends-on <ids>` | Comma-separated task IDs, or `all` |
+
+### Rate Limit Recovery
+
+When a token rate limit is hit during execution:
+
+1. **Detect** — Pattern matching on stderr/stdout (429, "rate limit", "overloaded", etc.)
+2. **Checkpoint** — Save progress to `.planning/CHECKPOINT.json` (completed tasks, results, wave position)
+3. **Backoff** — Wait with exponential delay: 1min → 2min → 5min → 10min → 15min (cap)
+4. **Retry** — Resume the current wave, skip already-completed tasks
+5. **Limit** — Max 20 rate-limit retries (configurable via `maxRateLimitRetries`)
+
+Checkpoints are human-readable JSON. On next run, AWSL auto-detects and resumes from the checkpoint.
+
+## Sleep Mode Dashboard
+
+Pixel-art retro dashboard to visualize your overnight build history.
+
+```bash
+awsl dashboard              # Open at http://localhost:3120
+awsl dashboard --port 8080  # Custom port
+```
+
+Features:
+- **RPG-style stats** — completed/failed counts, total time, success rate with pixel progress bars
+- **Calendar heatmap** — GitHub-style contribution graph showing daily activity (last 90 days)
+- **Timeline** — Vertical timeline of all runs, grouped by date, filterable by project
+- **Project sidebar** — All projects with color-coded badges and task counts
+- **Queue monitor** — Live view of current queue status with auto-refresh (30s)
+- **Pixel art aesthetic** — Press Start 2P font, CRT scanlines, neon glow, retro animations
 
 ## Architecture
 
@@ -345,6 +405,9 @@ State persists across sessions:
 ├── WAVES.md              # Computed wave schedule
 ├── VERIFICATION.md       # Test/lint/typecheck results
 ├── REVIEW.md             # Static code review results
+├── CHECKPOINT.json       # Rate-limit recovery checkpoint (auto-managed)
+├── QUEUE.json            # Task queue for sleep mode (auto-managed)
+├── HISTORY.json          # Sleep mode execution history (auto-managed)
 ├── research/
 │   ├── architecture.md   # Codebase analysis
 │   └── conventions.md    # Code style analysis
@@ -400,6 +463,7 @@ Real benchmark comparing CC Mode vs Terminal Mode on an identical complex task:
 | Highest code quality | Terminal Mode (reviewer loop) |
 | Fastest delivery | CC Mode |
 | Bug fix | CC Mode (`/awsl-quick`) |
+| Overnight multi-project build | Task Queue (`awsl queue start`) |
 
 ## Library API
 
@@ -423,6 +487,9 @@ const result = await executeTeam(
     engine: "claude-code", // or "builtin"
     maxFixAttempts: 3,     // Auto-fix retry limit
     maxRetries: 2,         // Task retry limit
+    maxRateLimitRetries: 20, // Rate limit retry cap
+    rateLimitBackoff: [60000, 120000, 300000, 600000, 900000],
+    resumeFromCheckpoint: true, // Resume from .planning/CHECKPOINT.json
     hooks: [(event) => {
       console.log(event.type, event.task?.id);
     }],
@@ -439,7 +506,8 @@ type TeamEventType =
   | "task_start" | "task_done"
   | "verify_start" | "verify_done"
   | "fix_start" | "fix_done"
-  | "retry_start" | "checkpoint";
+  | "retry_start" | "checkpoint"
+  | "rate_limit";
 ```
 
 ## CLI Reference
@@ -473,6 +541,16 @@ awsl unlock --force          # Force release any lock
 
 # Agents
 awsl agents                  # List all agents
+
+# Task queue (sleep mode)
+awsl queue add "Build REST API" --quick      # Add task to queue
+awsl queue add "Add auth" --depends-on q_1   # Add with dependency
+awsl queue add "Write tests" --depends-on all # Wait for all prior tasks
+awsl queue list                               # Show queue status
+awsl queue remove q_1                         # Remove a task
+awsl queue start --engine claude-code         # Start queue execution
+awsl queue clear                              # Clear all tasks
+awsl dashboard [--port N]                     # Open the sleep mode pixel dashboard (default: 3120)
 ```
 
 ## Environment Variables

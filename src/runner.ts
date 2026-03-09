@@ -27,10 +27,28 @@ export type Engine = "claude-code" | "builtin";
 
 export interface RunResult {
 	agent: string;
-	status: "done" | "failed" | "blocked" | "no_report";
+	status: "done" | "failed" | "blocked" | "no_report" | "rate_limited";
 	result: string;
 	turns: number;
 	error?: string;
+}
+
+// ─── Rate Limit Detection ────────────────────────────────────
+
+const RATE_LIMIT_PATTERNS = [
+	/rate limit/i,
+	/rate_limit/i,
+	/too many requests/i,
+	/quota exceeded/i,
+	/overloaded/i,
+	/token limit/i,
+	/429/,
+	/capacity/i,
+	/throttl/i,
+];
+
+export function isRateLimitError(text: string): boolean {
+	return RATE_LIMIT_PATTERNS.some((pattern) => pattern.test(text));
 }
 
 // ─── Engine Detection ────────────────────────────────────────
@@ -152,6 +170,19 @@ ${memSummary === "(empty)" ? "No shared data yet." : memSummary}
 		});
 
 		child.on("close", (code) => {
+			// Check for rate limiting before parsing response
+			if (code !== 0 && isRateLimitError(stderr + stdout)) {
+				log.warn(agentDef.name, `Rate limited (exit: ${code})`);
+				resolve({
+					agent: agentDef.name,
+					status: "rate_limited",
+					result: "",
+					turns: 0,
+					error: (stderr + stdout).slice(0, 500),
+				});
+				return;
+			}
+
 			// Parse JSON response
 			try {
 				const response = JSON.parse(stdout);
@@ -183,6 +214,17 @@ ${memSummary === "(empty)" ? "No shared data yet." : memSummary}
 		});
 
 		child.on("error", (err) => {
+			if (isRateLimitError(err.message)) {
+				log.warn(agentDef.name, `Rate limited (spawn error)`);
+				resolve({
+					agent: agentDef.name,
+					status: "rate_limited",
+					result: "",
+					turns: 0,
+					error: err.message,
+				});
+				return;
+			}
 			resolve({
 				agent: agentDef.name,
 				status: "failed",

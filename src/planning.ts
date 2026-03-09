@@ -7,6 +7,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { log } from "./log.js";
 
 export interface PlanningDir {
 	root: string;
@@ -177,5 +178,47 @@ export function atomicCommit(cwd: string, taskId: string, message: string): bool
 		return true;
 	} catch {
 		return false;
+	}
+}
+
+// ─── Checkpoint Persistence ─────────────────────────────────
+
+export interface CheckpointData {
+	wave: number;
+	completedTasks: string[];
+	taskResults: Record<string, string>;
+	failedTasks: string[];
+	rateLimitRetries: number;
+	savedAt: string;
+}
+
+export function saveCheckpoint(cwd: string, data: CheckpointData): void {
+	const dir = path.join(cwd, ".planning");
+	fs.mkdirSync(dir, { recursive: true });
+	fs.writeFileSync(
+		path.join(dir, "CHECKPOINT.json"),
+		JSON.stringify(data, null, 2),
+	);
+	log.info("checkpoint", "Checkpoint saved");
+}
+
+export function loadCheckpoint(cwd: string): CheckpointData | null {
+	const filePath = path.join(cwd, ".planning", "CHECKPOINT.json");
+	try {
+		const raw = fs.readFileSync(filePath, "utf-8");
+		const data: CheckpointData = JSON.parse(raw);
+		log.info("checkpoint", "Checkpoint loaded");
+		return data;
+	} catch {
+		log.info("checkpoint", "No checkpoint found");
+		return null;
+	}
+}
+
+export function clearCheckpoint(cwd: string): void {
+	try {
+		fs.unlinkSync(path.join(cwd, ".planning", "CHECKPOINT.json"));
+	} catch {
+		// silently ignore if file doesn't exist
 	}
 }
