@@ -13,6 +13,7 @@ import { parse as parseYaml } from "yaml";
 import { Type } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import { log } from "./log.js";
+import type { SandboxPolicy } from "./sandbox.js";
 
 export interface TeamAgentDef {
 	name: string;
@@ -23,6 +24,8 @@ export interface TeamAgentDef {
 	/** Explicit skill names to activate (in addition to role-based auto-activation) */
 	skills?: string[];
 	thinkingLevel?: string;
+	/** Per-agent sandbox policy override (optional). */
+	sandbox?: SandboxPolicy;
 	systemPrompt: string;
 	source: "file" | "builtin";
 }

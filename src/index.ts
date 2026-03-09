@@ -31,3 +31,4 @@ export {
 export { appendHistory, loadHistory, clearHistory, getHistoryStats, type HistoryEntry, type HistoryData, type HistoryStats } from "./history.js";
 export { startDashboard, isPortInUse } from "./dashboard.js";
 export { LogStream, getLogStream, type LogLine } from "./logstream.js";
+export { type SandboxPolicy, type BashPolicy, defaultPolicy, checkWritePath, checkBashCommand } from "./sandbox.js";
