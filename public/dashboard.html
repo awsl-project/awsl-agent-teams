@@ -24,6 +24,8 @@
   --orange: #f59e0b;
   --purple: #8b5cf6;
   --purple-bg: #f3e8ff;
+  --yellow: #ffd700;
+  --yellow-bg: #332b00;
   --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', 'Noto Sans SC', sans-serif;
 }
 
@@ -163,6 +165,43 @@ a { color: var(--blue); text-decoration: none; }
   margin-left: 8px;
 }
 
+.row2 {
+  display: grid;
+  grid-template-columns: 1fr 260px;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.token-card { padding: 14px 16px; }
+.token-card h2 { font-size: 13px; margin-bottom: 12px; }
+
+.token-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.tk-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.tk-label {
+  font-size: 10px;
+  color: var(--ink3);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.tk-val {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+}
+
 .stat-bar { margin-top: 6px; }
 
 /* ─── Progress Bar ──────────────────── */
@@ -189,7 +228,7 @@ a { color: var(--blue); text-decoration: none; }
 
 /* ─── Heatmap ──────────────────────── */
 
-.heatmap-card { width: fit-content; }
+.heatmap-card { overflow-x: auto; }
 
 .heatmap-months {
   display: flex;
@@ -264,9 +303,13 @@ a { color: var(--blue); text-decoration: none; }
   margin-bottom: 14px;
 }
 
+@media (max-width: 900px) {
+  .stats { grid-template-columns: repeat(3, 1fr); }
+}
 @media (max-width: 700px) {
   .stats { grid-template-columns: repeat(2, 1fr); }
   .cols { grid-template-columns: 1fr; }
+  .row2 { grid-template-columns: 1fr; }
 }
 
 /* ─── Sidebar ──────────────────── */
@@ -600,12 +643,35 @@ a { color: var(--blue); text-decoration: none; }
     </div>
   </div>
 
-  <div class="card heatmap-card">
-    <h2>&#9889; Activity Heatmap</h2>
-    <div id="hmMonths" class="heatmap-months"></div>
-    <div class="heatmap-row">
-      <div class="heatmap-labels" id="hmLabels"></div>
-      <div class="heatmap-grid" id="hmGrid"></div>
+  <div class="row2">
+    <div class="card heatmap-card">
+      <h2>&#9889; Activity Heatmap</h2>
+      <div id="hmMonths" class="heatmap-months"></div>
+      <div class="heatmap-row">
+        <div class="heatmap-labels" id="hmLabels"></div>
+        <div class="heatmap-grid" id="hmGrid"></div>
+      </div>
+    </div>
+    <div class="card token-card">
+      <h2>&#9889; Tokens</h2>
+      <div class="token-grid">
+        <div class="tk-item">
+          <div class="tk-label">Input</div>
+          <div class="tk-val" id="sTokIn">-</div>
+        </div>
+        <div class="tk-item">
+          <div class="tk-label">Output</div>
+          <div class="tk-val" id="sTokOut">-</div>
+        </div>
+        <div class="tk-item">
+          <div class="tk-label">Total</div>
+          <div class="tk-val" id="sTokTotal">-</div>
+        </div>
+        <div class="tk-item">
+          <div class="tk-label">Cost</div>
+          <div class="tk-val" id="sTokCost">-</div>
+        </div>
+      </div>
     </div>
   </div>
   <div class="heatmap-tip" id="hmTip"></div>
@@ -685,6 +751,7 @@ function bar(n, t, w) {
 function dn(d) { return ['SUN','MON','TUE','WED','THU','FRI','SAT'][d.getDay()]; }
 function esc(s) { var d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
 function trunc(s, n) { return !s ? '' : s.length > (n||80) ? s.slice(0, n||80) + '...' : s; }
+function fmtK(n) { if (n >= 1000000) return (n/1000000).toFixed(1) + 'M'; if (n >= 1000) return (n/1000).toFixed(1) + 'K'; return String(n); }
 
 function localDate(iso) {
   if (!iso) return '';
@@ -723,17 +790,20 @@ async function load() {
 }
 
 function stats(entries) {
-  var done = 0, fail = 0, dur = 0, byD = {}, byP = {};
+  var done = 0, fail = 0, dur = 0, byD = {}, byP = {}, inTok = 0, outTok = 0, cost = 0;
   for (var i = 0; i < entries.length; i++) {
     var e = entries[i];
     if (e.status === 'done') done++; else fail++;
     dur += (e.duration || 0);
+    inTok += (e.inputTokens || 0);
+    outTok += (e.outputTokens || 0);
+    cost += (e.costUsd || 0);
     var dk = localDate(e.date || e.startedAt);
     if (dk) { if (!byD[dk]) byD[dk] = []; byD[dk].push(e); }
     var p = e.project || '?';
     if (!byP[p]) byP[p] = []; byP[p].push(e);
   }
-  return { done: done, fail: fail, dur: dur, rate: entries.length > 0 ? Math.round(done / entries.length * 100) : 0, byD: byD, byP: byP };
+  return { done: done, fail: fail, dur: dur, rate: entries.length > 0 ? Math.round(done / entries.length * 100) : 0, byD: byD, byP: byP, inTok: inTok, outTok: outTok, cost: cost };
 }
 
 function renderStats(s) {
@@ -742,6 +812,10 @@ function renderStats(s) {
   document.getElementById('sTime').textContent = fmt(s.dur);
   document.getElementById('sRate').textContent = s.rate + '%';
   document.getElementById('sBar').innerHTML = bar(s.rate, 100, 10);
+  document.getElementById('sTokIn').textContent = fmtK(s.inTok);
+  document.getElementById('sTokOut').textContent = fmtK(s.outTok);
+  document.getElementById('sTokTotal').textContent = fmtK(s.inTok + s.outTok);
+  document.getElementById('sTokCost').textContent = s.cost > 0 ? '$' + s.cost.toFixed(2) : '$0';
 }
 
 function renderHeatmap(byD) {
@@ -807,10 +881,14 @@ function renderProjects(byP) {
   var ps = Object.keys(byP).sort(function(a,b){return byP[b].length - byP[a].length;});
   for (var i = 0; i < ps.length; i++) {
     (function(p) {
+      var projTok = 0;
+      for (var k = 0; k < byP[p].length; k++) { projTok += (byP[p][k].inputTokens||0) + (byP[p][k].outputTokens||0); }
       var it = document.createElement('div');
       it.className = 'proj-item' + (filterProj === p ? ' active' : '');
       it.innerHTML = '<span class="proj-dot" style="background:' + hc(p) + '"></span>' +
-        '<span class="proj-name">' + esc(p) + '</span><span class="proj-count">' + byP[p].length + '</span>';
+        '<span class="proj-name">' + esc(p) + '</span>' +
+        (projTok > 0 ? '<span class="proj-tokens" style="font-size:10px;color:var(--ink4);margin-left:4px">' + fmtK(projTok) + '</span>' : '') +
+        '<span class="proj-count">' + byP[p].length + '</span>';
       it.onclick = function() { filterProj = p; render(); };
       el.appendChild(it);
     })(ps[i]);
@@ -851,11 +929,16 @@ function renderTimeline(entries) {
       var card = document.createElement('div');
       card.className = 'entry ' + e.status;
       var pc = hc(e.project || '');
+      var tokStr = '';
+      if (e.inputTokens || e.outputTokens) {
+        tokStr = '<span class="entry-tokens" style="font-size:11px;color:var(--ink4);margin-left:8px">T:' + fmtK((e.inputTokens||0)+(e.outputTokens||0)) + '</span>';
+      }
       card.innerHTML =
         '<div class="entry-row1">' +
           '<span class="entry-status ' + e.status + '">' + (ok ? '\u2713' : '\u2717') + '</span>' +
           '<span class="entry-proj" style="background:' + pc + '">' + esc(e.project||'?') + '</span>' +
           '<span class="entry-dur">' + fmt(e.duration) + '</span>' +
+          tokStr +
           '<span class="entry-time">' + esc(localTime(e.startedAt)) + '</span>' +
         '</div>' +
         '<div class="entry-goal" title="' + esc(e.goal).replace(/"/g,'&quot;') + '">' + esc(trunc(e.goal, 90)) + '</div>' +

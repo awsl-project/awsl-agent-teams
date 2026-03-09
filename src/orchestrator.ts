@@ -75,6 +75,9 @@ export interface TeamResult {
 	summary: string;
 	memory: SharedMemory;
 	planning: PlanningDir;
+	inputTokens: number;
+	outputTokens: number;
+	costUsd: number;
 }
 
 export interface ExecuteOptions {
@@ -234,6 +237,10 @@ export async function executeTeam(
 	const planning = createPlanningDir(cwd);
 	planning.init();
 
+	let totalInputTokens = 0;
+	let totalOutputTokens = 0;
+	let totalCostUsd = 0;
+
 	const planner = agents.find(a => a.name === "planner");
 	if (!planner) throw new Error("No planner agent found");
 	const available = agents.filter(a => a.name !== "planner").map(a => a.name);
@@ -266,7 +273,7 @@ export async function executeTeam(
 
 	if (options?.resumeFromCheckpoint !== false) {
 		const checkpoint = loadCheckpoint(cwd);
-		if (checkpoint && checkpoint.completedTasks.length > 0) {
+		if (checkpoint) {
 			// Restore shared memory first (research, design, plan, prior results)
 			if (checkpoint.memory) {
 				memory.restore(checkpoint.memory);
@@ -352,6 +359,10 @@ export async function executeTeam(
 				cwd, memory, roster, defaultModel, 20, skills, engine,
 			);
 
+			totalInputTokens += brainstormResult.inputTokens ?? 0;
+			totalOutputTokens += brainstormResult.outputTokens ?? 0;
+			totalCostUsd += brainstormResult.costUsd ?? 0;
+
 			if (brainstormResult.status === "done" || brainstormResult.status === "no_report") {
 				planning.write("DESIGN.md", brainstormResult.result);
 				memory.set("design", brainstormResult.result, brainstormer.name);
@@ -374,6 +385,9 @@ export async function executeTeam(
 			if (researcher) {
 				await runParallel(researchTopics, maxConcurrency, async (topic) => {
 					const result = await runAgent(researcher, topic.prompt, cwd, memory, roster, defaultModel, 15, skills, engine);
+					totalInputTokens += result.inputTokens ?? 0;
+					totalOutputTokens += result.outputTokens ?? 0;
+					totalCostUsd += result.costUsd ?? 0;
 					if (result.status === "done" || result.status === "no_report") {
 						planning.write(`research/${topic.name}.md`, result.result);
 						memory.set(`research:${topic.name}`, result.result, researcher.name);
@@ -436,9 +450,12 @@ IMPORTANT: You MUST call the report tool with ONLY a JSON code block in this EXA
 Do NOT output any text before or after the JSON. Do NOT use markdown prose format.`;
 
 		const planResult = await runAgent(planner, planPrompt, cwd, memory, roster, defaultModel, 30, skills, engine);
+		totalInputTokens += planResult.inputTokens ?? 0;
+		totalOutputTokens += planResult.outputTokens ?? 0;
+		totalCostUsd += planResult.costUsd ?? 0;
 
 		if (planResult.status === "failed") {
-			return { success: false, tasks: [], summary: `Planning failed: ${planResult.error}`, memory, planning };
+			return { success: false, tasks: [], summary: `Planning failed: ${planResult.error}`, memory, planning, inputTokens: totalInputTokens, outputTokens: totalOutputTokens, costUsd: totalCostUsd };
 		}
 
 		let structuredTasks = parseStructuredTasks(planResult.result);
@@ -453,7 +470,7 @@ Do NOT output any text before or after the JSON. Do NOT use markdown prose forma
 			}
 		}
 		if (structuredTasks.length === 0) {
-			return { success: false, tasks: [], summary: `Planner produced no parseable tasks:\n${planResult.result.slice(0, 300)}`, memory, planning };
+			return { success: false, tasks: [], summary: `Planner produced no parseable tasks:\n${planResult.result.slice(0, 300)}`, memory, planning, inputTokens: totalInputTokens, outputTokens: totalOutputTokens, costUsd: totalCostUsd };
 		}
 
 		tasks = structuredTasks.map(st => ({
@@ -548,6 +565,9 @@ Do NOT output any text before or after the JSON. Do NOT use markdown prose forma
 			// Conductor: fresh context per task (new Agent instance)
 			// Guardian: skills auto-activate based on agent role
 			const result = await runAgent(agentDef, prompt, cwd, memory, roster, defaultModel, 30, skills, engine);
+			totalInputTokens += result.inputTokens ?? 0;
+			totalOutputTokens += result.outputTokens ?? 0;
+			totalCostUsd += result.costUsd ?? 0;
 
 			if (result.status === "rate_limited") {
 				task.status = "pending"; // Reset to pending for retry
@@ -649,6 +669,9 @@ Do NOT output any text before or after the JSON. Do NOT use markdown prose forma
 				`# Guardian Verification (Two-Stage Review)\n\nVerify the following completed tasks using two stages:\n\n## Stage 1: Spec Compliance\nDoes each task meet its definition of done?\n\n## Stage 2: Code Quality\nAre there bugs, security issues, or quality problems?\n\n${verifyItems}\n\nFor each task, report PASS, FAIL, or WARN with category and details. Critical findings should be marked [CRITICAL]. Call report with your findings.`,
 				cwd, memory, roster, defaultModel, 30, skills, engine,
 			);
+			totalInputTokens += verifyResult.inputTokens ?? 0;
+			totalOutputTokens += verifyResult.outputTokens ?? 0;
+			totalCostUsd += verifyResult.costUsd ?? 0;
 
 			if (verifyResult.status === "done" || verifyResult.status === "no_report") {
 				planning.write("VERIFICATION.md", verifyResult.result);
@@ -693,7 +716,10 @@ Do NOT output any text before or after the JSON. Do NOT use markdown prose forma
 			if (!coder) break;
 
 			const fixPrompt = "Read .planning/VERIFICATION.md. Fix all FAIL items. Then re-run the failing commands to confirm they pass.";
-			await runAgent(coder, fixPrompt, cwd, memory, roster, defaultModel, 30, skills, engine);
+			const fixResult = await runAgent(coder, fixPrompt, cwd, memory, roster, defaultModel, 30, skills, engine);
+			totalInputTokens += fixResult.inputTokens ?? 0;
+			totalOutputTokens += fixResult.outputTokens ?? 0;
+			totalCostUsd += fixResult.costUsd ?? 0;
 
 			// Re-run verification after fix attempt
 			const reVerify = await runFullVerification(cwd);
@@ -729,6 +755,9 @@ Do NOT output any text before or after the JSON. Do NOT use markdown prose forma
 
 			const retryPrompt = `# Retry: ${task.id}\n\nPrevious attempt failed: ${task.error}\n\n## Action\n${task.description}\n\nFix the issue and complete the task.`;
 			const result = await runAgent(agentDef, retryPrompt, cwd, memory, roster, defaultModel, 30, skills, engine);
+			totalInputTokens += result.inputTokens ?? 0;
+			totalOutputTokens += result.outputTokens ?? 0;
+			totalCostUsd += result.costUsd ?? 0;
 
 			if (result.status === "done" || result.status === "no_report") {
 				task.status = "done";
@@ -757,6 +786,9 @@ Do NOT output any text before or after the JSON. Do NOT use markdown prose forma
 			`## Original Goal\n${goal}\n\n## Completed\n${doneSummary}\n\n## Failed\n${failedSummary}\n\n## Team\n${roster}\n\nCreate a recovery plan. Use different approaches where the original failed. Assign only to: ${available.join(", ")}.\n\nIMPORTANT: Call the report tool with ONLY a JSON code block:\n\`\`\`json\n{ "summary": "...", "tasks": [{ "id": "task_1", "name": "...", "assignee": "...", "dependencies": [], "files": [], "action": "...", "verify": "...", "done": "..." }] }\n\`\`\`\nDo NOT output markdown prose. Output ONLY JSON.`,
 			cwd, memory, roster, defaultModel, 30, skills, engine,
 		);
+		totalInputTokens += replanResult.inputTokens ?? 0;
+		totalOutputTokens += replanResult.outputTokens ?? 0;
+		totalCostUsd += replanResult.costUsd ?? 0;
 
 		if (replanResult.status !== "failed") {
 			const retryStructured = parseStructuredTasks(replanResult.result);
@@ -781,9 +813,12 @@ Do NOT output any text before or after the JSON. Do NOT use markdown prose forma
 						const agentDef = agents.find(a => a.name === task.assignee);
 						if (!agentDef) {
 							task.status = "failed";
-							return { agent: task.assignee, status: "failed" as const, result: "", turns: 0 };
+							return { agent: task.assignee, status: "failed" as const, result: "", turns: 0, inputTokens: 0, outputTokens: 0, costUsd: 0 };
 						}
 						const result = await runAgent(agentDef, task.description, cwd, memory, roster, defaultModel, 30, skills, engine);
+						totalInputTokens += result.inputTokens ?? 0;
+						totalOutputTokens += result.outputTokens ?? 0;
+						totalCostUsd += result.costUsd ?? 0;
 						if (result.status === "done" || result.status === "no_report") {
 							task.status = "done";
 							task.result = result.result;
@@ -801,12 +836,16 @@ Do NOT output any text before or after the JSON. Do NOT use markdown prose forma
 		}
 	}
 
-	// Clear checkpoint on completion
-	clearCheckpoint(cwd);
-
 	// ── Update State ──────────────────────────────────────────
 	const doneCount = tasks.filter(t => t.status === "done" || t.status === "verified").length;
 	const success = doneCount === tasks.length;
+
+	// Clear checkpoint only on full success; keep for partial/failed to allow resume
+	if (success) {
+		clearCheckpoint(cwd);
+	} else {
+		log.info("checkpoint", "Keeping checkpoint for resume (not all tasks succeeded)");
+	}
 
 	planning.write("STATE.md", `# Project State
 
@@ -844,7 +883,7 @@ ${failedTasksForReplan.length > 0 ? failedTasksForReplan.map(t => `- ${t.id}: ${
 		: `${doneCount}/${tasks.length} tasks completed.`;
 	const summary = taskSummaries ? `${headline}\n${taskSummaries}` : headline;
 
-	return { success, tasks, summary, memory, planning };
+	return { success, tasks, summary, memory, planning, inputTokens: totalInputTokens, outputTokens: totalOutputTokens, costUsd: totalCostUsd };
 }
 
 // ─── Plan-Only Mode (for CC hybrid) ──────────────────────────

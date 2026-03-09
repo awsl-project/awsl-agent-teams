@@ -26,6 +26,9 @@ export interface HistoryEntry {
 	summary: string;
 	engine?: string;
 	commits?: number;
+	inputTokens?: number;
+	outputTokens?: number;
+	costUsd?: number;
 }
 
 export interface HistoryData {
@@ -41,6 +44,10 @@ export interface HistoryStats {
 	successRate: number;
 	byDate: Record<string, HistoryEntry[]>;
 	byProject: Record<string, HistoryEntry[]>;
+	totalInputTokens: number;
+	totalOutputTokens: number;
+	totalCostUsd: number;
+	tokensByProject: Record<string, { inputTokens: number; outputTokens: number; costUsd: number }>;
 }
 
 // ─── Constants ───────────────────────────────────────────────
@@ -119,6 +126,11 @@ export function getHistoryStats(data: HistoryData): HistoryStats {
 	const byDate: Record<string, HistoryEntry[]> = {};
 	const byProject: Record<string, HistoryEntry[]> = {};
 
+	let totalInputTokens = 0;
+	let totalOutputTokens = 0;
+	let totalCostUsd = 0;
+	const tokensByProject: Record<string, { inputTokens: number; outputTokens: number; costUsd: number }> = {};
+
 	for (const entry of data.entries) {
 		// Group by YYYY-MM-DD
 		const dateKey = entry.date.slice(0, 10);
@@ -126,8 +138,19 @@ export function getHistoryStats(data: HistoryData): HistoryStats {
 		byDate[dateKey].push(entry);
 
 		// Group by project name
-		if (!byProject[entry.project]) byProject[entry.project] = [];
-		byProject[entry.project].push(entry);
+		const proj = entry.project;
+		if (!byProject[proj]) byProject[proj] = [];
+		byProject[proj].push(entry);
+
+		// Accumulate token usage
+		totalInputTokens += entry.inputTokens ?? 0;
+		totalOutputTokens += entry.outputTokens ?? 0;
+		totalCostUsd += entry.costUsd ?? 0;
+
+		if (!tokensByProject[proj]) tokensByProject[proj] = { inputTokens: 0, outputTokens: 0, costUsd: 0 };
+		tokensByProject[proj].inputTokens += entry.inputTokens ?? 0;
+		tokensByProject[proj].outputTokens += entry.outputTokens ?? 0;
+		tokensByProject[proj].costUsd += entry.costUsd ?? 0;
 	}
 
 	return {
@@ -138,5 +161,9 @@ export function getHistoryStats(data: HistoryData): HistoryStats {
 		successRate,
 		byDate,
 		byProject,
+		totalInputTokens,
+		totalOutputTokens,
+		totalCostUsd,
+		tokensByProject,
 	};
 }

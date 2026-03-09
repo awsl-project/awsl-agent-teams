@@ -32,6 +32,9 @@ export interface RunResult {
 	result: string;
 	turns: number;
 	error?: string;
+	inputTokens?: number;
+	outputTokens?: number;
+	costUsd?: number;
 }
 
 // ─── Rate Limit Detection ────────────────────────────────────
@@ -196,6 +199,9 @@ ${memSummary === "(empty)" ? "No shared data yet." : memSummary}
 					result: "",
 					turns: 0,
 					error: (stderr + stdout).slice(0, 500),
+					inputTokens: 0,
+					outputTokens: 0,
+					costUsd: 0,
 				});
 				return;
 			}
@@ -205,6 +211,12 @@ ${memSummary === "(empty)" ? "No shared data yet." : memSummary}
 				const response = JSON.parse(stdout);
 				const result = response.result ?? stdout;
 				const sessionId = response.session_id ?? "";
+
+				// Extract token usage
+				const usage = response.usage ?? {};
+				const inputTokens = usage.input_tokens ?? 0;
+				const outputTokens = usage.output_tokens ?? 0;
+				const costUsd = response.cost_usd ?? response.total_cost_usd ?? 0;
 
 				// Store result in shared memory
 				memory.set(`result:${agentDef.name}:session`, sessionId, agentDef.name);
@@ -216,6 +228,9 @@ ${memSummary === "(empty)" ? "No shared data yet." : memSummary}
 					result,
 					turns: response.num_turns ?? 1,
 					error: code !== 0 ? `Exit code ${code}` : undefined,
+					inputTokens,
+					outputTokens,
+					costUsd,
 				});
 			} catch {
 				// Non-JSON output — use raw stdout
@@ -226,6 +241,9 @@ ${memSummary === "(empty)" ? "No shared data yet." : memSummary}
 					result,
 					turns: 1,
 					error: code !== 0 ? `Exit code ${code}: ${stderr.slice(0, 200)}` : undefined,
+					inputTokens: 0,
+					outputTokens: 0,
+					costUsd: 0,
 				});
 			}
 		});
@@ -239,6 +257,9 @@ ${memSummary === "(empty)" ? "No shared data yet." : memSummary}
 					result: "",
 					turns: 0,
 					error: err.message,
+					inputTokens: 0,
+					outputTokens: 0,
+					costUsd: 0,
 				});
 				return;
 			}
@@ -248,6 +269,9 @@ ${memSummary === "(empty)" ? "No shared data yet." : memSummary}
 				result: "",
 				turns: 0,
 				error: `Spawn error: ${err.message}`,
+				inputTokens: 0,
+				outputTokens: 0,
+				costUsd: 0,
 			});
 		});
 	});
@@ -331,7 +355,7 @@ ${memSummary === "(empty)" ? "No shared data yet." : memSummary}
 		await agent.prompt(task);
 	} catch (e: any) {
 		unsub();
-		return { agent: agentDef.name, status: "failed", result: "", turns, error: e.message ?? String(e) };
+		return { agent: agentDef.name, status: "failed", result: "", turns, error: e.message ?? String(e), inputTokens: 0, outputTokens: 0, costUsd: 0 };
 	}
 
 	unsub();
@@ -340,7 +364,7 @@ ${memSummary === "(empty)" ? "No shared data yet." : memSummary}
 	if (reportBox.value) {
 		const rpt = reportBox.value;
 		log.info(agentDef.name, `Done (${rpt.status})`);
-		return { agent: agentDef.name, status: rpt.status as RunResult["status"], result: rpt.result, turns };
+		return { agent: agentDef.name, status: rpt.status as RunResult["status"], result: rpt.result, turns, inputTokens: 0, outputTokens: 0, costUsd: 0 };
 	}
 
 	const messages = agent.state.messages;
@@ -351,12 +375,12 @@ ${memSummary === "(empty)" ? "No shared data yet." : memSummary}
 			if (textParts.length > 0) {
 				const text = textParts.map((c: any) => c.text).join("\n");
 				log.info(agentDef.name, "Done (no report tool, using last output)");
-				return { agent: agentDef.name, status: "no_report", result: text, turns };
+				return { agent: agentDef.name, status: "no_report", result: text, turns, inputTokens: 0, outputTokens: 0, costUsd: 0 };
 			}
 		}
 	}
 
-	return { agent: agentDef.name, status: "failed", result: "", turns, error: "No output" };
+	return { agent: agentDef.name, status: "failed", result: "", turns, error: "No output", inputTokens: 0, outputTokens: 0, costUsd: 0 };
 }
 
 // ─── Public API ──────────────────────────────────────────────

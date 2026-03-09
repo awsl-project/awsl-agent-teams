@@ -306,6 +306,9 @@ export class TaskQueue {
 							tasksTotal: tasksTotalMatch ? parseInt(tasksTotalMatch[1], 10) : 0,
 							summary: freshTask.result?.summary ?? "",
 							engine: detectEngine(freshTask.engine) as string,
+							inputTokens: teamResult.inputTokens ?? 0,
+							outputTokens: teamResult.outputTokens ?? 0,
+							costUsd: teamResult.costUsd ?? 0,
 						});
 					} catch (e) {
 						log.warn("queue", `Failed to record history: ${e}`);
@@ -339,6 +342,9 @@ export class TaskQueue {
 							tasksTotal: 0,
 							summary: freshTask.error ?? "",
 							engine: detectEngine(freshTask.engine) as string,
+							inputTokens: 0,
+							outputTokens: 0,
+							costUsd: 0,
 						});
 					} catch (e) {
 						log.warn("queue", `Failed to record history: ${e}`);
