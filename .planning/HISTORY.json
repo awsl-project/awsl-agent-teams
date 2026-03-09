@@ -56,7 +56,26 @@
       "inputTokens": 9825,
       "outputTokens": 55639,
       "costUsd": 5.52464075
+    },
+    {
+      "id": "h_4",
+      "date": "2026-03-09T19:23:32.462Z",
+      "project": "awsl-agent-teams",
+      "projectPath": "C:\\Users\\11421\\awsl-agent-teams",
+      "queueTaskId": "q_7",
+      "goal": "每次队列后 都要commit一次",
+      "status": "done",
+      "startedAt": "2026-03-09T19:13:00.013Z",
+      "completedAt": "2026-03-09T19:23:32.462Z",
+      "duration": 632449,
+      "tasksCompleted": 0,
+      "tasksTotal": 0,
+      "summary": "All 4 tasks completed.\n- task_1: ## AWSL_RESULT\n- task_2: Build passes. \n- task_3: Type-check passes. Here's my full review:\n- task_4: All three `atomicCommit` references are in place — import (line 18), success/failure path (line 361), and catch/error path (line 404). All wrapped in `try/catch` with `log.warn` fallback.",
+      "engine": "claude-code",
+      "inputTokens": 7007,
+      "outputTokens": 21797,
+      "costUsd": 2.8119659999999995
     }
   ],
-  "updatedAt": "2026-03-09T18:01:43.329Z"
+  "updatedAt": "2026-03-09T19:23:32.462Z"
 }

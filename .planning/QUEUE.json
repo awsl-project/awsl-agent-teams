@@ -54,9 +54,10 @@
       "options": {
         "quick": false
       },
-      "status": "pending",
+      "status": "running",
       "scheduledAt": "2026-03-09T14:06:13.849Z",
-      "runAt": "2026-03-09T20:14:00.000Z"
+      "runAt": "2026-03-09T20:14:00.000Z",
+      "startedAt": "2026-03-09T20:14:00.010Z"
     },
     {
       "id": "q_6",
@@ -74,12 +75,17 @@
       "options": {
         "quick": false
       },
-      "status": "running",
+      "status": "done",
       "scheduledAt": "2026-03-09T14:07:55.170Z",
       "runAt": "2026-03-09T19:13:00.000Z",
-      "startedAt": "2026-03-09T19:13:00.013Z"
+      "startedAt": "2026-03-09T19:13:00.013Z",
+      "completedAt": "2026-03-09T19:23:32.462Z",
+      "result": {
+        "success": true,
+        "summary": "All 4 tasks completed.\n- task_1: ## AWSL_RESULT\n- task_2: Build passes. \n- task_3: Type-check passes. Here's my full review:\n- task_4: All three `atomicCommit` references are in place — import (line 18), success/failure path (line 361), and catch/error path (line 404). All wrapped in `try/catch` with `log.warn` fallback."
+      }
     }
   ],
   "createdAt": "2026-03-09T10:11:39.245Z",
-  "updatedAt": "2026-03-09T19:13:00.013Z"
+  "updatedAt": "2026-03-09T20:14:00.010Z"
 }

@@ -1,30 +1,48 @@
-`atomicCommit` is **not** imported yet. It needs to be added from `./planning.js`. Design is complete — let me write the final report.
-
 ## AWSL_RESULT
 
-### Design: 队列任务后自动 Commit
+### Design: Builtin Engine Minimal Sandbox
 
-**目标**：每次队列任务（`executeTeam`）执行完毕后，自动 commit QUEUE.json 和 HISTORY.json 的状态变更。
+**Design document:** `.planning/DESIGN-sandbox.md`
 
-**方案**：在 `src/queue.ts` 的任务完成路径（成功 + 失败）添加 `atomicCommit` 调用。
+### Summary of Key Decisions
 
-**修改文件**：
-| 文件 | 变更 |
-|---|---|
-| `src/queue.ts` | 添加 `atomicCommit` import + 两处调用（成功路径 ~line 356、失败路径 ~line 394） |
-| `README.md` | 文档更新 |
-| `README.zh-CN.md` | 文档更新 |
-| `BEST_PRACTICES.md` | 文档更新 |
+| # | Decision | Rationale |
+|---|----------|-----------|
+| 1 | **SandboxPolicy interface** (not hardcoded guards) | ~10 extra lines buys configurability, per-agent override, future extensibility |
+| 2 | **Role-based defaults** (not phase-based) | Roles already exist on every agent; phases would require threading new state through ToolContext |
+| 3 | **String pattern matching for bash** (not AST parsing) | Shell parsing is a rabbit hole; prefix/contains matching prevents accidental damage, good enough for v1 |
+| 4 | **Opt-out, not opt-in** | Security on by default; `sandbox: false` to disable |
 
-**关键设计决策**：
+### Architecture
 
-1. **Commit 在 queue.ts 而非 orchestrator.ts** — 队列状态是 queue.ts 的职责，executeTeam 内部已有自己的 commit
-2. **成功和失败都 commit** — 失败状态同样有价值（记录原因，支持 resume）
-3. **尊重 autoCommit 选项** — 与 `--no-commit` CLI flag 保持一致
-4. **不传 taskFiles 参数** — 此时脏文件仅剩 `.planning/` 状态文件，正是我们要 commit 的
-5. **Commit 消息格式**: `{taskId}: Queue task {status}`（如 `q_1: Queue task done`）
-6. **用 try/catch 包裹** — commit 失败不应中断队列循环
+```
+ExecuteOptions.sandbox (bool | SandboxPolicy)
+  → runWithBuiltin() computes defaultPolicy(role, cwd)
+    → createAgentTools(…, sandbox)
+      → ToolContext.sandbox
+        → createWriteTool: checkWritePath() before fs.writeFileSync
+        → createEditTool:  checkWritePath() before fs.writeFileSync  
+        → createBashTool:  checkBashCommand() before execSync
+```
 
-**实现量**：~10 行代码 + 文档更新
+### Files to Change
 
-**设计文件**：`.planning/MEMORY.json` (key: `design`)
+| File | Action | Lines |
+|------|--------|-------|
+| `src/sandbox.ts` | **NEW** | ~80 |
+| `src/tools.ts` | Modify | +20 |
+| `src/runner.ts` | Modify | +5 |
+| `src/orchestrator.ts` | Modify | +10 |
+| `src/agents.ts` | Modify | +5 |
+| `src/index.ts` | Modify | +1 |
+| Docs (3 files) | Update | ~30 each |
+
+### Role → Policy Matrix
+
+| Role | Write | Bash | Philosophy |
+|------|-------|------|------------|
+| coder | project dir | denylist (dangerous cmds) | Broad access, block footguns |
+| tester | project dir | allowlist (test cmds) | Only what's needed to test |
+| reviewer | project dir | allowlist (read cmds) | Read-only exploration |
+| architect | project dir | allowlist (read cmds) | Read-only exploration |
+| planner | project dir | allowlist (minimal) | Minimal shell access |

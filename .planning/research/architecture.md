@@ -1,94 +1,101 @@
+Here is the architecture analysis:
+
 ## AWSL_RESULT
 
-### Architecture Analysis: `awsl-agent-core`
+### Architecture Analysis: awsl-agent-teams
 
-**Multi-agent orchestration engine** — TypeScript, ES modules, strict mode. Compiles to `dist/` via `tsc`.
+**Type:** Multi-agent orchestration engine for Claude Code / LLM-powered software development teams.
 
 ---
 
 ### File Structure & Module Boundaries
 
-| Module | File | LOC | Responsibility |
-|--------|------|-----|----------------|
-| **CLI** | `cli.ts` | 26K | Entry point, command parsing, `usage()` |
-| **Orchestrator** | `orchestrator.ts` | 45K | Core pipeline: brainstorm → research → plan → execute (wave-parallel) → verify → replan |
-| **Runner** | `runner.ts` | 13K | Dual-engine agent execution: `claude-code` (subprocess) or `builtin` (pi-agent-core in-process) |
-| **Queue** | `queue.ts` | 20K | Sequential task queue with dependency tracking, QUEUE.json persistence |
-| **Planning** | `planning.ts` | 14K | `.planning/` directory state: checkpoint, atomic commit, task parsing |
-| **Validate** | `validate.ts` | 12K | PLAN.md parser + topological sort → WAVES.md |
-| **Verify** | `verify.ts` | 18K | Two-stage verification: tsc + eslint + npm test + static review |
-| **Agents** | `agents.ts` | 7K | Agent definition loading from YAML-frontmatter markdown files |
-| **Skills** | `skills.ts` | 9K | Guardian skill registry (TDD, brainstorm, review, etc.) |
-| **Tools** | `tools.ts` | 9K | Built-in agent tools: read, write, edit, bash, memory_*, report |
-| **Context** | `context.ts` | 3K | `RunContext` — lifecycle-aware lock management with signal handlers |
-| **Lock** | `lock.ts` | 5K | File-based concurrency lock |
-| **Memory** | `memory.ts` | 2K | In-process KV store for inter-agent communication |
-| **History** | `history.ts` | 5K | HISTORY.json append-only execution log |
-| **Dashboard** | `dashboard.ts` | 8K | HTTP pixel dashboard for monitoring |
-| **LogStream** | `logstream.ts` | 2K | Log streaming support |
-| **Log** | `log.ts` | 1K | Structured logging utility |
-| **Install** | `install.ts` | 12K | Skill installer into `.claude/skills/` |
-| **Index** | `index.ts` | 2K | Public API re-exports |
+```
+src/
+├── cli.ts           (726 lines) — CLI entry, arg parsing, all subcommands
+├── orchestrator.ts  (1125 lines) — Core: Conductor pipeline (brainstorm→research→plan→execute→verify→replan)
+├── runner.ts        (350 lines)  — Dual engine: spawns `claude -p` or runs pi-agent-core in-process
+├── queue.ts         (500 lines)  — Task queue with dependency tracking, persistence to QUEUE.json
+├── planning.ts      (350 lines)  — .planning/ state dir: read/write/checkpoint/atomic commit
+├── validate.ts      (300 lines)  — PLAN.md parser + topo sort → WAVES.md
+├── verify.ts        (440 lines)  — Code verification: tsc, npm test, eslint (provider pattern, cached)
+├── tools.ts         (220 lines)  — Built-in agent tools: read/write/edit/bash/memory/report
+├── agents.ts        (170 lines)  — Agent defs from YAML-frontmatter markdown files
+├── skills.ts        (220 lines)  — Guardian skill registry (TDD, debug, brainstorm, review, planning)
+├── memory.ts        (68 lines)   — In-process KV store for inter-agent communication
+├── context.ts       (113 lines)  — RunContext: file-based lock + signal handler lifecycle
+├── lock.ts          (116 lines)  — File-based concurrency lock (.planning/.lock)
+├── history.ts       (130 lines)  — Execution history persistence (HISTORY.json)
+├── dashboard.ts     (210 lines)  — HTTP server: pixel-art dashboard + SSE log streaming
+├── logstream.ts     (67 lines)   — Singleton EventEmitter ring buffer for real-time logs
+├── log.ts           (47 lines)   — Colored logger with role-based styling
+├── install.ts       (290 lines)  — Skill installer for Claude Code ~/.claude/skills/
+├── index.ts         (34 lines)   — Public API re-exports
+```
 
----
+### Module Dependency Graph (simplified)
+
+```
+cli.ts ──→ orchestrator.ts ──→ runner.ts ──→ pi-agent-core (builtin engine)
+  │              │                  │              └─→ tools.ts ──→ memory.ts
+  │              │                  └─→ skills.ts
+  │              ├──→ planning.ts
+  │              ├──→ validate.ts (topo sort)
+  │              └──→ verify.ts
+  ├──→ queue.ts ──→ orchestrator.ts (full pipeline per queue task)
+  ├──→ context.ts ──→ lock.ts
+  ├──→ dashboard.ts ──→ history.ts, logstream.ts, queue.ts
+  └──→ install.ts
+```
 
 ### Key Architectural Patterns
 
-1. **Conductor/Guardian separation** — Orchestrator (Conductor) handles *what* to do; Skills (Guardian) handle *how* to do it well. Skills are injected per-agent via role-based auto-activation.
+1. **Conductor/Guardian split** — Conductor (orchestrator.ts) handles *what/when* (phases, waves, parallelism). Guardian (skills.ts) handles *how* (TDD, review methodology injected into agent prompts).
 
-2. **Wave-based parallelism** — Tasks form a DAG. `validate.ts` topologically sorts into waves. Tasks within a wave execute in parallel; waves execute sequentially.
+2. **Dual engine** — `claude-code` engine spawns `claude -p` subprocesses (full Claude Code power, no API key). `builtin` engine runs pi-agent-core in-process with custom tools (any LLM via pi-ai).
 
-3. **File-as-state** — All persistent state lives in `.planning/` directory: `STATE.md`, `PLAN.md`, `WAVES.md`, `QUEUE.json`, `HISTORY.json`, `CHECKPOINT.json`, `MEMORY.json`. No database.
+3. **File-as-state** — All persistent state lives in `.planning/` as human-readable files (PLAN.md, WAVES.md, STATE.md, QUEUE.json, CHECKPOINT.json, VERIFICATION.md). No database.
 
-4. **Dual engine** — `runner.ts` abstracts over two execution backends:
-   - `claude-code`: spawns `claude -p` subprocess (full Claude Code capabilities)
-   - `builtin`: in-process via `@mariozechner/pi-agent-core` Agent class (multi-provider)
+4. **Wave-based execution** — Tasks form a DAG. `topologicalSort()` computes parallel waves. Tasks within a wave run concurrently; waves execute sequentially.
 
-5. **Checkpoint/recovery** — Rate limit detection + checkpoint serialization enables pause/resume across sessions.
+5. **Event/hook system** — `TeamHook` callbacks receive typed events (task_start, wave_end, rate_limit, etc.) for extensibility.
 
-6. **Event/hook system** — `TeamHook` callbacks for lifecycle events (`task_start`, `wave_end`, `rate_limit`, etc.)
+6. **Agent definitions as markdown** — Agents defined in `agents/*.md` with YAML frontmatter (name, role, model, tools, skills) + system prompt body. Loaded from built-in defaults + user dirs.
 
-7. **Lock-guarded execution** — `RunContext` wraps file-based locking with RAII pattern (`ctx.run(fn)`) and signal handler cleanup.
+7. **Verification provider pattern** — `verify.ts` uses a provider interface (`detect()` + `execute()`) with caching (5min TTL). Runs tsc, npm test, eslint deterministically.
 
-8. **Agent definitions as markdown** — Agents defined in `.md` files with YAML frontmatter (name, role, model, tools). Loaded from built-in defaults + `./agents/` directory.
+8. **Checkpoint/recovery** — Orchestrator saves checkpoints after each wave, restores SharedMemory + task status on resume. Rate limit detection triggers exponential backoff.
 
----
+### Frameworks & Dependencies
 
-### Dependencies
-
-| Package | Purpose |
-|---------|---------|
-| `@mariozechner/pi-agent-core` | Builtin engine: Agent class, tool interface |
-| `@mariozechner/pi-ai` | LLM provider abstraction (`getModel()`) |
-| `@sinclair/typebox` | JSON schema validation for agent frontmatter + tool params |
-| `yaml` | YAML frontmatter parsing |
+| Dependency | Purpose |
+|---|---|
+| `@mariozechner/pi-agent-core` | Agent runtime for builtin engine |
+| `@mariozechner/pi-ai` | Multi-provider LLM access (getModel) |
+| `@sinclair/typebox` | JSON Schema for tool parameter definitions |
+| `yaml` | YAML frontmatter parsing in agent .md files |
 | `tsx` | Dev-time TypeScript execution |
+| `typescript` | Build (strict mode, ES2022, Node16 modules) |
 
----
+### Key Interfaces
 
-### Data Flow
+- **`Task`** — `{id, description, assignee, dependencies, status, files, verify, result}`
+- **`TeamAgentDef`** — `{name, role, model, tools, skills, systemPrompt}`
+- **`RunResult`** — `{agent, status, result, turns, inputTokens, outputTokens, costUsd}`
+- **`ExecuteOptions`** — Pipeline config (replan, autoCommit, verify, brainstorm, engine, maxRetries, rateLimitBackoff)
+- **`QueueTask`** — Persistent queued task with scheduling, dependencies, status tracking
 
-```
-CLI (cli.ts)
-  ├── awsl run → Orchestrator (orchestrator.ts)
-  │     ├── brainstorm phase → runAgent (runner.ts)
-  │     ├── research phase   → runParallel (runner.ts)
-  │     ├── plan phase       → runAgent → parseStructuredTasks (planning.ts)
-  │     ├── execute phase    → waves of runParallel → atomicCommit (planning.ts)
-  │     ├── verify phase     → runFullVerification (verify.ts)
-  │     └── replan phase     → retry loop
-  │
-  ├── awsl queue → TaskQueue (queue.ts)
-  │     └── executeTeam per task → Orchestrator
-  │
-  ├── awsl validate → validatePlan (validate.ts) → WAVES.md
-  ├── awsl verify   → runFullVerification (verify.ts)
-  └── awsl init     → runInstaller (install.ts)
-```
+### State Files (.planning/)
 
-### Key Design Decisions
-
-- **No npm publish yet** — source-only install
-- **Windows-compatible** — shell spawning accounts for platform
-- **`unset CLAUDECODE`** required before spawning `claude -p` to avoid nested session blocking
-- **Concurrency model**: file lock prevents parallel `awsl run` in same directory; within a run, wave-level parallelism via `Promise.allSettled`
+| File | Purpose |
+|---|---|
+| PLAN.md | Structured task plan (LLM-generated) |
+| WAVES.md | Computed topological waves (code-generated) |
+| STATE.md | Project decisions, blockers, position |
+| QUEUE.json | Task queue persistence |
+| CHECKPOINT.json | Recovery checkpoint (memory + task states) |
+| VERIFICATION.md | Test/lint/typecheck results |
+| REVIEW.md | Static review findings |
+| HISTORY.json | Execution history for dashboard |
+| research/ | Per-agent research outputs |
+| task_N-SUMMARY.md | Per-task execution summaries |

@@ -1,22 +1,17 @@
-The conventions file already exists and is well-documented. It's comprehensive and up-to-date with the codebase analysis.
-
 ## AWSL_RESULT
 
-Conventions file already exists at `memory/conventions.md` — verified against full codebase scan. No updates needed.
+### Coding Conventions Analysis Complete
 
-**Key conventions summary:**
+The existing `conventions.md` was already thorough. I verified it against all 14 source files and added missing patterns:
 
-| Aspect | Convention |
-|---|---|
-| Variables/Functions | camelCase (`runAgent`, `agentDef`) |
-| Constants | UPPER_SNAKE (`RATE_LIMIT_PATTERNS`, `CACHE_TTL`) |
-| Classes/Interfaces | PascalCase (`SharedMemory`, `RunResult`) |
-| Files | lowercase.ts (`runner.ts`, `memory.ts`) |
-| Imports | ES modules with `.js` ext, `node:` prefix for builtins |
-| Enums | String literal unions, no `enum` keyword |
-| Error handling | Fail-soft (return defaults), bare `catch {}`, `wx` flag for atomic writes |
-| Async | async/await only, sync fs ops, `spawn` for streaming |
-| Logging | `log.info(source, msg)` to stderr, ANSI colors by role |
-| State | File-as-state in `.planning/`, JSON for data, MD for plans |
-| Testing | No test framework — command-based verification (`tsc`, `eslint`) |
-| Patterns | Factory functions, typed event hooks, topo-sort waves, provider pattern |
+**Naming**: camelCase functions, PascalCase types/classes, UPPER_SNAKE constants, string literal unions (no enums), underscore prefix for unused params.
+
+**Style**: ES modules with `.js` extensions, `node:` prefix for builtins, `import type` for type-only, tabs, no semicolons, `// ─── Section ───` dividers, JSDoc file headers, factory functions returning interface objects.
+
+**Error Handling**: Bare `catch {}` when unused, `catch (e: any)` for messages, fail-soft defaults (null/[]/false), atomic file creation with `wx` flag, output truncation with `.slice(0, N)`.
+
+**Testing**: No unit test framework — verification is command-based via provider pattern (`detect` + `execute`), mtime-based cache with 5min TTL, static review via regex scanning.
+
+**Additions made**: Multi-strategy parsing pattern (7 fallback strategies), checkpoint/resume architecture, lock-based concurrency, RunContext RAII pattern, function signature conventions (positional required + optional config objects with `??` defaults), module boundary documentation.
+
+**File updated**: `memory/conventions.md`
