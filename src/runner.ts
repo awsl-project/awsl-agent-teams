@@ -21,6 +21,8 @@ import type { TeamAgentDef } from "./agents.js";
 import type { SharedMemory } from "./memory.js";
 import { createAgentTools } from "./tools.js";
 import { SkillRegistry } from "./skills.js";
+import type { SandboxPolicy } from "./sandbox.js";
+import { defaultPolicy } from "./sandbox.js";
 import { log } from "./log.js";
 import { getLogStream } from "./logstream.js";
 
@@ -294,6 +296,7 @@ async function runWithBuiltin(
 	defaultModel: string,
 	maxTurns: number,
 	skillRegistry?: SkillRegistry,
+	sandbox?: SandboxPolicy | boolean,
 ): Promise<RunResult> {
 	const modelStr = agentDef.model ?? defaultModel;
 	const [provider, modelId] = parseModel(modelStr);
@@ -304,7 +307,10 @@ async function runWithBuiltin(
 		reportBox.value = { status, result };
 	};
 
-	const tools = createAgentTools(agentDef.name, cwd, memory, onReport, agentDef.tools);
+	const policy = sandbox === false ? undefined
+		: (sandbox === true || sandbox === undefined) ? defaultPolicy(agentDef.role, cwd)
+		: sandbox;
+	const tools = createAgentTools(agentDef.name, cwd, memory, onReport, agentDef.tools, policy);
 
 	const skills = skillRegistry ?? new SkillRegistry();
 	const skillInstructions = skills.buildInstructions(agentDef.role, agentDef.skills);
@@ -396,13 +402,15 @@ export async function runAgent(
 	skillRegistry?: SkillRegistry,
 	engine?: Engine,
 	taskId?: string,
+	sandbox?: SandboxPolicy | boolean,
 ): Promise<RunResult> {
 	const resolved = detectEngine(engine);
 
 	if (resolved === "claude-code") {
+		// Claude Code has its own permission system; sandbox is ignored
 		return runWithClaudeCode(agentDef, task, cwd, memory, teamRoster, skillRegistry, taskId);
 	}
-	return runWithBuiltin(agentDef, task, cwd, memory, teamRoster, defaultModel, maxTurns, skillRegistry);
+	return runWithBuiltin(agentDef, task, cwd, memory, teamRoster, defaultModel, maxTurns, skillRegistry, sandbox);
 }
 
 /**

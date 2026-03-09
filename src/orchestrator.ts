@@ -16,6 +16,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { TeamAgentDef } from "./agents.js";
+import type { SandboxPolicy } from "./sandbox.js";
 import { SharedMemory } from "./memory.js";
 import { log } from "./log.js";
 import { type RunResult, type Engine, runAgent, runParallel, detectEngine } from "./runner.js";
@@ -108,6 +109,8 @@ export interface ExecuteOptions {
 	rateLimitBackoff?: number[];
 	/** Resume from checkpoint if available. Default true. */
 	resumeFromCheckpoint?: boolean;
+	/** Sandbox policy for builtin engine. true=role defaults (default), false=disabled, or custom SandboxPolicy. */
+	sandbox?: boolean | SandboxPolicy;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────
@@ -231,6 +234,7 @@ export async function executeTeam(
 	const maxRetries = options?.maxRetries ?? 2;
 	const maxRateLimitRetries = options?.maxRateLimitRetries ?? 20;
 	const rateLimitBackoff = options?.rateLimitBackoff ?? DEFAULT_RATE_LIMIT_BACKOFF;
+	const sandbox = options?.sandbox ?? true;
 	let rateLimitRetryCount = 0;
 	const memory = new SharedMemory();
 	const roster = buildRoster(agents);
@@ -356,7 +360,7 @@ export async function executeTeam(
 			const brainstormResult = await runAgent(
 				brainstormer,
 				`## Goal\n${goal}\n\n## Team\n${roster}\n\nConduct a Socratic brainstorming session about this goal. Explore requirements, alternatives, trade-offs, and constraints. Produce a design document with key decisions and rationale. Store it in shared memory as "design". Call report when done.`,
-				cwd, memory, roster, defaultModel, 20, skills, engine,
+				cwd, memory, roster, defaultModel, 20, skills, engine, undefined, sandbox,
 			);
 
 			totalInputTokens += brainstormResult.inputTokens ?? 0;
@@ -384,7 +388,7 @@ export async function executeTeam(
 			const researcher = agents.find(a => a.role === "architect") ?? agents.find(a => a.name !== "planner");
 			if (researcher) {
 				await runParallel(researchTopics, maxConcurrency, async (topic) => {
-					const result = await runAgent(researcher, topic.prompt, cwd, memory, roster, defaultModel, 15, skills, engine);
+					const result = await runAgent(researcher, topic.prompt, cwd, memory, roster, defaultModel, 15, skills, engine, undefined, sandbox);
 					totalInputTokens += result.inputTokens ?? 0;
 					totalOutputTokens += result.outputTokens ?? 0;
 					totalCostUsd += result.costUsd ?? 0;
@@ -449,7 +453,7 @@ IMPORTANT: You MUST call the report tool with ONLY a JSON code block in this EXA
 
 Do NOT output any text before or after the JSON. Do NOT use markdown prose format.`;
 
-		const planResult = await runAgent(planner, planPrompt, cwd, memory, roster, defaultModel, 30, skills, engine);
+		const planResult = await runAgent(planner, planPrompt, cwd, memory, roster, defaultModel, 30, skills, engine, undefined, sandbox);
 		totalInputTokens += planResult.inputTokens ?? 0;
 		totalOutputTokens += planResult.outputTokens ?? 0;
 		totalCostUsd += planResult.costUsd ?? 0;
@@ -564,7 +568,7 @@ Do NOT output any text before or after the JSON. Do NOT use markdown prose forma
 
 			// Conductor: fresh context per task (new Agent instance)
 			// Guardian: skills auto-activate based on agent role
-			const result = await runAgent(agentDef, prompt, cwd, memory, roster, defaultModel, 30, skills, engine);
+			const result = await runAgent(agentDef, prompt, cwd, memory, roster, defaultModel, 30, skills, engine, undefined, sandbox);
 			totalInputTokens += result.inputTokens ?? 0;
 			totalOutputTokens += result.outputTokens ?? 0;
 			totalCostUsd += result.costUsd ?? 0;
@@ -667,7 +671,7 @@ Do NOT output any text before or after the JSON. Do NOT use markdown prose forma
 			const verifyResult = await runAgent(
 				verifier,
 				`# Guardian Verification (Two-Stage Review)\n\nVerify the following completed tasks using two stages:\n\n## Stage 1: Spec Compliance\nDoes each task meet its definition of done?\n\n## Stage 2: Code Quality\nAre there bugs, security issues, or quality problems?\n\n${verifyItems}\n\nFor each task, report PASS, FAIL, or WARN with category and details. Critical findings should be marked [CRITICAL]. Call report with your findings.`,
-				cwd, memory, roster, defaultModel, 30, skills, engine,
+				cwd, memory, roster, defaultModel, 30, skills, engine, undefined, sandbox,
 			);
 			totalInputTokens += verifyResult.inputTokens ?? 0;
 			totalOutputTokens += verifyResult.outputTokens ?? 0;
@@ -716,7 +720,7 @@ Do NOT output any text before or after the JSON. Do NOT use markdown prose forma
 			if (!coder) break;
 
 			const fixPrompt = "Read .planning/VERIFICATION.md and .planning/REVIEW.md. Fix all FAIL and CRITICAL items from both files. Then re-run the failing commands to confirm they pass.";
-			const fixResult = await runAgent(coder, fixPrompt, cwd, memory, roster, defaultModel, 30, skills, engine);
+			const fixResult = await runAgent(coder, fixPrompt, cwd, memory, roster, defaultModel, 30, skills, engine, undefined, sandbox);
 			totalInputTokens += fixResult.inputTokens ?? 0;
 			totalOutputTokens += fixResult.outputTokens ?? 0;
 			totalCostUsd += fixResult.costUsd ?? 0;
@@ -754,7 +758,7 @@ Do NOT output any text before or after the JSON. Do NOT use markdown prose forma
 			if (!agentDef) continue;
 
 			const retryPrompt = `# Retry: ${task.id}\n\nPrevious attempt failed: ${task.error}\n\n## Action\n${task.description}\n\nFix the issue and complete the task.`;
-			const result = await runAgent(agentDef, retryPrompt, cwd, memory, roster, defaultModel, 30, skills, engine);
+			const result = await runAgent(agentDef, retryPrompt, cwd, memory, roster, defaultModel, 30, skills, engine, undefined, sandbox);
 			totalInputTokens += result.inputTokens ?? 0;
 			totalOutputTokens += result.outputTokens ?? 0;
 			totalCostUsd += result.costUsd ?? 0;
@@ -784,7 +788,7 @@ Do NOT output any text before or after the JSON. Do NOT use markdown prose forma
 		const replanResult = await runAgent(
 			planner,
 			`## Original Goal\n${goal}\n\n## Completed\n${doneSummary}\n\n## Failed\n${failedSummary}\n\n## Team\n${roster}\n\nCreate a recovery plan. Use different approaches where the original failed. Assign only to: ${available.join(", ")}.\n\nIMPORTANT: Call the report tool with ONLY a JSON code block:\n\`\`\`json\n{ "summary": "...", "tasks": [{ "id": "task_1", "name": "...", "assignee": "...", "dependencies": [], "files": [], "action": "...", "verify": "...", "done": "..." }] }\n\`\`\`\nDo NOT output markdown prose. Output ONLY JSON.`,
-			cwd, memory, roster, defaultModel, 30, skills, engine,
+			cwd, memory, roster, defaultModel, 30, skills, engine, undefined, sandbox,
 		);
 		totalInputTokens += replanResult.inputTokens ?? 0;
 		totalOutputTokens += replanResult.outputTokens ?? 0;
@@ -815,7 +819,7 @@ Do NOT output any text before or after the JSON. Do NOT use markdown prose forma
 							task.status = "failed";
 							return { agent: task.assignee, status: "failed" as const, result: "", turns: 0, inputTokens: 0, outputTokens: 0, costUsd: 0 };
 						}
-						const result = await runAgent(agentDef, task.description, cwd, memory, roster, defaultModel, 30, skills, engine);
+						const result = await runAgent(agentDef, task.description, cwd, memory, roster, defaultModel, 30, skills, engine, undefined, sandbox);
 						totalInputTokens += result.inputTokens ?? 0;
 						totalOutputTokens += result.outputTokens ?? 0;
 						totalCostUsd += result.costUsd ?? 0;
@@ -910,10 +914,11 @@ export async function planOnly(
 	agents: TeamAgentDef[],
 	cwd: string,
 	defaultModel: string,
-	options?: { brainstorm?: boolean; research?: boolean; engine?: Engine },
+	options?: { brainstorm?: boolean; research?: boolean; engine?: Engine; sandbox?: boolean | SandboxPolicy },
 ): Promise<PlanOnlyResult> {
 	const skills = new SkillRegistry();
 	const engine = detectEngine(options?.engine ?? "builtin");
+	const sandbox = options?.sandbox ?? true;
 	const memory = new SharedMemory();
 	const roster = buildRoster(agents);
 	const planning = createPlanningDir(cwd);
@@ -930,7 +935,7 @@ export async function planOnly(
 		const result = await runAgent(
 			brainstormer,
 			`## Goal\n${goal}\n\n## Team\n${roster}\n\nConduct a Socratic brainstorming session. Explore requirements, alternatives, trade-offs. Produce a design document. Call report when done.`,
-			cwd, memory, roster, defaultModel, 20, skills, engine,
+			cwd, memory, roster, defaultModel, 20, skills, engine, undefined, sandbox,
 		);
 		if (result.status === "done" || result.status === "no_report") {
 			planning.write("DESIGN.md", result.result);
@@ -949,7 +954,7 @@ export async function planOnly(
 				{ name: "conventions", prompt: `Analyze coding conventions in ${cwd}. Document: naming, style, error handling, testing patterns. Be concise.` },
 			];
 			await runParallel(topics, 2, async (topic) => {
-				const result = await runAgent(researcher, topic.prompt, cwd, memory, roster, defaultModel, 15, skills, engine);
+				const result = await runAgent(researcher, topic.prompt, cwd, memory, roster, defaultModel, 15, skills, engine, undefined, sandbox);
 				if (result.status === "done" || result.status === "no_report") {
 					planning.write(`research/${topic.name}.md`, result.result);
 					memory.set(`research:${topic.name}`, result.result, researcher.name);
@@ -971,7 +976,7 @@ export async function planOnly(
 
 	const planPrompt = `## Team Members\n${roster}\n\n## Goal\n${goal}\n\n${researchContext ? `## Research Findings\n${researchContext}\n` : ""}${existingState !== "(no state file)" ? `## Project State\n${existingState}\n` : ""}## Instructions\n\nCreate a structured task plan. Output MUST be a JSON code block and nothing else.\n\nRules:\n- ONE deliverable per task, max 2-3 files\n- No dependencies = can run in parallel\n- Do NOT assign to "planner"\n- verify should be a runnable command when possible\n\nIMPORTANT: Call the report tool with ONLY a JSON code block in this EXACT format:\n\n\`\`\`json\n{\n  "summary": "Brief plan description",\n  "tasks": [\n    {\n      "id": "task_1",\n      "name": "Short task name",\n      "assignee": "one of [${available.join(", ")}]",\n      "dependencies": [],\n      "files": ["src/example.ts"],\n      "action": "Detailed implementation instructions",\n      "verify": "npm test",\n      "done": "Definition of done"\n    }\n  ]\n}\n\`\`\`\n\nDo NOT output any text before or after the JSON. Do NOT use markdown prose format.`;
 
-	const planResult = await runAgent(planner, planPrompt, cwd, memory, roster, defaultModel, 30, skills, engine);
+	const planResult = await runAgent(planner, planPrompt, cwd, memory, roster, defaultModel, 30, skills, engine, undefined, sandbox);
 
 	if (planResult.status === "failed") {
 		return { success: false, planPath: "", tasks: [], waves: [], summary: `Planning failed: ${planResult.error}` };
