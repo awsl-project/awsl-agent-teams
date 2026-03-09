@@ -48,6 +48,7 @@ CC Hybrid Mode (no API key needed):
 
 Queue Commands (sleep mode):
   queue add <goal> [opts]  Add a task to the queue
+  queue plan <text> [opts] Parse natural language into multiple queue tasks
   queue list               List queue tasks and status
   queue remove <id>        Remove a task from queue
   queue start [opts]       Start executing the queue (foreground)
@@ -323,6 +324,44 @@ async function main() {
 			if (quick) console.log(`  Mode: quick`);
 			if (engine) console.log(`  Engine: ${engine}`);
 		}
+		else if (subCmd === "plan") {
+			// Parse options
+			let engine: Engine | undefined;
+			let quick = false;
+			let concurrency: number | undefined;
+			let model: string | undefined;
+			const descParts: string[] = [];
+
+			for (let i = 2; i < args.length; i++) {
+				const a = args[i];
+				if (a === "--engine" && i + 1 < args.length) { engine = args[++i] as Engine; }
+				else if (a === "--quick") { quick = true; }
+				else if (a === "--concurrency" && i + 1 < args.length) { concurrency = parseInt(args[++i], 10); }
+				else if (a === "--model" && i + 1 < args.length) { model = args[++i]; }
+				else if (a === "--cwd" && i + 1 < args.length) { i++; }
+				else if (a === "--force") { /* skip */ }
+				else if (!a.startsWith("--")) { descParts.push(a); }
+			}
+
+			const description = descParts.join(" ").trim();
+			if (!description) {
+				console.error('Usage: awsl queue plan "先构建认证，然后加支付，最后写测试" [--engine claude-code]');
+				process.exit(1);
+			}
+
+			console.log("Parsing tasks from natural language...\n");
+			const added = await queue.plan(description, { engine, quick, concurrency, model });
+
+			console.log(`\nPlanned ${added.length} task(s):\n`);
+			console.log("  ID       Deps       Goal");
+			console.log("  " + "-".repeat(60));
+			for (const t of added) {
+				const deps = t.dependsOn?.length ? t.dependsOn.join(",") : "(none)";
+				const goal = t.goal.length > 40 ? t.goal.slice(0, 37) + "..." : t.goal;
+				console.log(`  ${t.id.padEnd(8)} ${deps.padEnd(10)} ${goal}`);
+			}
+			console.log(`\nRun 'awsl queue list' to review, then 'awsl queue start' to execute.`);
+		}
 		else if (subCmd === "list") {
 			const tasks = queue.list();
 			if (tasks.length === 0) {
@@ -381,7 +420,7 @@ async function main() {
 			console.log("Queue cleared.");
 		}
 		else {
-			console.error("Unknown queue command. Use: add, list, remove, start, clear");
+			console.error("Unknown queue command. Use: add, plan, list, remove, start, clear");
 			process.exit(1);
 		}
 		process.exit(0);

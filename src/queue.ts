@@ -8,12 +8,21 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { execSync, spawn } from "node:child_process";
 import { executeTeam, type ExecuteOptions } from "./orchestrator.js";
 import { type Engine, detectEngine } from "./runner.js";
 import { loadAgents } from "./agents.js";
 import { acquireLock, releaseLock, forceReleaseLock } from "./lock.js";
 import { log } from "./log.js";
 import { appendHistory } from "./history.js";
+
+// ─── Interfaces for queue plan ──────────────────────────────
+
+export interface PlannedTask {
+	goal: string;
+	dependsOn?: string[];  // references by index: "q_1", "q_2", or "all"
+	quick?: boolean;
+}
 
 // ─── Interfaces ──────────────────────────────────────────────
 
@@ -299,6 +308,151 @@ export class TaskQueue {
 
 		log.section("Queue Complete");
 		log.info("queue", `Queue complete: ${doneCount} done, ${failedCount} failed out of ${total} total`);
+	}
+
+	// ─── Plan from natural language ──────────────────────────
+
+	/**
+	 * Use LLM to parse a natural language description into structured queue tasks,
+	 * then add them all to the queue with inferred dependencies.
+	 *
+	 * Example input: "先构建用户认证，然后加支付模块，最后写集成测试"
+	 * Result: 3 tasks with q_1 → q_2 → q_3 dependency chain.
+	 */
+	async plan(
+		description: string,
+		defaults?: { engine?: Engine; quick?: boolean; concurrency?: number; model?: string },
+	): Promise<QueueTask[]> {
+		log.info("queue", "Parsing natural language into queue tasks...");
+
+		const prompt = `You are a task planner. Parse the following natural language description into a list of independent build tasks for a software project queue.
+
+Each task should have:
+- "goal": a clear, specific description of what to build (include technical details from the input)
+- "dependsOn": array of task references. Use "1", "2", etc. to reference by position (1-indexed). Use "all" if it depends on ALL previous tasks. Use empty array [] if no dependencies.
+- "quick": boolean, true if this is a small/simple task that can skip brainstorming
+
+Rules:
+- Split logically: each task should be one coherent unit of work
+- Infer dependencies from ordering words like "先/first", "然后/then", "最后/finally", "在...基础上/based on"
+- If no ordering is mentioned, tasks are independent (no dependencies)
+- Keep the original language and technical details in the goal
+- Output ONLY valid JSON array, no markdown fences, no explanation
+
+Example input: "先构建用户认证，然后加支付模块，最后写集成测试"
+Example output:
+[{"goal":"构建用户认证模块","dependsOn":[],"quick":false},{"goal":"添加支付模块","dependsOn":["1"],"quick":false},{"goal":"写集成测试","dependsOn":["all"],"quick":false}]
+
+Now parse this:
+${description}`;
+
+		const result = await this.callClaude(prompt);
+
+		// Parse JSON from LLM response
+		let planned: PlannedTask[];
+		try {
+			// Try to extract JSON array from response (LLM might wrap in markdown)
+			const jsonMatch = result.match(/\[[\s\S]*\]/);
+			if (!jsonMatch) throw new Error("No JSON array found in response");
+			planned = JSON.parse(jsonMatch[0]);
+		} catch (e) {
+			throw new Error(`Failed to parse LLM response as task list: ${e}\nRaw response: ${result.slice(0, 500)}`);
+		}
+
+		if (!Array.isArray(planned) || planned.length === 0) {
+			throw new Error("LLM returned empty or invalid task list");
+		}
+
+		// Add tasks to queue, mapping position references to actual IDs
+		const added: QueueTask[] = [];
+		const data = this.load();
+		const baseIndex = data.tasks.length; // offset for existing tasks
+
+		for (let i = 0; i < planned.length; i++) {
+			const p = planned[i];
+
+			// Resolve dependency references
+			let dependsOn: string[] | undefined;
+			if (p.dependsOn && p.dependsOn.length > 0) {
+				dependsOn = p.dependsOn.map(ref => {
+					if (ref === "all") return "all";
+					// Position reference (1-indexed) → actual queue ID
+					const refIdx = parseInt(ref, 10);
+					if (!isNaN(refIdx) && refIdx >= 1 && refIdx <= i) {
+						return `q_${baseIndex + refIdx}`;
+					}
+					// Already a q_N reference
+					if (ref.startsWith("q_")) return ref;
+					return ref;
+				});
+			}
+
+			const task = this.add(
+				p.goal,
+				{
+					quick: p.quick ?? defaults?.quick,
+					concurrency: defaults?.concurrency,
+					model: defaults?.model,
+				},
+				{
+					engine: defaults?.engine,
+					dependsOn,
+				},
+			);
+			added.push(task);
+		}
+
+		return added;
+	}
+
+	// ─── Call Claude CLI ─────────────────────────────────────
+
+	private callClaude(prompt: string): Promise<string> {
+		// Resolve claude CLI path (same logic as runner.ts)
+		let claudeCmd: string;
+		let baseArgs: string[];
+		const claudeCliJs = path.join(
+			process.env.APPDATA || "",
+			"npm", "node_modules", "@anthropic-ai", "claude-code", "cli.js",
+		);
+
+		if (process.platform === "win32" && fs.existsSync(claudeCliJs)) {
+			claudeCmd = process.execPath;
+			baseArgs = [claudeCliJs];
+		} else {
+			claudeCmd = "claude";
+			baseArgs = [];
+		}
+
+		const args = [...baseArgs, "-p", "--output-format", "text"];
+
+		return new Promise<string>((resolve, reject) => {
+			const cleanEnv = { ...process.env };
+			delete cleanEnv.CLAUDECODE;
+
+			const child = spawn(claudeCmd, args, {
+				cwd: this.cwd,
+				env: cleanEnv,
+				stdio: ["pipe", "pipe", "pipe"],
+			});
+
+			let stdout = "";
+			let stderr = "";
+			child.stdout.on("data", (d: Buffer) => { stdout += d.toString(); });
+			child.stderr.on("data", (d: Buffer) => { stderr += d.toString(); });
+
+			child.stdin.write(prompt);
+			child.stdin.end();
+
+			child.on("close", (code) => {
+				if (code === 0 && stdout.trim()) {
+					resolve(stdout.trim());
+				} else {
+					reject(new Error(`claude -p exited with code ${code}: ${stderr.slice(0, 500)}`));
+				}
+			});
+			child.on("error", (err) => reject(err));
+		});
 	}
 
 	// ─── Private persistence ─────────────────────────────────

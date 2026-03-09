@@ -241,12 +241,39 @@ awsl queue add "构建用户认证模块" --engine claude-code
 awsl queue add "添加支付集成" --depends-on q_1
 awsl queue add "写端到端测试" --depends-on all  # 等待所有前置任务完成
 
+# 或者：用自然语言一句话描述，自动拆分为多个任务并推断依赖
+awsl queue plan "先构建用户认证，然后加支付模块，最后写集成测试" --engine claude-code
+
 # 查看队列
 awsl queue list
 
 # 开始执行（前台守护进程）
 awsl queue start
 ```
+
+### 自然语言队列规划
+
+一句话描述多个任务 — AWSL 使用 Claude 自动解析为结构化队列任务，并推断依赖关系。
+
+```bash
+awsl queue plan "先构建用户认证，然后加支付模块，最后写集成测试" --engine claude-code
+```
+
+输出：
+```
+Planned 3 task(s):
+
+  ID       Deps       Goal
+  ------------------------------------------------------------
+  q_1      (none)     构建用户认证模块
+  q_2      q_1        添加支付模块
+  q_3      all        写集成测试
+```
+
+自动检测排序关键词：
+- 顺序执行："先...然后...最后"、"first...then...finally"
+- 依赖关系："在...基础上"、"based on"、"after"
+- 无序任务：没有排序词的任务默认无依赖，可并行
 
 ### 队列选项
 
@@ -546,6 +573,7 @@ awsl agents                  # 列出所有智能体
 awsl queue add "构建 REST API" --quick        # 添加任务
 awsl queue add "添加认证" --depends-on q_1     # 带依赖的任务
 awsl queue add "写测试" --depends-on all       # 等待所有前置任务
+awsl queue plan "先认证，然后支付，最后测试"    # 自然语言 → 自动拆分
 awsl queue list                                # 查看队列
 awsl queue remove q_1                          # 移除任务
 awsl queue start --engine claude-code          # 开始执行

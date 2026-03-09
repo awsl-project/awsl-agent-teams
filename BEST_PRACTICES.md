@@ -50,6 +50,7 @@ awsl run "goal" --engine claude-code
 执行已有计划             →  awsl run --execute-plan
 检查代码质量             →  awsl review
 排队多任务，通宵执行     →  awsl queue add "goal" + awsl queue start
+一句话排队多任务         →  awsl queue plan "先做A，然后B，最后C"
 查看睡前模式仪表盘        →  awsl dashboard
 ```
 
@@ -742,6 +743,31 @@ awsl queue list
 awsl queue start
 ```
 
+### 自然语言排队（推荐）
+
+不想一条条 `queue add`？一句话搞定：
+
+```bash
+awsl queue plan "先构建用户认证 REST API（Express + JWT），然后在认证基础上加 RBAC 权限，最后写集成测试" --engine claude-code
+```
+
+AWSL 会调用 Claude 自动解析为：
+```
+  q_1  (none)  构建用户认证 REST API（Express + JWT）
+  q_2  q_1     在认证基础上添加 RBAC 权限系统
+  q_3  all     写集成测试
+```
+
+**关键词推断规则：**
+- "先...然后...最后" → 顺序依赖链
+- "在...基础上" → 依赖前一个任务
+- 并列无序的任务 → 无依赖，可以并行
+- "所有完成后" / "最后" → `depends-on all`
+
+**选项继承：** `--engine`、`--quick`、`--concurrency` 会应用到所有解析出的任务。
+
+**提示：** 解析后先 `awsl queue list` 确认，不满意可以 `awsl queue clear` 重来。
+
 ### 依赖管理
 
 ```bash
@@ -803,7 +829,12 @@ awsl queue add "goal" \
 ### 典型睡前工作流
 
 ```bash
-# 1. 排好队列
+# 1. 排好队列（二选一）
+
+# 方式 A：一句话自然语言
+awsl queue plan "先用 Express+TS 构建电商 API（商品、购物车、订单、支付），然后加用户系统（注册登录个人中心），再加后台管理，最后全面集成测试" --engine claude-code
+
+# 方式 B：逐条添加（精确控制依赖）
 awsl queue add "用 Express+TS 构建电商 API：商品、购物车、订单、支付" --engine claude-code
 awsl queue add "添加用户系统：注册、登录、个人中心、地址管理" --depends-on q_1
 awsl queue add "添加后台管理：商品管理、订单管理、数据看板" --depends-on q_1,q_2

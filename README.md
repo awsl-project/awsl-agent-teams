@@ -241,12 +241,39 @@ awsl queue add "Build user auth module" --engine claude-code
 awsl queue add "Add payment integration" --depends-on q_1
 awsl queue add "Write E2E tests" --depends-on all  # waits for ALL prior tasks
 
+# Or: describe everything in natural language — auto-split into tasks with dependencies
+awsl queue plan "First build user auth with JWT, then add payment with Stripe, finally write E2E tests" --engine claude-code
+
 # Review the queue
 awsl queue list
 
 # Start execution (foreground daemon)
 awsl queue start
 ```
+
+### Natural Language Queue Planning
+
+Describe multiple tasks in one sentence — AWSL uses Claude to parse them into structured queue tasks with inferred dependencies.
+
+```bash
+awsl queue plan "先构建用户认证，然后加支付模块，最后写集成测试" --engine claude-code
+```
+
+Output:
+```
+Planned 3 task(s):
+
+  ID       Deps       Goal
+  ------------------------------------------------------------
+  q_1      (none)     构建用户认证模块
+  q_2      q_1        添加支付模块
+  q_3      all        写集成测试
+```
+
+Ordering keywords are automatically detected:
+- Sequential: "先/first ... 然后/then ... 最后/finally"
+- Dependent: "在...基础上/based on", "after"
+- Independent: tasks without ordering words get no dependencies
 
 ### Queue Options
 
@@ -546,6 +573,7 @@ awsl agents                  # List all agents
 awsl queue add "Build REST API" --quick      # Add task to queue
 awsl queue add "Add auth" --depends-on q_1   # Add with dependency
 awsl queue add "Write tests" --depends-on all # Wait for all prior tasks
+awsl queue plan "First auth, then payments, finally tests"  # Natural language → auto-split
 awsl queue list                               # Show queue status
 awsl queue remove q_1                         # Remove a task
 awsl queue start --engine claude-code         # Start queue execution
