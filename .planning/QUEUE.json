@@ -38,10 +38,15 @@
       "options": {
         "quick": false
       },
-      "status": "running",
+      "status": "done",
       "scheduledAt": "2026-03-09T14:05:57.809Z",
       "runAt": "2026-03-09T17:45:00.000Z",
-      "startedAt": "2026-03-09T17:45:00.000Z"
+      "startedAt": "2026-03-09T17:45:00.000Z",
+      "completedAt": "2026-03-09T18:01:43.329Z",
+      "result": {
+        "success": true,
+        "summary": "All 6 tasks completed.\n- task_1: Compiles cleanly with no errors.\n- task_2: Everything checks out.\n- task_3: `execSync` was already unused before my changes — not something introduced by this task, so I'll leave it as-is.\n- task_4: All three docs now mention `RunContext`/`context.ts`:\n- task_5: All checks pass.\n- task_6: All files read, build passes, signal handler and lock management analyzed. Here's my review:"
+      }
     },
     {
       "id": "q_5",
@@ -69,11 +74,12 @@
       "options": {
         "quick": false
       },
-      "status": "pending",
+      "status": "running",
       "scheduledAt": "2026-03-09T14:07:55.170Z",
-      "runAt": "2026-03-09T19:13:00.000Z"
+      "runAt": "2026-03-09T19:13:00.000Z",
+      "startedAt": "2026-03-09T19:13:00.013Z"
     }
   ],
   "createdAt": "2026-03-09T10:11:39.245Z",
-  "updatedAt": "2026-03-09T17:45:00.000Z"
+  "updatedAt": "2026-03-09T19:13:00.013Z"
 }

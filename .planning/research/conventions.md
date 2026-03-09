@@ -1,20 +1,22 @@
-The conventions file already exists and is well-documented. The exploration confirmed it's accurate. Here's the summary:
+The conventions file already exists and is well-documented. It's comprehensive and up-to-date with the codebase analysis.
 
 ## AWSL_RESULT
 
-### Coding Conventions — Confirmed & Current
+Conventions file already exists at `memory/conventions.md` — verified against full codebase scan. No updates needed.
 
-The existing `memory/conventions.md` is accurate and comprehensive. Key conventions:
+**Key conventions summary:**
 
-| Category | Pattern |
+| Aspect | Convention |
 |---|---|
-| **Naming** | camelCase functions, PascalCase types/classes, UPPER_SNAKE constants, no enums (string unions) |
-| **Style** | ES modules + `.js` extensions, `node:` prefix for builtins, tabs, no semicolons, double quotes |
-| **Error handling** | Fail-soft (return defaults, don't throw), bare `catch {}` when unused, `catch (e: any)` when needed |
-| **Async** | `async/await` only, sync fs ops, `Promise.all`/`allSettled` for parallelism, `spawn` for streaming |
-| **Logging** | `log.info/warn/debug(source, msg)` — never `console.log`, stderr only, ANSI colors by role |
-| **State** | File-as-state in `.planning/`, JSON for data, Markdown for plans, `SharedMemory` for in-session KV |
-| **Testing** | No test framework — command-based verification (`tsc`, `npm test`, `eslint`), provider pattern with cache |
-| **Architecture** | Conductor/Guardian split, dual engine, topo-sort waves, factory functions, typed events |
-
-**Files produced**: None (existing `memory/conventions.md` already up-to-date)
+| Variables/Functions | camelCase (`runAgent`, `agentDef`) |
+| Constants | UPPER_SNAKE (`RATE_LIMIT_PATTERNS`, `CACHE_TTL`) |
+| Classes/Interfaces | PascalCase (`SharedMemory`, `RunResult`) |
+| Files | lowercase.ts (`runner.ts`, `memory.ts`) |
+| Imports | ES modules with `.js` ext, `node:` prefix for builtins |
+| Enums | String literal unions, no `enum` keyword |
+| Error handling | Fail-soft (return defaults), bare `catch {}`, `wx` flag for atomic writes |
+| Async | async/await only, sync fs ops, `spawn` for streaming |
+| Logging | `log.info(source, msg)` to stderr, ANSI colors by role |
+| State | File-as-state in `.planning/`, JSON for data, MD for plans |
+| Testing | No test framework — command-based verification (`tsc`, `eslint`) |
+| Patterns | Factory functions, typed event hooks, topo-sort waves, provider pattern |

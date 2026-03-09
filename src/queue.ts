@@ -15,6 +15,7 @@ import { loadAgents } from "./agents.js";
 import { RunContext } from "./context.js";
 import { log } from "./log.js";
 import { appendHistory } from "./history.js";
+import { atomicCommit } from "./planning.js";
 
 // ─── Interfaces for queue plan ──────────────────────────────
 
@@ -355,6 +356,13 @@ export class TaskQueue {
 					}
 				}
 
+				// Auto-commit queue state after task completion
+				try {
+					atomicCommit(this.cwd, nextTask.id, `queue: ${nextTask.id} ${teamResult.success ? "done" : "failed"} — ${nextTask.goal}`);
+				} catch (e) {
+					log.warn("queue", `Failed to auto-commit after task: ${e}`);
+				}
+
 				log.info("queue", `${nextTask.id}: ${teamResult.success ? "done" : "failed"} — ${teamResult.summary}`);
 			} catch (err: any) {
 				// Mark as failed on error
@@ -389,6 +397,13 @@ export class TaskQueue {
 					} catch (e) {
 						log.warn("queue", `Failed to record history: ${e}`);
 					}
+				}
+
+				// Auto-commit queue state after task failure
+				try {
+					atomicCommit(this.cwd, nextTask.id, `queue: ${nextTask.id} failed — ${nextTask.goal}`);
+				} catch (e) {
+					log.warn("queue", `Failed to auto-commit after task: ${e}`);
 				}
 
 				log.warn("queue", `${nextTask.id} error: ${err.message ?? String(err)}`);

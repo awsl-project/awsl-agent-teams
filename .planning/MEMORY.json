@@ -1,35 +1,60 @@
 {
   "design": {
-    "title": "RunContext — Lifecycle-Aware Lock Management",
-    "summary": "Extract lock management into a RunContext class that owns cwd + lock state + signal handler cleanup. Eliminates process.cwd() usage in signal handlers (bug) and scattered lock acquire/release code (20+ sites).",
-    "new_file": "src/context.ts",
-    "modify_files": ["src/cli.ts", "src/queue.ts", "src/index.ts", "README.md", "README.zh-CN.md", "BEST_PRACTICES.md"],
-    "keep_files": ["src/lock.ts", "src/orchestrator.ts", "src/planning.ts", "src/verify.ts"],
-    "class_design": {
-      "RunContext": {
-        "static_methods": ["acquire(cwd, options) → RunContext", "create(cwd) → RunContext"],
-        "instance_methods": ["release()", "run<T>(fn) → Promise<T>"],
-        "properties": ["readonly cwd: string", "get locked(): boolean"],
-        "private": ["_locked: boolean", "_signalHandlers: Map", "_acquire()", "_registerSignalHandlers()", "_unregisterSignalHandlers()"]
-      },
-      "LockConflictError": {
-        "extends": "Error",
-        "properties": ["readonly lockInfo: LockInfo"]
-      }
+    "title": "Queue Post-Task Auto-Commit",
+    "summary": "Add atomicCommit call in queue.ts after each queue task completes (both success and failure paths), so that QUEUE.json and HISTORY.json state changes are committed to git after every queue task execution.",
+    "modify_files": ["src/queue.ts", "README.md", "README.zh-CN.md", "BEST_PRACTICES.md"],
+    "approach": "Option A — Add atomicCommit in queue.ts (minimal, targeted change)",
+    "alternatives_rejected": [
+      "Option B: commit in executeTeam finalization — would duplicate per-wave commits, mixes concerns",
+      "Option C: post-task hook mechanism — over-engineered for a 10-line change"
+    ],
+    "implementation": {
+      "file": "src/queue.ts",
+      "change_points": [
+        {
+          "location": "After success path (after appendHistory, ~line 356)",
+          "action": "Add atomicCommit(this.cwd, nextTask.id, `Queue task ${freshTask.status}`) if autoCommit is enabled",
+          "rationale": "Commits QUEUE.json (updated status=done) and HISTORY.json (new entry)"
+        },
+        {
+          "location": "After failure/catch path (after appendHistory, ~line 394)",
+          "action": "Add atomicCommit(this.cwd, nextTask.id, `Queue task failed`) if autoCommit is enabled",
+          "rationale": "Commits QUEUE.json (updated status=failed, error) and HISTORY.json (failure entry)"
+        }
+      ],
+      "commit_message_format": "{taskId}: Queue task {status}",
+      "examples": ["q_1: Queue task done", "q_2: Queue task failed"],
+      "autoCommit_respect": "Read from execOptions.autoCommit (already computed at line 298). Need to hoist or re-check the option before the commit call.",
+      "import_needed": "atomicCommit is already imported in queue.ts (from ./planning.js)"
     },
     "key_decisions": [
-      "Static factory (not constructor) — lock acquisition can fail",
-      "Per-context signal handlers (not global) — correct cwd in closure",
-      "ctx.run(fn) for guaranteed cleanup — replaces try/finally",
-      "Idempotent release — safe to call multiple times",
-      "Lock-free create() variant — for commands that don't need locks",
-      "LockConflictError typed error — replaces console.error + process.exit"
+      {
+        "decision": "Commit in queue.ts, not orchestrator.ts",
+        "rationale": "Queue state (QUEUE.json, HISTORY.json) is updated by queue.ts after executeTeam returns. This is a queue-specific concern."
+      },
+      {
+        "decision": "Commit on both success and failure paths",
+        "rationale": "Failed task status is valuable state — it records what failed and why, enabling queue resume."
+      },
+      {
+        "decision": "Respect autoCommit option",
+        "rationale": "Consistency with existing --no-commit CLI flag. Users who disable commits should not get queue commits either."
+      },
+      {
+        "decision": "Use atomicCommit without taskFiles parameter",
+        "rationale": "Without taskFiles, atomicCommit stages all dirty files. Since we're post-executeTeam, the only remaining dirty files are .planning/ state files (QUEUE.json, HISTORY.json). This is exactly what we want."
+      },
+      {
+        "decision": "Commit message format: '{taskId}: Queue task {status}'",
+        "rationale": "Consistent with existing format '{taskId}: {message}'. Makes queue commits easily identifiable in git log."
+      }
     ],
-    "bug_fixes": [
-      "cli.ts:773 — main().catch() used process.cwd() instead of --cwd value",
-      "cli.ts:779 — SIGINT handler used process.cwd() instead of --cwd value",
-      "cli.ts:784 — SIGTERM handler used process.cwd() instead of --cwd value"
+    "edge_cases": [
+      "executeTeam already committed everything → atomicCommit returns false (no-op), safe",
+      "No dirty files at all → atomicCommit returns false, safe",
+      "--no-commit flag → autoCommit=false, skip the commit",
+      "atomicCommit throws → wrapped in try/catch, log warning, don't break queue loop"
     ],
-    "scope_boundary": "orchestrator.ts and downstream modules keep cwd:string params. RunContext wraps lock.ts, does not replace it."
+    "scope": "~10 lines of code change in queue.ts + documentation updates"
   }
 }

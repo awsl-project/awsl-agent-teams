@@ -7,6 +7,6 @@
 (none)
 
 ## Position
-- Goal: 先把验证链路拆清楚：REVIEW.md 只给 reviewer，VERIFICATION.md 只给 deterministic providers，auto-fix 同时读两者，避免状态覆盖
-- Tasks: 4/4 completed
+- Goal: 把锁管理抽成一个带生命周期的运行上下文对象，统一持有实际 cwd，不要在进程级 handler 里重新用 process.cwd() 推断
+- Tasks: 6/6 completed
 - Status: SUCCESS

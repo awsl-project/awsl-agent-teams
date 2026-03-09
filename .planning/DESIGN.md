@@ -1,26 +1,30 @@
+`atomicCommit` is **not** imported yet. It needs to be added from `./planning.js`. Design is complete — let me write the final report.
+
 ## AWSL_RESULT
 
-### Design: RunContext — Lifecycle-Aware Lock Management
+### Design: 队列任务后自动 Commit
 
-**Problem**: Lock management is scattered across 20+ call sites in `cli.ts`/`queue.ts`. Process-level signal handlers at `cli.ts:773,779,784` use `process.cwd()` to release locks — **wrong** when `--cwd /other/path` was passed. The lock leaks on crash/signal.
+**目标**：每次队列任务（`executeTeam`）执行完毕后，自动 commit QUEUE.json 和 HISTORY.json 的状态变更。
 
-**Solution**: New `RunContext` class in `src/context.ts`:
+**方案**：在 `src/queue.ts` 的任务完成路径（成功 + 失败）添加 `atomicCommit` 调用。
 
-| API | Purpose |
-|-----|---------|
-| `RunContext.acquire(cwd, {description, force})` | Create context + acquire lock + register signal handlers |
-| `RunContext.create(cwd)` | Lock-free context for commands that don't need locks |
-| `ctx.run(fn)` | Execute with guaranteed cleanup (replaces try/finally) |
-| `ctx.release()` | Idempotent lock release + unregister signal handlers |
-| `LockConflictError` | Typed error with lock info (replaces console.error + exit) |
+**修改文件**：
+| 文件 | 变更 |
+|---|---|
+| `src/queue.ts` | 添加 `atomicCommit` import + 两处调用（成功路径 ~line 356、失败路径 ~line 394） |
+| `README.md` | 文档更新 |
+| `README.zh-CN.md` | 文档更新 |
+| `BEST_PRACTICES.md` | 文档更新 |
 
-**Key decisions**:
-1. Static factory (not constructor) — lock acquisition can fail
-2. Per-context signal handlers — correct `cwd` captured in `this`, not `process.cwd()`
-3. `ctx.run(fn)` for guaranteed cleanup — replaces 20+ scattered try/finally blocks
-4. Scope boundary: orchestrator keeps `cwd: string` params, receives `ctx.cwd`
-5. `lock.ts` unchanged — RunContext wraps it
+**关键设计决策**：
 
-**Files**: CREATE `src/context.ts` | MODIFY `cli.ts`, `queue.ts`, `index.ts`, docs | KEEP `lock.ts`, `orchestrator.ts`
+1. **Commit 在 queue.ts 而非 orchestrator.ts** — 队列状态是 queue.ts 的职责，executeTeam 内部已有自己的 commit
+2. **成功和失败都 commit** — 失败状态同样有价值（记录原因，支持 resume）
+3. **尊重 autoCommit 选项** — 与 `--no-commit` CLI flag 保持一致
+4. **不传 taskFiles 参数** — 此时脏文件仅剩 `.planning/` 状态文件，正是我们要 commit 的
+5. **Commit 消息格式**: `{taskId}: Queue task {status}`（如 `q_1: Queue task done`）
+6. **用 try/catch 包裹** — commit 失败不应中断队列循环
 
-**Design stored in**: `.planning/DESIGN.md` + `.planning/MEMORY.json` (key: "design")
+**实现量**：~10 行代码 + 文档更新
+
+**设计文件**：`.planning/MEMORY.json` (key: `design`)
