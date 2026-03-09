@@ -9,7 +9,7 @@ import * as http from "node:http";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadHistory, getHistoryStats } from "./history.js";
+import { loadHistory, getHistoryStats, clearHistory } from "./history.js";
 import { getLogStream, type LogLine } from "./logstream.js";
 import { TaskQueue } from "./queue.js";
 import { log } from "./log.js";
@@ -91,6 +91,12 @@ export function startDashboard(cwd: string, port: number = 3120): http.Server {
 		}
 
 		// ── JSON APIs: read-only ──────────────────────────
+		if (url.pathname === "/api/info") {
+			res.writeHead(200, { "Content-Type": "application/json" });
+			res.end(JSON.stringify({ cwd, project: path.basename(cwd) }));
+			return;
+		}
+
 		if (url.pathname === "/api/history") {
 			const data = loadHistory(cwd);
 			res.writeHead(200, { "Content-Type": "application/json" });
@@ -165,6 +171,13 @@ export function startDashboard(cwd: string, port: number = 3120): http.Server {
 			return;
 		}
 
+		if (req.method === "POST" && url.pathname === "/api/history/clear") {
+			clearHistory(cwd);
+			res.writeHead(200, { "Content-Type": "application/json" });
+			res.end(JSON.stringify({ cleared: true }));
+			return;
+		}
+
 		// ── 404 ───────────────────────────────────────────
 		res.writeHead(404, { "Content-Type": "application/json" });
 		res.end(JSON.stringify({ error: "Not found" }));
@@ -172,7 +185,7 @@ export function startDashboard(cwd: string, port: number = 3120): http.Server {
 
 	server.listen(port, () => {
 		log.info("dashboard", `Dashboard running at http://localhost:${port}`);
-		log.info("dashboard", `API: /api/history, /api/stats, /api/queue, /api/logs (SSE), /api/queue/add|remove|clear`);
+		log.info("dashboard", `API: /api/history, /api/stats, /api/queue, /api/logs (SSE), /api/queue/add|remove|clear, /api/history/clear`);
 	});
 
 	return server;
