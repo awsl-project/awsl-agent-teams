@@ -335,6 +335,13 @@ frontmatter 现在会做 TypeBox schema 校验。无效配置会输出友好错�
 
 AWSL 使用文件锁（`.planning/.lock`）防止同一项目同时运行多个 AWSL 会话导致冲突。
 
+**RunContext（推荐）：**
+锁管理现在通过 `RunContext` 统一处理：
+- `RunContext.acquire(cwd, opts)` — 需要独占访问的命令使用，失败时抛出异常
+- `RunContext.tryAcquire(cwd, opts)` — 队列等场景使用，失败返回 `null` 而非抛出
+- RunContext 自动注册 SIGINT/SIGTERM 处理器，使用正确的 `cwd`（修复了旧版 `process.cwd()` bug）
+- 务必使用 `try/finally` + `ctx.release()` 或 `ctx.run(fn)` 确保清理
+
 **自动行为：**
 - `validate` 获取锁 → 成功后保持锁（CC 接着执行）
 - `verify` 结束后自动释放锁

@@ -437,6 +437,8 @@ awsl run "Build a REST API"
 Output: .planning/ artifacts + code + per-task git commits
 ```
 
+**Key module:** `context.ts` — `RunContext` provides lifecycle-aware lock management. It replaces scattered manual `acquireLock`/`releaseLock` calls with a single object that auto-registers signal handlers using the correct `cwd` and guarantees cleanup on exit.
+
 ## Conductor
 
 Conductor is the orchestration engine. It handles **what** to do and **when**.

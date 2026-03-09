@@ -437,6 +437,8 @@ awsl run "构建一个 REST API"
 输出: .planning/ 产物 + 代码 + 每任务 git 提交
 ```
 
+**核心模块：** `context.ts` — `RunContext` 提供带生命周期的运行上下文，统一管理锁。它替代了分散的手动 `acquireLock`/`releaseLock` 调用，自动注册信号处理器并使用正确的 `cwd`，保证退出时清理。
+
 ## Conductor
 
 Conductor 是编排引擎，负责 **做什么** 以及 **何时做**。
