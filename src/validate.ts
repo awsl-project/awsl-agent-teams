@@ -149,77 +149,44 @@ function computeWaves(tasks: ValidatedTask[]): { waves: string[][]; errors: stri
 // ── File Conflict Resolution ───────────────────────────────────
 
 function resolveFileConflicts(
-	waves: string[][],
+	_waves: string[][],
 	tasks: ValidatedTask[],
 ): { waves: string[][]; conflicts: FileConflict[] } {
 	const taskMap = new Map(tasks.map(t => [t.id, t]));
 	const conflicts: FileConflict[] = [];
-	const result: string[][] = [];
 
-	for (const wave of waves) {
-		const currentWave: string[] = [];
-		const claimedFiles = new Map<string, string>(); // file -> taskId that claimed it
-
-		for (const taskId of wave) {
-			const task = taskMap.get(taskId)!;
-			const overlapping: string[] = [];
-
-			for (const file of task.files) {
-				const owner = claimedFiles.get(file);
-				if (owner) {
-					overlapping.push(file);
-				}
-			}
-
-			if (overlapping.length > 0) {
-				// Find who owns the conflicting files (pick first owner)
-				const ownerSet = new Set(overlapping.map(f => claimedFiles.get(f)!));
-				for (const ownerId of ownerSet) {
-					const sharedFiles = overlapping.filter(f => claimedFiles.get(f) === ownerId);
-					conflicts.push({ taskA: ownerId, taskB: taskId, files: sharedFiles });
-					log.warn("validate", `File conflict: ${ownerId} and ${taskId} both touch ${sharedFiles.join(", ")} — serializing`);
-				}
-
-				// Add dependency on conflicting tasks and push to next wave
-				for (const ownerId of ownerSet) {
-					if (!task.dependencies.includes(ownerId)) {
-						task.dependencies.push(ownerId);
-					}
-				}
-
-				// Ensure there's a next wave slot
-				const nextIdx = result.length + 1;
-				while (waves.length <= nextIdx && result.length + 1 > waves.length) {
-					// Will be handled by appending below
-					break;
-				}
-
-				// Defer this task — it will be placed after the current wave
-				// We collect deferred tasks and append them
-				let placed = false;
-				for (let i = result.length + 1; i < waves.length; i++) {
-					if (!waves[i].includes(taskId)) {
-						waves[i].push(taskId);
-						placed = true;
-						break;
-					}
-				}
-				if (!placed) {
-					waves.push([taskId]);
-				}
-			} else {
-				// No conflict, add to current wave and claim files
-				currentWave.push(taskId);
-				for (const file of task.files) {
-					claimedFiles.set(file, taskId);
-				}
-			}
+	// Stage 1: detect file conflicts and add dependency edges
+	const fileOwners = new Map<string, string[]>(); // file -> taskIds that touch it
+	for (const task of tasks) {
+		for (const file of task.files) {
+			const owners = fileOwners.get(file) ?? [];
+			owners.push(task.id);
+			fileOwners.set(file, owners);
 		}
-
-		result.push(currentWave);
 	}
 
-	return { waves: result, conflicts };
+	for (const [file, owners] of fileOwners) {
+		if (owners.length < 2) continue;
+		// Chain: each later task depends on the one before it
+		for (let i = 1; i < owners.length; i++) {
+			const prev = owners[i - 1];
+			const curr = owners[i];
+			const task = taskMap.get(curr)!;
+			if (!task.dependencies.includes(prev)) {
+				task.dependencies.push(prev);
+				// Find all shared files between this pair for reporting
+				const prevTask = taskMap.get(prev)!;
+				const sharedFiles = task.files.filter(f => prevTask.files.includes(f));
+				conflicts.push({ taskA: prev, taskB: curr, files: sharedFiles });
+				log.warn("validate", `File conflict: ${prev} and ${curr} both touch ${sharedFiles.join(", ")} — serializing`);
+			}
+		}
+	}
+
+	// Stage 2: re-run topo-sort with the new edges
+	const { waves } = computeWaves(tasks);
+
+	return { waves, conflicts };
 }
 
 // ── Validation Logic ───────────────────────────────────────────
