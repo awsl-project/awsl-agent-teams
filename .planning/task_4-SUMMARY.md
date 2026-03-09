@@ -1,21 +1,16 @@
-# task_4: Run full build and type-check to verify the changes compile 
+# task_4: 1. In src/index.ts: add export line: `export { type SandboxP
 
-Assignee: tester
+Assignee: coder
 Status: done
 
 ## Result
-All three `atomicCommit` references are in place — import (line 18), success/failure path (line 361), and catch/error path (line 404). All wrapped in `try/catch` with `log.warn` fallback.
+Type-check passes clean.
 
 ## AWSL_RESULT
 
-### Task Complete: Build & Type-Check Verification
+**Modified files:**
 
-| Check | Result |
-|---|---|
-| `npx tsc --noEmit` | Passed — zero errors |
-| `npm run build` | Passed — zero errors |
-| `atomicCommit` import | Verified at line 18 |
-| Success/failure commit | Verified at line 361 |
-| Error path commit | Verified at line 404 |
+1. **`src/index.ts`** — Added export line for `SandboxPolicy`, `BashPolicy`, `defaultPolicy`, `checkWritePath`, `checkBashCommand` from `./sandbox.js`
+2. **`src/agents.ts`** — Added `import type { SandboxPolicy }` and optional `sandbox?: SandboxPolicy` field to `TeamAgentDef` interface
 
-**Verdict:** Build succeeds with zero errors. The `atomicCommit` integration compiles correctly and all three call sites are properly placed with error handling.
+**Verification:** `npx tsc --noEmit` — passes with no errors

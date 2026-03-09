@@ -11,6 +11,8 @@ import { execSync } from "node:child_process";
 import { Type } from "@sinclair/typebox";
 import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
 import type { SharedMemory } from "./memory.js";
+import type { SandboxPolicy } from "./sandbox.js";
+import { checkWritePath, checkBashCommand } from "./sandbox.js";
 
 function text(t: string): AgentToolResult<any> {
 	return { content: [{ type: "text", text: t }], details: {} };
@@ -44,7 +46,7 @@ export function createReadTool(cwd: string): AgentTool<any> {
 	};
 }
 
-export function createWriteTool(cwd: string): AgentTool<any> {
+export function createWriteTool(cwd: string, sandbox?: SandboxPolicy): AgentTool<any> {
 	return {
 		name: "write",
 		label: "Write file",
@@ -55,6 +57,10 @@ export function createWriteTool(cwd: string): AgentTool<any> {
 		}),
 		async execute(_id, params) {
 			const filePath = path.resolve(cwd, params.path);
+			if (sandbox) {
+				const blocked = checkWritePath(filePath, sandbox);
+				if (blocked) return text(blocked);
+			}
 			try {
 				fs.mkdirSync(path.dirname(filePath), { recursive: true });
 				fs.writeFileSync(filePath, params.content);
@@ -66,7 +72,7 @@ export function createWriteTool(cwd: string): AgentTool<any> {
 	};
 }
 
-export function createEditTool(cwd: string): AgentTool<any> {
+export function createEditTool(cwd: string, sandbox?: SandboxPolicy): AgentTool<any> {
 	return {
 		name: "edit",
 		label: "Edit file",
@@ -78,6 +84,10 @@ export function createEditTool(cwd: string): AgentTool<any> {
 		}),
 		async execute(_id, params) {
 			const filePath = path.resolve(cwd, params.path);
+			if (sandbox) {
+				const blocked = checkWritePath(filePath, sandbox);
+				if (blocked) return text(blocked);
+			}
 			try {
 				const content = fs.readFileSync(filePath, "utf-8");
 				if (!content.includes(params.old_string)) {
@@ -93,7 +103,7 @@ export function createEditTool(cwd: string): AgentTool<any> {
 	};
 }
 
-export function createBashTool(cwd: string): AgentTool<any> {
+export function createBashTool(cwd: string, sandbox?: SandboxPolicy): AgentTool<any> {
 	return {
 		name: "bash",
 		label: "Run command",
@@ -102,6 +112,10 @@ export function createBashTool(cwd: string): AgentTool<any> {
 			command: Type.String({ description: "Shell command to execute" }),
 		}),
 		async execute(_id, params) {
+			if (sandbox) {
+				const blocked = checkBashCommand(params.command, sandbox);
+				if (blocked) return text(blocked);
+			}
 			try {
 				const output = execSync(params.command, {
 					cwd,
@@ -212,9 +226,9 @@ export function createSendMessageTool(
 /** All tool constructors keyed by name */
 const TOOL_FACTORIES: Record<string, (ctx: ToolContext) => AgentTool<any>> = {
 	read: (ctx) => createReadTool(ctx.cwd),
-	write: (ctx) => createWriteTool(ctx.cwd),
-	edit: (ctx) => createEditTool(ctx.cwd),
-	bash: (ctx) => createBashTool(ctx.cwd),
+	write: (ctx) => createWriteTool(ctx.cwd, ctx.sandbox),
+	edit: (ctx) => createEditTool(ctx.cwd, ctx.sandbox),
+	bash: (ctx) => createBashTool(ctx.cwd, ctx.sandbox),
 	memory_read: (ctx) => createMemoryReadTool(ctx.memory),
 	memory_write: (ctx) => createMemoryWriteTool(ctx.agentName, ctx.memory),
 	memory_list: (ctx) => createMemoryListTool(ctx.memory),
@@ -227,6 +241,7 @@ interface ToolContext {
 	cwd: string;
 	memory: SharedMemory;
 	onReport: (status: string, result: string) => void;
+	sandbox?: SandboxPolicy;
 }
 
 /** Assemble the tool set for an agent, respecting optional tool filter */
@@ -236,8 +251,9 @@ export function createAgentTools(
 	memory: SharedMemory,
 	onReport: (status: string, result: string) => void,
 	allowedTools?: string[],
+	sandbox?: SandboxPolicy,
 ): AgentTool<any>[] {
-	const ctx: ToolContext = { agentName, cwd, memory, onReport };
+	const ctx: ToolContext = { agentName, cwd, memory, onReport, sandbox };
 
 	// Always include memory tools and report
 	const alwaysInclude = new Set(["memory_read", "memory_write", "memory_list", "send_message", "report"]);
