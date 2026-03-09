@@ -1,27 +1,37 @@
-# task_4: Add Clear History feature to documentation:
-1. README.md — I
+# task_4: Run the full build and type-check to verify no regressions:
 
-Assignee: coder
+
+Assignee: tester
 Status: done
 
 ## Result
-All changes verified. The Clear History feature is documented in all three files.
+All checks pass. Here's the verification summary:
 
 ## AWSL_RESULT
 
-### Task 4 Complete — Documentation updated for Clear History feature
+### Build & Type-Check Verification — All Passed
 
-**Files modified:**
+**Build results:**
+- `npx tsc --noEmit` — zero errors
+- `npm run build` — compiled successfully
 
-1. **README.md**
-   - Line 318 — Added "Clear History" to dashboard features list
-   - Line 331 — Added `POST /api/history/clear` to API endpoints list
+**File separation verified:**
 
-2. **README.zh-CN.md**
-   - Line 318 — Added "清除历史" to dashboard features list (Chinese)
-   - Line 331 — Added `POST /api/history/clear` to API endpoints list (Chinese)
+| Check | Result |
+|-------|--------|
+| Phase 3 (LLM reviewer) writes `REVIEW.md` | `orchestrator.ts:677` — `planning.write("REVIEW.md", ...)` |
+| Phase 3b (deterministic) writes `VERIFICATION.md` | `verify.ts:325` — writes to `.planning/VERIFICATION.md` |
+| Auto-fix reads **both** files | `orchestrator.ts:718` — `"Read .planning/VERIFICATION.md and .planning/REVIEW.md. Fix all FAIL and CRITICAL items from both files."` |
+| No cross-contamination | `planning.write("VERIFICATION.md"...)` does NOT appear in orchestrator.ts — only `verify.ts` writes it |
 
-3. **BEST_PRACTICES.md**
-   - Line 939 — Added Clear History button description in the dashboard operations panel section
+**CLI & installer references confirmed:**
+- `cli.ts:50` — documents `VERIFICATION.md` for deterministic checks
+- `cli.ts:51` — documents `REVIEW.md` for static code review
+- `install.ts:169,173` — auto-fix skill reads both files
+- `install.ts:296-297` — status skill lists both files
 
-All changes are minimal — one line each for features/API lists, matching existing style and formatting.
+**Files verified (no modifications needed):**
+- `src/orchestrator.ts`
+- `src/cli.ts`
+- `src/install.ts`
+- `src/verify.ts`
