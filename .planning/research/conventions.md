@@ -1,16 +1,17 @@
 ## AWSL_RESULT
 
-Conventions documented and saved to `memory/conventions.md`. Key highlights:
+Analyzed all source files and documented conventions in `memory/conventions.md`.
 
-- **Naming**: camelCase vars/functions, PascalCase types, UPPERCASE constants, no enums (string unions)
-- **Style**: ES modules with `.js` imports, named exports, 2-space indent, `src/index.ts` re-exports all public API
-- **Error handling**: Return status objects over throwing, nested try-catch for cleanup, multi-strategy graceful degradation
-- **Async**: async/await only, manual concurrency pool (`runParallel`), subprocess via `spawn()` + Promise wrapper
-- **Logging**: Centralized `log` module to stderr, color-coded by role, debug gated by env var
-- **State**: File-as-state in `.planning/`, `SharedMemory` for inter-agent comms, atomic writes + file locks
-- **Testing**: Vitest, `*.test.ts`, integration checks via `execSync`
-- **TypeScript**: Strict mode, ES2022, Node16 modules, discriminated unions, explicit return types
+**Key patterns found:**
 
-### Files produced
-- `memory/conventions.md` — full conventions reference
-- `memory/MEMORY.md` — updated with link to conventions
+| Category | Convention |
+|---|---|
+| **Naming** | PascalCase interfaces, camelCase functions (verb-first), UPPER_SNAKE constants, string literal unions (no enums) |
+| **Style** | ES modules + `.js` extensions, `node:` prefix, tabs, no semicolons, `import type`, section dividers `// ───`, JSDoc file headers |
+| **Error handling** | Fail-soft (return defaults, don't throw), bare `catch {}`, nested try-catch for cleanup, atomic `wx` flag writes, output truncation |
+| **Async** | async/await only, sync fs ops (`readFileSync`), `execSync` for verification, `Promise.all` for parallel agents |
+| **Logging** | `log.info/warn/debug(source, msg)` to stderr, ANSI colors by role, `DEBUG` env gate |
+| **State** | `.planning/` directory as file-as-state, JSON for data, Markdown for plans, `SharedMemory` Map for in-session |
+| **Architecture** | Conductor/Guardian split, dual engine, factory functions, provider pattern, typed events + hooks, topo-sort DAG waves |
+
+**Files produced:** `memory/conventions.md`

@@ -1,5 +1,67 @@
 {
-  "tasks": [],
+  "tasks": [
+    {
+      "id": "q_2",
+      "goal": "先把验证链路拆清楚：REVIEW.md 只给 reviewer，VERIFICATION.md 只给 deterministic providers，auto-fix 同时读两者，避免状态覆盖",
+      "options": {
+        "quick": false
+      },
+      "status": "pending",
+      "scheduledAt": "2026-03-09T14:05:38.122Z",
+      "runAt": "2026-03-09T17:11:00.000Z"
+    },
+    {
+      "id": "q_3",
+      "goal": "把 verify 变成真正的总开关。verify=false 时 reviewer、provider verify、auto-fix 都应一起关闭",
+      "options": {
+        "quick": false
+      },
+      "status": "running",
+      "scheduledAt": "2026-03-09T14:05:47.664Z",
+      "runAt": "2026-03-09T14:10:00.000Z",
+      "startedAt": "2026-03-09T14:40:00.453Z"
+    },
+    {
+      "id": "q_4",
+      "goal": "把锁管理抽成一个带生命周期的运行上下文对象，统一持有实际 cwd，不要在进程级 handler 里重新用 process.cwd() 推断",
+      "options": {
+        "quick": false
+      },
+      "status": "pending",
+      "scheduledAt": "2026-03-09T14:05:57.809Z",
+      "runAt": "2026-03-09T17:45:00.000Z"
+    },
+    {
+      "id": "q_5",
+      "goal": "给 builtin engine 增加最少限度的沙箱：写路径限制在项目目录内，bash 至少按 phase 或 allowlist 控制",
+      "options": {
+        "quick": false
+      },
+      "status": "pending",
+      "scheduledAt": "2026-03-09T14:06:13.849Z",
+      "runAt": "2026-03-09T20:14:00.000Z"
+    },
+    {
+      "id": "q_6",
+      "goal": "检查有没有安全问题 如果有就直接修复",
+      "options": {
+        "quick": false
+      },
+      "status": "pending",
+      "scheduledAt": "2026-03-09T14:06:27.135Z",
+      "runAt": "2026-03-09T20:58:00.000Z"
+    },
+    {
+      "id": "q_7",
+      "goal": "每次队列后 都要commit一次",
+      "options": {
+        "quick": false
+      },
+      "status": "pending",
+      "scheduledAt": "2026-03-09T14:07:55.170Z",
+      "runAt": "2026-03-09T19:13:00.000Z"
+    }
+  ],
   "createdAt": "2026-03-09T10:11:39.245Z",
-  "updatedAt": "2026-03-09T10:11:41.965Z"
+  "updatedAt": "2026-03-09T14:40:00.454Z"
 }

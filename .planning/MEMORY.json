@@ -1,0 +1,23 @@
+{
+  "design": {
+    "title": "Make verify a true master switch",
+    "summary": "When verify=false, Phase 3 (reviewer), Phase 3b (provider verify + auto-fix loop) must all be skipped. Currently only Phase 3 is gated.",
+    "change": {
+      "file": "src/orchestrator.ts",
+      "description": "Wrap the Phase 3b auto-fix loop (lines 699-739) with `if (verifyEnabled) { ... }`. The existing bare block `{ let fixAttempt = 0; ... }` becomes `if (verifyEnabled) { let fixAttempt = 0; ... }`.",
+      "before_pattern": "// ── Phase 3b: Auto-Fix Loop\n\t{\n\t\tlet fixAttempt = 0;",
+      "after_pattern": "// ── Phase 3b: Auto-Fix Loop\n\tif (verifyEnabled) {\n\t\tlet fixAttempt = 0;"
+    },
+    "what_verify_false_disables": [
+      "Phase 3: Reviewer agent verification (already gated at line 654)",
+      "Phase 3b: runFullVerification() provider checks (tsc, npm test, eslint) — NEW",
+      "Phase 3b: Auto-fix coder agent loop — NEW"
+    ],
+    "what_stays_enabled": [
+      "Task auto-retry (independent concern — retries failed tasks regardless of verify)",
+      "awsl verify CLI command (standalone, not part of executeTeam)"
+    ],
+    "rationale": "Single guard on existing verifyEnabled flag. No new options needed. YAGNI — granular sub-options can be added later if needed.",
+    "docs_to_update": ["README.md", "README.zh-CN.md", "BEST_PRACTICES.md"]
+  }
+}

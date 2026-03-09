@@ -697,7 +697,7 @@ Do NOT output any text before or after the JSON. Do NOT use markdown prose forma
 	}
 
 	// ── Phase 3b: Auto-Fix Loop ──────────────────────────────
-	{
+	if (verifyEnabled) {
 		let fixAttempt = 0;
 		let verifyPassed = false;
 		while (fixAttempt < maxFixAttempts && !verifyPassed) {
