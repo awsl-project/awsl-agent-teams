@@ -674,8 +674,8 @@ Do NOT output any text before or after the JSON. Do NOT use markdown prose forma
 			totalCostUsd += verifyResult.costUsd ?? 0;
 
 			if (verifyResult.status === "done" || verifyResult.status === "no_report") {
-				planning.write("VERIFICATION.md", verifyResult.result);
-				memory.set("verification", verifyResult.result, verifier.name);
+				planning.write("REVIEW.md", verifyResult.result);
+				memory.set("review", verifyResult.result, verifier.name);
 
 				// Parse structured findings from the verifier result
 				const findings = parseReviewFindings(verifyResult.result);
@@ -715,7 +715,7 @@ Do NOT output any text before or after the JSON. Do NOT use markdown prose forma
 			const coder = agents.find(a => a.role === "coder") ?? agents.find(a => a.name !== "planner");
 			if (!coder) break;
 
-			const fixPrompt = "Read .planning/VERIFICATION.md. Fix all FAIL items. Then re-run the failing commands to confirm they pass.";
+			const fixPrompt = "Read .planning/VERIFICATION.md and .planning/REVIEW.md. Fix all FAIL and CRITICAL items from both files. Then re-run the failing commands to confirm they pass.";
 			const fixResult = await runAgent(coder, fixPrompt, cwd, memory, roster, defaultModel, 30, skills, engine);
 			totalInputTokens += fixResult.inputTokens ?? 0;
 			totalOutputTokens += fixResult.outputTokens ?? 0;
