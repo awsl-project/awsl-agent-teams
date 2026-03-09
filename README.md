@@ -179,8 +179,8 @@ Phase 0a: Brainstorm    architect agent explores requirements (Socratic method)
 Phase 0b: Research      parallel agents analyze existing codebase
 Phase 1:  Plan          planner agent creates structured task DAG
 Phase 2:  Execute       coder/tester/reviewer agents run in topological waves
-Phase 3:  Verify        code-based verification (tsc, npm test, eslint)  [skipped by --no-verify]
-Phase 3b: Auto-Fix      on verify failure → coder fixes → re-verify (max 3 rounds)  [skipped by --no-verify]
+Phase 3:  Review+Verify LLM reviewer → REVIEW.md; tsc/test/eslint → VERIFICATION.md  [skipped by --no-verify]
+Phase 3b: Auto-Fix      on failure → coder reads both files → fixes → re-verify (max 3 rounds)  [skipped by --no-verify]
 Phase 4:  Re-plan       on task failure → retry 2x → replan with different approach
 ```
 
@@ -188,7 +188,7 @@ Phase 4:  Re-plan       on task failure → retry 2x → replan with different a
 
 | Feature | Description |
 |---------|-------------|
-| **Auto-fix loop** | Verify fails → spawn coder agent → re-verify → up to 3 attempts |
+| **Auto-fix loop** | Review/verify fails → coder reads both REVIEW.md + VERIFICATION.md → fixes → re-verify → up to 3 attempts |
 | **Task auto-retry** | Failed tasks retry 2x with error context before re-planning |
 | **Reviewer hard-block** | Critical severity findings = task failed, must fix |
 | **File conflict detection** | Same-wave tasks sharing files → auto-split to different waves |
@@ -539,8 +539,8 @@ State persists across sessions:
 ├── DESIGN.md             # Brainstorm output
 ├── PLAN.md               # Structured task breakdown
 ├── WAVES.md              # Computed wave schedule
-├── VERIFICATION.md       # Test/lint/typecheck results
-├── REVIEW.md             # Static code review results
+├── VERIFICATION.md       # Deterministic check results (tsc, eslint, tests)
+├── REVIEW.md             # LLM reviewer findings (spec compliance + code quality)
 ├── CHECKPOINT.json       # Rate-limit recovery checkpoint (auto-managed)
 ├── QUEUE.json            # Task queue for sleep mode (auto-managed)
 ├── HISTORY.json          # Sleep mode execution history (auto-managed)

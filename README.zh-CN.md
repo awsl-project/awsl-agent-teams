@@ -179,8 +179,8 @@ awsl run "目标" --engine claude-code [选项]
 阶段 0b: 调研        并行智能体分析现有代码库
 阶段 1:  规划        规划师智能体创建结构化任务 DAG
 阶段 2:  执行        编码/测试/审查智能体按拓扑序波次运行
-阶段 3:  验证        基于代码的验证（tsc, npm test, eslint）  [--no-verify 时跳过]
-阶段 3b: 自动修复    验证失败 → 编码修复 → 重新验证（最多 3 轮）  [--no-verify 时跳过]
+阶段 3:  审查+验证   LLM 审查者 → REVIEW.md；tsc/test/eslint → VERIFICATION.md  [--no-verify 时跳过]
+阶段 3b: 自动修复    失败 → 编码者读取两个文件 → 修复 → 重新验证（最多 3 轮）  [--no-verify 时跳过]
 阶段 4:  重规划      任务失败 → 重试 2 次 → 换方案重新规划
 ```
 
@@ -188,7 +188,7 @@ awsl run "目标" --engine claude-code [选项]
 
 | 特性 | 说明 |
 |---------|-------------|
-| **自动修复循环** | 验证失败 → 启动编码智能体 → 重新验证 → 最多 3 次 |
+| **自动修复循环** | 审查/验证失败 → 编码者读取 REVIEW.md + VERIFICATION.md → 修复 → 重新验证 → 最多 3 次 |
 | **任务自动重试** | 失败任务携带错误上下文重试 2 次，然后再重规划 |
 | **审查硬阻塞** | 严重级别的发现 = 任务失败，必须修复 |
 | **文件冲突检测** | 同波次任务共享文件 → 自动分配到不同波次 |
@@ -539,8 +539,8 @@ skills:
 ├── DESIGN.md             # 头脑风暴输出
 ├── PLAN.md               # 结构化任务分解
 ├── WAVES.md              # 计算出的波次调度
-├── VERIFICATION.md       # 测试/lint/类型检查结果
-├── REVIEW.md             # 静态代码审查结果
+├── VERIFICATION.md       # 确定性检查结果（tsc、eslint、测试）
+├── REVIEW.md             # LLM 审查者发现（规格合规 + 代码质量）
 ├── research/
 │   ├── architecture.md   # 代码库分析
 │   └── conventions.md    # 代码风格分析

@@ -21,8 +21,9 @@ awsl run "goal" --engine claude-code
   → architect research ×2       (claude -p ×2 并行: 分析代码库)
   → planner plan                (claude -p: 生成结构化任务 DAG)
   → coder/tester/reviewer ×N    (claude -p ×N: 按 wave 并行执行)
-  → verify                      (代码：tsc + npm test + eslint)
-  → auto-fix (最多3轮)          (claude -p: 修复 → 重新验证)
+  → LLM review → REVIEW.md      (claude -p: 审查者检查规格合规+代码质量)
+  → verify → VERIFICATION.md   (代码：tsc + npm test + eslint)
+  → auto-fix (最多3轮)          (claude -p: 读取两份报告 → 修复 → 重新验证)
   → git checkpoint per wave     (代码：原子提交)
 ```
 
@@ -223,7 +224,19 @@ Wave 2: task-2          ← 依赖 task-1，等 Wave 1 完成
 `verify` 命令（纯代码逻辑，不调 LLM）：
 - 提取 PLAN.md 中每个 task 的 verify 命令并执行
 - 自动检测并运行：`tsc --noEmit`、`npm test`、`eslint`
-- 输出 `.planning/VERIFICATION.md`
+- 输出 `.planning/VERIFICATION.md`（确定性检查结果）
+
+**REVIEW.md vs VERIFICATION.md 分离：**
+
+| 文件 | 写入者 | 内容 |
+|------|--------|------|
+| `REVIEW.md` | Phase 3 LLM 审查者 | `[CRITICAL]`/`[PASS]`/`[WARN]` 级别的发现（规格合规 + 代码质量） |
+| `VERIFICATION.md` | Phase 3b 确定性检查 | tsc、eslint、npm test 的通过/失败结果 |
+
+**为什么分离？** 之前两者都写入 `VERIFICATION.md`，确定性检查会覆盖 LLM 审查者的发现。分离后：
+- LLM 审查者的代码质量发现不会丢失
+- Auto-fix 读取 **两个** 文件，同时修复代码质量问题和测试/类型错误
+- 两种报告独立演进，互不干扰
 
 **验证器超时和缓存：**
 - TypeScript 类型检查：120 秒超时
@@ -299,7 +312,8 @@ frontmatter 现在会做 TypeBox schema 校验。无效配置会输出友好错�
 - `.planning/PLAN.md` — 任务计划
 - `.planning/WAVES.md` — 执行波次
 - `.planning/STATE.md` — 进度和决策
-- `.planning/VERIFICATION.md` — 测试结果
+- `.planning/REVIEW.md` — LLM 审查者发现（规格合规 + 代码质量）
+- `.planning/VERIFICATION.md` — 确定性检查结果（tsc、eslint、测试）
 
 **第二天：**
 ```
@@ -448,9 +462,9 @@ verify 字段决定了 `awsl verify` 能否自动跑测试。**必须是可执�
 - Markdown 格式要求：`## task-1: 名称` 标题 + `- **Role:** coder` 等字段
 - 排查：查看 `.planning/` 目录下是否有 PLAN.md，手动确认格式是否正确
 
-**verify 失败（测试/lint/类型检查不过）：**
-- **终端模式：** 代码自动启动修复 agent → 重新 verify → 最多 3 轮，全自动
-- **CC 模式：** CC 读取 VERIFICATION.md → Agent 修复 → 重新 verify
+**verify 失败（测试/lint/类型检查不过）或 review 发现 critical 问题：**
+- **终端模式：** 代码自动启动修复 agent（读取 REVIEW.md + VERIFICATION.md）→ 重新 verify → 最多 3 轮，全自动
+- **CC 模式：** CC 读取 REVIEW.md + VERIFICATION.md → Agent 修复 → 重新 verify
 
 **单个 task Agent 失败：**
 - **终端模式：** 自动重试 2 次，用不同 prompt（包含上次错误信息）→ 再失败才 replan
@@ -522,8 +536,8 @@ Phase 0a Brainstorm:   ~2.5 min (1 architect agent)
 Phase 0  Research:     ~2.3 min (2 architect agents 并行)
 Phase 1  Planning:     ~2.3 min (1 planner agent)
 Phase 2  Execution:    ~8 min   (7 waves, 10 tasks, 并行度 2)
-Phase 3  Verify:       ~1.5 min (reviewer + tsc + npm test)
-Phase 3b Auto-Fix:     ~6 min   (3 rounds: 6/8 → 6/8 → 7/8 passed)
+Phase 3  Review+Verify:~1.5 min (LLM reviewer → REVIEW.md; tsc + npm test → VERIFICATION.md)
+Phase 3b Auto-Fix:     ~6 min   (reads both files; 3 rounds: 6/8 → 6/8 → 7/8 passed)
 Total:                 ~23 min
 Result:                SUCCESS (10/10 tasks verified)
 Git:                   17 commits (per-task + wave checkpoints)
@@ -564,8 +578,8 @@ awsl run "goal" --engine claude-code --no-verify
 
 | 跳过的阶段 | 说明 |
 |-----------|------|
-| Phase 3: Reviewer agent | 不启动 reviewer 智能体做代码审查 |
-| Phase 3: Provider verify | 不执行 tsc、npm test、eslint |
+| Phase 3: Reviewer agent | 不启动 LLM 审查者（不生成 REVIEW.md） |
+| Phase 3: Provider verify | 不执行 tsc、npm test、eslint（不生成 VERIFICATION.md） |
 | Phase 3b: Auto-fix loop | 不进入自动修复循环 |
 
 **不受影响的阶段：**
@@ -621,7 +635,9 @@ Review: 0 critical, 3 warnings, 1 info across 14 files.
 - **warning = 建议**：改了更好
 - **info = 信息**：留意即可
 
-报告自动保存到 `.planning/REVIEW.md`，终端模式的 reviewer agent 会参考此报告。
+报告自动保存到 `.planning/REVIEW.md`。
+
+> **注意区分：** `awsl review`（CLI 静态扫描）和 Phase 3 LLM 审查者都写入 `REVIEW.md`，但终端模式流水线中是 LLM 审查者写入。确定性检查（tsc、eslint、测试）的结果写入 `VERIFICATION.md`。Auto-fix 读取两个文件。
 
 ## 13. 断点续跑（崩溃恢复）
 
