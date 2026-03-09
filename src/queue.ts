@@ -130,6 +130,23 @@ export class TaskQueue {
 	async start(defaultEngine?: Engine): Promise<void> {
 		log.section("Queue: Starting task execution");
 
+		// Recover from crash: any task left "running" from a prior session is stale
+		{
+			const recoverData = this.load();
+			let recovered = 0;
+			for (const t of recoverData.tasks) {
+				if (t.status === "running") {
+					t.status = "pending";
+					t.startedAt = undefined;
+					recovered++;
+				}
+			}
+			if (recovered > 0) {
+				this.save(recoverData);
+				log.info("queue", `Recovered ${recovered} stale running task(s) to pending`);
+			}
+		}
+
 		while (true) {
 			const data = this.load();
 			const pendingTasks = data.tasks.filter(t => t.status === "pending");

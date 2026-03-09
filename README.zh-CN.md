@@ -248,6 +248,9 @@ awsl queue plan "先构建用户认证，然后加支付模块，最后写集成
 # 查看队列
 awsl queue list
 
+# 查看单个任务详情
+awsl queue show q_1
+
 # 开始执行（前台守护进程）
 awsl queue start
 ```
@@ -591,6 +594,7 @@ awsl queue add "添加认证" --depends-on q_1     # 带依赖的任务
 awsl queue add "写测试" --depends-on all       # 等待所有前置任务
 awsl queue plan "先认证，然后支付，最后测试"    # 自然语言 → 自动拆分
 awsl queue list                                # 查看队列
+awsl queue show q_1                            # 查看单个任务详情
 awsl queue remove q_1                          # 移除任务
 awsl queue start --engine claude-code          # 开始执行
 awsl queue clear                               # 清空队列

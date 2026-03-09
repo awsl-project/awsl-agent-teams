@@ -239,7 +239,23 @@
       "tasksTotal": 0,
       "summary": "Planner produced no parseable tasks:\n## AWSL_RESULT\n\n### Plan: 删除测试数据，保留真实数据\n\n**3 tasks, 2 parallel + 1 verification**\n\n| Task | Assignee | Dependencies | Action |\n|------|----------|-------------|--------|\n| `task_1` — Clean HISTORY.json | coder | none | Remove fake entries h_1–h_11, keep real h_12–h_14 |\n| `task_2` — Delete stale fil",
       "engine": "claude-code"
+    },
+    {
+      "id": "h_16",
+      "date": "2026-03-09T09:57:37.656Z",
+      "project": "awsl-agent-teams",
+      "projectPath": "C:\\Users\\11421\\awsl-agent-teams",
+      "queueTaskId": "q_5",
+      "goal": "Timeline 有个clear 好像没有实现功能",
+      "status": "done",
+      "startedAt": "2026-03-09T09:46:47.931Z",
+      "completedAt": "2026-03-09T09:57:37.656Z",
+      "duration": 649725,
+      "tasksCompleted": 0,
+      "tasksTotal": 0,
+      "summary": "All 4 tasks completed.",
+      "engine": "claude-code"
     }
   ],
-  "updatedAt": "2026-03-09T09:41:22.392Z"
+  "updatedAt": "2026-03-09T09:57:37.656Z"
 }

@@ -248,6 +248,9 @@ awsl queue plan "First build user auth with JWT, then add payment with Stripe, f
 # Review the queue
 awsl queue list
 
+# Show detailed info for a single task
+awsl queue show q_1
+
 # Start execution (foreground daemon)
 awsl queue start
 ```
@@ -591,6 +594,7 @@ awsl queue add "Add auth" --depends-on q_1   # Add with dependency
 awsl queue add "Write tests" --depends-on all # Wait for all prior tasks
 awsl queue plan "First auth, then payments, finally tests"  # Natural language → auto-split
 awsl queue list                               # Show queue status
+awsl queue show q_1                           # Show detailed info for a single task
 awsl queue remove q_1                         # Remove a task
 awsl queue start --engine claude-code         # Start queue execution
 awsl queue clear                              # Clear all tasks

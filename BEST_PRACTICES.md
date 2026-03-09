@@ -783,6 +783,9 @@ awsl queue add "给所有模块写集成测试" --depends-on all
 # 查看队列
 awsl queue list
 
+# 查看单个任务详情（goal、状态、依赖、时间戳、耗时、结果摘要、错误信息）
+awsl queue show q_1
+
 # 开始执行（前台守护进程，睡前运行）
 awsl queue start
 ```

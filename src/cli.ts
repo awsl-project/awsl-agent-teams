@@ -50,6 +50,7 @@ Queue Commands (sleep mode):
   queue add <goal> [opts]  Add a task to the queue
   queue plan <text> [opts] Parse natural language into multiple queue tasks
   queue list               List queue tasks and status
+  queue show <id>          Show detailed info for a queue task
   queue remove <id>        Remove a task from queue
   queue start [opts]       Start executing the queue (foreground)
   queue clear              Clear all queue tasks
@@ -380,6 +381,68 @@ async function main() {
 				console.log();
 			}
 		}
+		else if (subCmd === "show") {
+			const id = args[2];
+			if (!id) {
+				console.error("Usage: awsl queue show <id>");
+				process.exit(1);
+			}
+			const task = queue.get(id);
+			if (!task) {
+				console.error(`Task not found: ${id}`);
+				process.exit(1);
+			}
+
+			// Format duration
+			const formatDuration = (ms: number): string => {
+				if (ms < 1000) return `${ms}ms`;
+				const s = Math.floor(ms / 1000);
+				if (s < 60) return `${s}s`;
+				const m = Math.floor(s / 60);
+				const rs = s % 60;
+				return rs > 0 ? `${m}m ${rs}s` : `${m}m`;
+			};
+
+			const statusIcon = task.status === "done" ? "[OK]" : task.status === "failed" ? "[FAIL]" : `[${task.status.toUpperCase()}]`;
+
+			console.log(`\n  ${statusIcon} ${task.id}\n`);
+			console.log(`  Goal:       ${task.goal}`);
+			console.log(`  Status:     ${task.status}`);
+			if (task.engine) console.log(`  Engine:     ${task.engine}`);
+			if (task.dependsOn?.length) console.log(`  Depends on: ${task.dependsOn.join(", ")}`);
+
+			// Options
+			const opts: string[] = [];
+			if (task.options.quick) opts.push("quick");
+			if (task.options.model) opts.push(`model=${task.options.model}`);
+			if (task.options.concurrency) opts.push(`concurrency=${task.options.concurrency}`);
+			if (opts.length > 0) console.log(`  Options:    ${opts.join(", ")}`);
+
+			// Timestamps
+			console.log();
+			if (task.scheduledAt) console.log(`  Scheduled:  ${task.scheduledAt}`);
+			if (task.startedAt)   console.log(`  Started:    ${task.startedAt}`);
+			if (task.completedAt) console.log(`  Completed:  ${task.completedAt}`);
+			if (task.startedAt && task.completedAt) {
+				const duration = Date.parse(task.completedAt) - Date.parse(task.startedAt);
+				console.log(`  Duration:   ${formatDuration(duration)}`);
+			}
+
+			// Result
+			if (task.result) {
+				console.log(`\n  Result:     ${task.result.success ? "SUCCESS" : "FAILED"}`);
+				console.log(`  Summary:    ${task.result.summary}`);
+			}
+
+			// Error (full, not truncated)
+			if (task.error) {
+				console.log(`\n  Error:`);
+				for (const line of task.error.split("\n")) {
+					console.log(`    ${line}`);
+				}
+			}
+			console.log();
+		}
 		else if (subCmd === "remove") {
 			const id = args[2];
 			if (!id) {
@@ -420,7 +483,7 @@ async function main() {
 			console.log("Queue cleared.");
 		}
 		else {
-			console.error("Unknown queue command. Use: add, plan, list, remove, start, clear");
+			console.error("Unknown queue command. Use: add, plan, list, show, remove, start, clear");
 			process.exit(1);
 		}
 		process.exit(0);

@@ -43,4 +43,26 @@ export class SharedMemory {
 		}
 		return lines.join("\n\n");
 	}
+
+	/** Serialize to plain object for checkpoint persistence.
+	 *  Truncates values over maxLen to keep CHECKPOINT.json manageable. */
+	serialize(maxLen = 8000): Record<string, MemoryEntry> {
+		const obj: Record<string, MemoryEntry> = {};
+		for (const [key, entry] of this.store) {
+			obj[key] = entry.value.length > maxLen
+				? { ...entry, value: entry.value.slice(0, maxLen) + "\n...[truncated for checkpoint]" }
+				: entry;
+		}
+		return obj;
+	}
+
+	/** Restore from serialized checkpoint data */
+	restore(data: Record<string, MemoryEntry>): void {
+		for (const [key, entry] of Object.entries(data)) {
+			// Don't overwrite entries that already exist (fresher data wins)
+			if (!this.store.has(key)) {
+				this.store.set(key, entry);
+			}
+		}
+	}
 }

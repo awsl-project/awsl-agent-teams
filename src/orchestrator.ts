@@ -238,64 +238,165 @@ export async function executeTeam(
 	if (!planner) throw new Error("No planner agent found");
 	const available = agents.filter(a => a.name !== "planner").map(a => a.name);
 
-	// ── Phase 0a: Brainstorm (Guardian) ──────────────────────
-	if (brainstormEnabled) {
-		log.section("Phase 0a: Brainstorming");
-		const brainstormer = agents.find(a => a.role === "architect") ?? planner;
-
-		const brainstormResult = await runAgent(
-			brainstormer,
-			`## Goal\n${goal}\n\n## Team\n${roster}\n\nConduct a Socratic brainstorming session about this goal. Explore requirements, alternatives, trade-offs, and constraints. Produce a design document with key decisions and rationale. Store it in shared memory as "design". Call report when done.`,
-			cwd, memory, roster, defaultModel, 20, skills, engine,
-		);
-
-		if (brainstormResult.status === "done" || brainstormResult.status === "no_report") {
-			planning.write("DESIGN.md", brainstormResult.result);
-			memory.set("design", brainstormResult.result, brainstormer.name);
-			log.info("conductor", "Design document saved to .planning/DESIGN.md");
+	// ── Checkpoint save helper ────────────────────────────────
+	function doSaveCheckpoint(wi: number, tasks: Task[]): void {
+		const completedTasks = tasks.filter(t => t.status === "done" || t.status === "verified").map(t => t.id);
+		const taskResults: Record<string, string> = {};
+		const taskErrors: Record<string, string> = {};
+		for (const t of tasks) {
+			if (t.status === "done" || t.status === "verified") taskResults[t.id] = t.result ?? "";
+			if (t.status === "failed" && t.error) taskErrors[t.id] = t.error;
 		}
+		const failedTasks = tasks.filter(t => t.status === "failed").map(t => t.id);
+		saveCheckpoint(cwd, {
+			wave: wi,
+			completedTasks,
+			taskResults,
+			failedTasks,
+			taskErrors,
+			rateLimitRetries: rateLimitRetryCount,
+			savedAt: new Date().toISOString(),
+			memory: memory.serialize(),
+			goal,
+		});
 	}
 
-	// ── Phase 0b: Research (Conductor) ───────────────────────
-	const needsResearch = options?.research ?? goal.length > 200;
-	if (needsResearch) {
-		log.section("Phase 0: Research");
-		await emit(hooks, { type: "research_start", memory });
+	// ── Early checkpoint probe — skip phases 0/1 if resumable ─
+	let resumedTasks: Task[] | null = null;
 
-		const researchTopics = [
-			{ name: "architecture", prompt: `Analyze the codebase architecture in ${cwd}. Document: file structure, module boundaries, key patterns, frameworks used. Be concise and specific.` },
-			{ name: "conventions", prompt: `Analyze coding conventions in ${cwd}. Document: naming, style, error handling, testing patterns. Be concise.` },
-		];
+	if (options?.resumeFromCheckpoint !== false) {
+		const checkpoint = loadCheckpoint(cwd);
+		if (checkpoint && checkpoint.completedTasks.length > 0) {
+			// Restore shared memory first (research, design, plan, prior results)
+			if (checkpoint.memory) {
+				memory.restore(checkpoint.memory);
+				log.info("checkpoint", `Restored ${Object.keys(checkpoint.memory).length} memory entries`);
+			}
 
-		// Use architect or first available agent for research
-		const researcher = agents.find(a => a.role === "architect") ?? agents.find(a => a.name !== "planner");
-		if (researcher) {
-			await runParallel(researchTopics, maxConcurrency, async (topic) => {
-				const result = await runAgent(researcher, topic.prompt, cwd, memory, roster, defaultModel, 15, skills, engine);
-				if (result.status === "done" || result.status === "no_report") {
-					planning.write(`research/${topic.name}.md`, result.result);
-					memory.set(`research:${topic.name}`, result.result, researcher.name);
+			// Goal sanity check — if goal changed, don't reuse old checkpoint
+			const goalMatch = !checkpoint.goal || checkpoint.goal === goal;
+			if (!goalMatch) {
+				log.warn("checkpoint", "Goal changed since last checkpoint — starting fresh");
+				clearCheckpoint(cwd);
+			} else {
+				// Try to rebuild tasks from stored plan in memory
+				const storedPlan = memory.get("plan");
+				if (storedPlan) {
+					const structuredTasks = parseStructuredTasks(storedPlan);
+					if (structuredTasks.length > 0) {
+						resumedTasks = structuredTasks.map(st => ({
+							id: st.id,
+							description: st.action || st.name,
+							assignee: st.assignee,
+							dependencies: st.dependencies,
+							files: st.files,
+							verify: st.verify,
+							doneCriteria: st.done,
+							status: "pending" as Task["status"],
+						}));
+
+						// Restore task statuses
+						for (const taskId of checkpoint.completedTasks) {
+							const task = resumedTasks.find(t => t.id === taskId);
+							if (task) {
+								task.status = "done";
+								task.result = checkpoint.taskResults[taskId] ?? "(restored from checkpoint)";
+							}
+						}
+						for (const taskId of checkpoint.failedTasks) {
+							const task = resumedTasks.find(t => t.id === taskId);
+							if (task) {
+								task.status = "failed";
+								task.error = checkpoint.taskErrors?.[taskId] ?? "Failed in previous run";
+							}
+						}
+						rateLimitRetryCount = checkpoint.rateLimitRetries;
+
+						log.info("conductor", `Full resume: ${checkpoint.completedTasks.length} done, ${checkpoint.failedTasks.length} failed, skipping phases 0-1`);
+					}
 				}
-				return result;
-			});
+			}
 		}
-
-		await emit(hooks, { type: "research_done", memory });
-		log.info("conductor", `Research stored in .planning/research/`);
 	}
 
-	// ── Phase 1: Plan ─────────────────────────────────────────
-	log.section("Phase 1: Planning");
+	let tasks: Task[];
 
-	// Build rich context for planner
-	const researchContext = memory.keys()
-		.filter(k => k.startsWith("research:"))
-		.map(k => `### ${k}\n${memory.get(k)}`)
-		.join("\n\n");
+	if (resumedTasks) {
+		// ── Fast path: skip brainstorm + research + plan ─────────
+		tasks = resumedTasks;
 
-	const existingState = planning.stateSummary();
+		// Validate assignees
+		const agentNames = new Set(agents.map(a => a.name));
+		for (const task of tasks) {
+			if (task.status === "pending" && !agentNames.has(task.assignee)) {
+				log.warn("conductor", `Task ${task.id}: unknown agent "${task.assignee}"`);
+				task.status = "failed";
+				task.error = `Unknown agent: ${task.assignee}`;
+			}
+		}
 
-	const planPrompt = `## Team Members
+		const pending = tasks.filter(t => t.status === "pending").length;
+		log.info("conductor", `Resumed plan: ${tasks.length} tasks (${pending} pending)`);
+		await emit(hooks, { type: "plan_ready", tasks, memory });
+	} else {
+		// ── Full path: brainstorm → research → plan ──────────────
+
+		// Phase 0a: Brainstorm
+		if (brainstormEnabled) {
+			log.section("Phase 0a: Brainstorming");
+			const brainstormer = agents.find(a => a.role === "architect") ?? planner;
+
+			const brainstormResult = await runAgent(
+				brainstormer,
+				`## Goal\n${goal}\n\n## Team\n${roster}\n\nConduct a Socratic brainstorming session about this goal. Explore requirements, alternatives, trade-offs, and constraints. Produce a design document with key decisions and rationale. Store it in shared memory as "design". Call report when done.`,
+				cwd, memory, roster, defaultModel, 20, skills, engine,
+			);
+
+			if (brainstormResult.status === "done" || brainstormResult.status === "no_report") {
+				planning.write("DESIGN.md", brainstormResult.result);
+				memory.set("design", brainstormResult.result, brainstormer.name);
+				log.info("conductor", "Design document saved to .planning/DESIGN.md");
+			}
+		}
+
+		// Phase 0b: Research
+		const needsResearch = options?.research ?? goal.length > 200;
+		if (needsResearch) {
+			log.section("Phase 0: Research");
+			await emit(hooks, { type: "research_start", memory });
+
+			const researchTopics = [
+				{ name: "architecture", prompt: `Analyze the codebase architecture in ${cwd}. Document: file structure, module boundaries, key patterns, frameworks used. Be concise and specific.` },
+				{ name: "conventions", prompt: `Analyze coding conventions in ${cwd}. Document: naming, style, error handling, testing patterns. Be concise.` },
+			];
+
+			const researcher = agents.find(a => a.role === "architect") ?? agents.find(a => a.name !== "planner");
+			if (researcher) {
+				await runParallel(researchTopics, maxConcurrency, async (topic) => {
+					const result = await runAgent(researcher, topic.prompt, cwd, memory, roster, defaultModel, 15, skills, engine);
+					if (result.status === "done" || result.status === "no_report") {
+						planning.write(`research/${topic.name}.md`, result.result);
+						memory.set(`research:${topic.name}`, result.result, researcher.name);
+					}
+					return result;
+				});
+			}
+
+			await emit(hooks, { type: "research_done", memory });
+			log.info("conductor", `Research stored in .planning/research/`);
+		}
+
+		// Phase 1: Plan
+		log.section("Phase 1: Planning");
+
+		const researchContext = memory.keys()
+			.filter(k => k.startsWith("research:"))
+			.map(k => `### ${k}\n${memory.get(k)}`)
+			.join("\n\n");
+
+		const existingState = planning.stateSummary();
+
+		const planPrompt = `## Team Members
 ${roster}
 
 ## Goal
@@ -305,115 +406,90 @@ ${researchContext ? `## Research Findings\n${researchContext}\n` : ""}
 ${existingState !== "(no state file)" ? `## Project State\n${existingState}\n` : ""}
 ## Instructions
 
-Create a structured task plan. Each task MUST include:
-- id: unique identifier
-- name: short task name
-- assignee: one of [${available.join(", ")}]
-- dependencies: array of task ids this depends on
-- files: array of files this task will touch
-- action: detailed implementation instructions
-- verify: how to verify this task succeeded (test command, manual check, etc.)
-- done: definition of done — what must be true when complete
+Create a structured task plan. Output MUST be a JSON code block and nothing else.
 
 Rules:
 - Keep each task focused — ONE deliverable, max 2-3 files
 - No dependencies = can run in parallel
 - Do NOT assign to "planner"
 
-Call the report tool with your JSON plan:
+IMPORTANT: You MUST call the report tool with ONLY a JSON code block in this EXACT format:
+
+\`\`\`json
 {
-  "summary": "...",
-  "tasks": [ { id, name, assignee, dependencies, files, action, verify, done } ]
-}`;
+  "summary": "Brief plan description",
+  "tasks": [
+    {
+      "id": "task_1",
+      "name": "Short task name",
+      "assignee": "one of [${available.join(", ")}]",
+      "dependencies": [],
+      "files": ["src/example.ts"],
+      "action": "Detailed implementation instructions",
+      "verify": "npm test or other runnable command",
+      "done": "Definition of done"
+    }
+  ]
+}
+\`\`\`
 
-	const planResult = await runAgent(planner, planPrompt, cwd, memory, roster, defaultModel, 30, skills, engine);
+Do NOT output any text before or after the JSON. Do NOT use markdown prose format.`;
 
-	if (planResult.status === "failed") {
-		return { success: false, tasks: [], summary: `Planning failed: ${planResult.error}`, memory, planning };
-	}
+		const planResult = await runAgent(planner, planPrompt, cwd, memory, roster, defaultModel, 30, skills, engine);
 
-	// Parse structured tasks from planner result, fallback to PLAN.md file
-	let structuredTasks = parseStructuredTasks(planResult.result);
-	if (structuredTasks.length === 0) {
-		// Planner may have written tasks to PLAN.md file instead of returning them in result
-		const planMdPath = path.join(cwd, ".planning", "PLAN.md");
-		if (fs.existsSync(planMdPath)) {
-			const planMdContent = fs.readFileSync(planMdPath, "utf-8");
-			structuredTasks = parseStructuredTasks(planMdContent);
-			if (structuredTasks.length > 0) {
-				log.info("conductor", `Parsed ${structuredTasks.length} tasks from .planning/PLAN.md`);
+		if (planResult.status === "failed") {
+			return { success: false, tasks: [], summary: `Planning failed: ${planResult.error}`, memory, planning };
+		}
+
+		let structuredTasks = parseStructuredTasks(planResult.result);
+		if (structuredTasks.length === 0) {
+			const planMdPath = path.join(cwd, ".planning", "PLAN.md");
+			if (fs.existsSync(planMdPath)) {
+				const planMdContent = fs.readFileSync(planMdPath, "utf-8");
+				structuredTasks = parseStructuredTasks(planMdContent);
+				if (structuredTasks.length > 0) {
+					log.info("conductor", `Parsed ${structuredTasks.length} tasks from .planning/PLAN.md`);
+				}
 			}
 		}
-	}
-	if (structuredTasks.length === 0) {
-		return { success: false, tasks: [], summary: `Planner produced no parseable tasks:\n${planResult.result.slice(0, 300)}`, memory, planning };
-	}
-
-	// Convert to Task objects
-	const tasks: Task[] = structuredTasks.map(st => ({
-		id: st.id,
-		description: st.action || st.name,
-		assignee: st.assignee,
-		dependencies: st.dependencies,
-		files: st.files,
-		verify: st.verify,
-		doneCriteria: st.done,
-		status: "pending" as const,
-	}));
-
-	// Validate assignees
-	const agentNames = new Set(agents.map(a => a.name));
-	for (const task of tasks) {
-		if (!agentNames.has(task.assignee)) {
-			log.warn("conductor", `Task ${task.id}: unknown agent "${task.assignee}"`);
-			task.status = "failed";
-			task.error = `Unknown agent: ${task.assignee}`;
+		if (structuredTasks.length === 0) {
+			return { success: false, tasks: [], summary: `Planner produced no parseable tasks:\n${planResult.result.slice(0, 300)}`, memory, planning };
 		}
-	}
 
-	// Save plan
-	log.info("conductor", `Plan: ${tasks.length} tasks`);
-	for (const t of tasks) {
-		const deps = t.dependencies.length > 0 ? ` (after: ${t.dependencies.join(", ")})` : "";
-		const files = t.files?.length ? ` [${t.files.join(", ")}]` : "";
-		log.info("conductor", `  [${t.id}] ${t.assignee}: ${t.description.slice(0, 60)}${deps}${files}`);
-	}
+		tasks = structuredTasks.map(st => ({
+			id: st.id,
+			description: st.action || st.name,
+			assignee: st.assignee,
+			dependencies: st.dependencies,
+			files: st.files,
+			verify: st.verify,
+			doneCriteria: st.done,
+			status: "pending" as const,
+		}));
 
-	planning.write("PLAN.md", formatPlanMarkdown(structuredTasks));
-	memory.set("plan", JSON.stringify(structuredTasks, null, 2), "planner");
-	await emit(hooks, { type: "plan_ready", tasks, memory });
+		const agentNames = new Set(agents.map(a => a.name));
+		for (const task of tasks) {
+			if (!agentNames.has(task.assignee)) {
+				log.warn("conductor", `Task ${task.id}: unknown agent "${task.assignee}"`);
+				task.status = "failed";
+				task.error = `Unknown agent: ${task.assignee}`;
+			}
+		}
+
+		log.info("conductor", `Plan: ${tasks.length} tasks`);
+		for (const t of tasks) {
+			const deps = t.dependencies.length > 0 ? ` (after: ${t.dependencies.join(", ")})` : "";
+			const files = t.files?.length ? ` [${t.files.join(", ")}]` : "";
+			log.info("conductor", `  [${t.id}] ${t.assignee}: ${t.description.slice(0, 60)}${deps}${files}`);
+		}
+
+		planning.write("PLAN.md", formatPlanMarkdown(structuredTasks));
+		memory.set("plan", JSON.stringify(structuredTasks, null, 2), "planner");
+		await emit(hooks, { type: "plan_ready", tasks, memory });
+	}
 
 	// ── Phase 2: Execute ──────────────────────────────────────
 	let waves = topologicalSort(tasks);
-
-	// Checkpoint resume: restore completed/failed tasks from prior run
-	if (options?.resumeFromCheckpoint !== false) {
-		const checkpoint = loadCheckpoint(cwd);
-		if (checkpoint) {
-			// Restore completed tasks
-			for (const taskId of checkpoint.completedTasks) {
-				const task = tasks.find(t => t.id === taskId);
-				if (task) {
-					task.status = "done";
-					task.result = checkpoint.taskResults[taskId] ?? "(restored from checkpoint)";
-					memory.set(`result:${task.id}`, task.result, task.assignee);
-				}
-			}
-			// Restore failed tasks
-			for (const taskId of checkpoint.failedTasks) {
-				const task = tasks.find(t => t.id === taskId);
-				if (task) {
-					task.status = "failed";
-					task.error = "Failed in previous run";
-				}
-			}
-			rateLimitRetryCount = checkpoint.rateLimitRetries;
-
-			// Recompute waves since some tasks are now done/failed
-			waves = topologicalSort(tasks);
-			log.info("conductor", `Resumed from checkpoint: ${checkpoint.completedTasks.length} tasks completed, wave ${checkpoint.wave}`);
-		}
-	}
 
 	log.section(`Phase 2: Execution (${waves.length} waves)`);
 
@@ -513,21 +589,8 @@ Call the report tool with your JSON plan:
 				}
 				log.warn("conductor", `Rate limit retries exhausted (${maxRateLimitRetries})`);
 			} else {
-				// Save checkpoint
-				const completedTasks = tasks.filter(t => t.status === "done" || t.status === "verified").map(t => t.id);
-				const taskResults: Record<string, string> = {};
-				for (const t of tasks.filter(t => t.status === "done" || t.status === "verified")) {
-					taskResults[t.id] = t.result ?? "";
-				}
-				const failedTasks = tasks.filter(t => t.status === "failed").map(t => t.id);
-				saveCheckpoint(cwd, {
-					wave: wi,
-					completedTasks,
-					taskResults,
-					failedTasks,
-					rateLimitRetries: rateLimitRetryCount,
-					savedAt: new Date().toISOString(),
-				});
+				// Save full checkpoint (memory + task state)
+				doSaveCheckpoint(wi, tasks);
 
 				await emit(hooks, { type: "rate_limit", wave: wi, tasks: rateLimitedTasks, memory });
 
@@ -550,6 +613,9 @@ Call the report tool with your JSON plan:
 		}
 
 		await emit(hooks, { type: "wave_end", wave: wi, tasks: wave, memory });
+
+		// Save checkpoint after every wave (enables full resume)
+		doSaveCheckpoint(wi, tasks);
 
 		// Git checkpoint after each successful wave
 		if (autoCommit) {
@@ -688,7 +754,7 @@ Call the report tool with your JSON plan:
 
 		const replanResult = await runAgent(
 			planner,
-			`## Original Goal\n${goal}\n\n## Completed\n${doneSummary}\n\n## Failed\n${failedSummary}\n\n## Team\n${roster}\n\nCreate a recovery plan. Use different approaches where the original failed. Each task needs: id, name, assignee, dependencies, files, action, verify, done. Assign only to: ${available.join(", ")}. Call the report tool with your JSON plan.`,
+			`## Original Goal\n${goal}\n\n## Completed\n${doneSummary}\n\n## Failed\n${failedSummary}\n\n## Team\n${roster}\n\nCreate a recovery plan. Use different approaches where the original failed. Assign only to: ${available.join(", ")}.\n\nIMPORTANT: Call the report tool with ONLY a JSON code block:\n\`\`\`json\n{ "summary": "...", "tasks": [{ "id": "task_1", "name": "...", "assignee": "...", "dependencies": [], "files": [], "action": "...", "verify": "...", "done": "..." }] }\n\`\`\`\nDo NOT output markdown prose. Output ONLY JSON.`,
 			cwd, memory, roster, defaultModel, 30, skills, engine,
 		);
 
@@ -855,7 +921,7 @@ export async function planOnly(
 		.join("\n\n");
 	const existingState = planning.stateSummary();
 
-	const planPrompt = `## Team Members\n${roster}\n\n## Goal\n${goal}\n\n${researchContext ? `## Research Findings\n${researchContext}\n` : ""}${existingState !== "(no state file)" ? `## Project State\n${existingState}\n` : ""}## Instructions\n\nCreate a structured task plan. Each task MUST include:\n- id: unique identifier (e.g. task_1, task_2)\n- name: short task name\n- assignee: one of [${available.join(", ")}]\n- dependencies: array of task ids this depends on\n- files: array of files this task will touch\n- action: detailed implementation instructions\n- verify: how to verify (runnable command preferred, e.g. npm test)\n- done: definition of done\n\nRules:\n- ONE deliverable per task, max 2-3 files\n- No dependencies = can run in parallel\n- Do NOT assign to "planner"\n- verify should be a runnable command when possible\n\nCall the report tool with JSON:\n{\n  "summary": "...",\n  "tasks": [ { id, name, assignee, dependencies, files, action, verify, done } ]\n}`;
+	const planPrompt = `## Team Members\n${roster}\n\n## Goal\n${goal}\n\n${researchContext ? `## Research Findings\n${researchContext}\n` : ""}${existingState !== "(no state file)" ? `## Project State\n${existingState}\n` : ""}## Instructions\n\nCreate a structured task plan. Output MUST be a JSON code block and nothing else.\n\nRules:\n- ONE deliverable per task, max 2-3 files\n- No dependencies = can run in parallel\n- Do NOT assign to "planner"\n- verify should be a runnable command when possible\n\nIMPORTANT: Call the report tool with ONLY a JSON code block in this EXACT format:\n\n\`\`\`json\n{\n  "summary": "Brief plan description",\n  "tasks": [\n    {\n      "id": "task_1",\n      "name": "Short task name",\n      "assignee": "one of [${available.join(", ")}]",\n      "dependencies": [],\n      "files": ["src/example.ts"],\n      "action": "Detailed implementation instructions",\n      "verify": "npm test",\n      "done": "Definition of done"\n    }\n  ]\n}\n\`\`\`\n\nDo NOT output any text before or after the JSON. Do NOT use markdown prose format.`;
 
 	const planResult = await runAgent(planner, planPrompt, cwd, memory, roster, defaultModel, 30, skills, engine);
 
@@ -864,9 +930,20 @@ export async function planOnly(
 	}
 
 	// ── Code-controlled validation ──────────────────────────
-	const structuredTasks = parseStructuredTasks(planResult.result);
+	let structuredTasks = parseStructuredTasks(planResult.result);
 	if (structuredTasks.length === 0) {
-		return { success: false, planPath: "", tasks: [], waves: [], summary: `No parseable tasks from planner output` };
+		// Fallback: try reading PLAN.md (planner may have written it as a file)
+		const planMdPath = path.join(cwd, ".planning", "PLAN.md");
+		if (fs.existsSync(planMdPath)) {
+			const planMdContent = fs.readFileSync(planMdPath, "utf-8");
+			structuredTasks = parseStructuredTasks(planMdContent);
+			if (structuredTasks.length > 0) {
+				log.info("conductor", `Parsed ${structuredTasks.length} tasks from .planning/PLAN.md`);
+			}
+		}
+	}
+	if (structuredTasks.length === 0) {
+		return { success: false, planPath: "", tasks: [], waves: [], summary: `No parseable tasks from planner output:\n${planResult.result.slice(0, 300)}` };
 	}
 
 	// Validate assignees
