@@ -75,7 +75,26 @@
       "inputTokens": 7007,
       "outputTokens": 21797,
       "costUsd": 2.8119659999999995
+    },
+    {
+      "id": "h_5",
+      "date": "2026-03-09T20:31:31.833Z",
+      "project": "awsl-agent-teams",
+      "projectPath": "C:\\Users\\11421\\awsl-agent-teams",
+      "queueTaskId": "q_5",
+      "goal": "给 builtin engine 增加最少限度的沙箱：写路径限制在项目目录内，bash 至少按 phase 或 allowlist 控制",
+      "status": "done",
+      "startedAt": "2026-03-09T20:14:00.010Z",
+      "completedAt": "2026-03-09T20:31:31.833Z",
+      "duration": 1051823,
+      "tasksCompleted": 0,
+      "tasksTotal": 0,
+      "summary": "All 6 tasks completed.\n- task_1: All 5 exports present. The file is complete and type-checks clean.\n- task_2: All changes are in place and type-check passes.\n- task_3: All 12 `runAgent()` calls in orchestrator now pass `sandbox`. 12 calls in total, all covered.\n- task_4: Type-check passes clean.\n- task_5: Type-check passes clean (no output = no errors).\n- task_6: All verifications pass.",
+      "engine": "claude-code",
+      "inputTokens": 5560,
+      "outputTokens": 48595,
+      "costUsd": 5.7438893
     }
   ],
-  "updatedAt": "2026-03-09T19:23:32.462Z"
+  "updatedAt": "2026-03-09T20:31:31.833Z"
 }

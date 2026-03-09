@@ -1,12 +1,16 @@
 # Verification Report
 
-**Verification: 4 passed, 0 failed out of 4 checks.**
+**Verification: 6 passed, 0 failed out of 6 checks.**
 
 ## Task Checks
 
 ### [PASS] task_1: `npx tsc --noEmit`
 
+### [PASS] task_2: `npx tsc --noEmit`
+
 ### [PASS] task_3: `npx tsc --noEmit`
+
+### [PASS] task_4: `npx tsc --noEmit`
 
 ## General Checks
 
@@ -14,10 +18,10 @@
 
 ### [PASS] git-diff: `git diff --stat`
 ```
-.planning/.lock              |  6 +--
- .planning/.verify-cache.json |  4 +-
- .planning/CHECKPOINT.json    | 43 +++++++++++++++++---
- .planning/VERIFICATION.md    | 93 +++++++++++++++++++++++++++++++++-----------
- .planning/task_4-SUMMARY.md  | 25 ++++++------
- 5 files changed, 125 insertions(+), 46 deletions(-)
+.planning/.lock              |   6 +--
+ .planning/.verify-cache.json |   4 +-
+ .planning/CHECKPOINT.json    |  20 ++++++--
+ .planning/VERIFICATION.md    | 115 +++++++++++++++++++++++++++++++++++++------
+ .planning/task_6-SUMMARY.md  |  78 ++++++-----------------------
+ 5 files changed, 134 insertions(+), 89 deletions(-)
 ```

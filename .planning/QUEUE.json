@@ -54,10 +54,15 @@
       "options": {
         "quick": false
       },
-      "status": "running",
+      "status": "done",
       "scheduledAt": "2026-03-09T14:06:13.849Z",
       "runAt": "2026-03-09T20:14:00.000Z",
-      "startedAt": "2026-03-09T20:14:00.010Z"
+      "startedAt": "2026-03-09T20:14:00.010Z",
+      "completedAt": "2026-03-09T20:31:31.833Z",
+      "result": {
+        "success": true,
+        "summary": "All 6 tasks completed.\n- task_1: All 5 exports present. The file is complete and type-checks clean.\n- task_2: All changes are in place and type-check passes.\n- task_3: All 12 `runAgent()` calls in orchestrator now pass `sandbox`. 12 calls in total, all covered.\n- task_4: Type-check passes clean.\n- task_5: Type-check passes clean (no output = no errors).\n- task_6: All verifications pass."
+      }
     },
     {
       "id": "q_6",
@@ -65,9 +70,10 @@
       "options": {
         "quick": false
       },
-      "status": "pending",
+      "status": "running",
       "scheduledAt": "2026-03-09T14:06:27.135Z",
-      "runAt": "2026-03-09T20:58:00.000Z"
+      "runAt": "2026-03-09T20:58:00.000Z",
+      "startedAt": "2026-03-09T20:58:00.013Z"
     },
     {
       "id": "q_7",
@@ -87,5 +93,5 @@
     }
   ],
   "createdAt": "2026-03-09T10:11:39.245Z",
-  "updatedAt": "2026-03-09T20:14:00.010Z"
+  "updatedAt": "2026-03-09T20:58:00.014Z"
 }

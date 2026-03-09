@@ -12,13 +12,13 @@ import { Type } from "@sinclair/typebox";
 import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
 import type { SharedMemory } from "./memory.js";
 import type { SandboxPolicy } from "./sandbox.js";
-import { checkWritePath, checkBashCommand } from "./sandbox.js";
+import { checkReadPath, checkWritePath, checkBashCommand } from "./sandbox.js";
 
 function text(t: string): AgentToolResult<any> {
 	return { content: [{ type: "text", text: t }], details: {} };
 }
 
-export function createReadTool(cwd: string): AgentTool<any> {
+export function createReadTool(cwd: string, sandbox?: SandboxPolicy): AgentTool<any> {
 	return {
 		name: "read",
 		label: "Read file",
@@ -30,6 +30,10 @@ export function createReadTool(cwd: string): AgentTool<any> {
 		}),
 		async execute(_id, params) {
 			const filePath = path.resolve(cwd, params.path);
+			if (sandbox) {
+				const blocked = checkReadPath(filePath, sandbox);
+				if (blocked) return text(blocked);
+			}
 			try {
 				let content = fs.readFileSync(filePath, "utf-8");
 				if (params.offset || params.limit) {
@@ -225,7 +229,7 @@ export function createSendMessageTool(
 
 /** All tool constructors keyed by name */
 const TOOL_FACTORIES: Record<string, (ctx: ToolContext) => AgentTool<any>> = {
-	read: (ctx) => createReadTool(ctx.cwd),
+	read: (ctx) => createReadTool(ctx.cwd, ctx.sandbox),
 	write: (ctx) => createWriteTool(ctx.cwd, ctx.sandbox),
 	edit: (ctx) => createEditTool(ctx.cwd, ctx.sandbox),
 	bash: (ctx) => createBashTool(ctx.cwd, ctx.sandbox),

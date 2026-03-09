@@ -1,48 +1,24 @@
 ## AWSL_RESULT
 
-### Design: Builtin Engine Minimal Sandbox
+### Security Audit Design Document
 
-**Design document:** `.planning/DESIGN-sandbox.md`
+**File produced**: `.planning/SECURITY_AUDIT.md`
 
-### Summary of Key Decisions
+**5 verified security issues found, prioritized by impact:**
 
-| # | Decision | Rationale |
-|---|----------|-----------|
-| 1 | **SandboxPolicy interface** (not hardcoded guards) | ~10 extra lines buys configurability, per-agent override, future extensibility |
-| 2 | **Role-based defaults** (not phase-based) | Roles already exist on every agent; phases would require threading new state through ToolContext |
-| 3 | **String pattern matching for bash** (not AST parsing) | Shell parsing is a rabbit hole; prefix/contains matching prevents accidental damage, good enough for v1 |
-| 4 | **Opt-out, not opt-in** | Security on by default; `sandbox: false` to disable |
+| # | Severity | File | Issue |
+|---|----------|------|-------|
+| FIX 1 | **HIGH** | `src/tools.ts` | Read tool has zero path validation — complete sandbox bypass |
+| FIX 2 | **HIGH** | `src/dashboard.ts` | Dashboard binds to 0.0.0.0 with `CORS: *` — network-accessible mutation APIs |
+| FIX 3 | **MEDIUM** | `src/dashboard.ts` | No HTTP body size limit — memory exhaustion DoS |
+| FIX 4 | **MEDIUM** | `src/sandbox.ts` | Coder denylist only has 7 patterns — trivially bypassed |
+| FIX 5 | **MEDIUM** | `src/planning.ts` | `execSync` with string interpolation for git commands — shell injection |
 
-### Architecture
+**Key decisions:**
+1. Read tool reuses `writePaths` for validation (no new config surface)
+2. Dashboard defaults to `127.0.0.1` (localhost only)
+3. Keep denylist for coder role but expand patterns significantly
+4. Switch git commands from `execSync` to `execFileSync` (array args, no shell)
+5. 1MB body size cap on dashboard API
 
-```
-ExecuteOptions.sandbox (bool | SandboxPolicy)
-  → runWithBuiltin() computes defaultPolicy(role, cwd)
-    → createAgentTools(…, sandbox)
-      → ToolContext.sandbox
-        → createWriteTool: checkWritePath() before fs.writeFileSync
-        → createEditTool:  checkWritePath() before fs.writeFileSync  
-        → createBashTool:  checkBashCommand() before execSync
-```
-
-### Files to Change
-
-| File | Action | Lines |
-|------|--------|-------|
-| `src/sandbox.ts` | **NEW** | ~80 |
-| `src/tools.ts` | Modify | +20 |
-| `src/runner.ts` | Modify | +5 |
-| `src/orchestrator.ts` | Modify | +10 |
-| `src/agents.ts` | Modify | +5 |
-| `src/index.ts` | Modify | +1 |
-| Docs (3 files) | Update | ~30 each |
-
-### Role → Policy Matrix
-
-| Role | Write | Bash | Philosophy |
-|------|-------|------|------------|
-| coder | project dir | denylist (dangerous cmds) | Broad access, block footguns |
-| tester | project dir | allowlist (test cmds) | Only what's needed to test |
-| reviewer | project dir | allowlist (read cmds) | Read-only exploration |
-| architect | project dir | allowlist (read cmds) | Read-only exploration |
-| planner | project dir | allowlist (minimal) | Minimal shell access |
+**Non-issues confirmed safe:** prototype pollution (Map-based), lock TOCTOU (wx flag), regex DoS (lazy quantifiers), Windows process check.

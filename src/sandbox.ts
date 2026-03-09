@@ -83,6 +83,23 @@ export function defaultPolicy(role: string, cwd: string): SandboxPolicy {
 // ─── Validators ─────────────────────────────────────────────────────
 
 /**
+ * Validate a file path against the sandbox read policy.
+ * Returns null if allowed, or an error message if blocked.
+ */
+export function checkReadPath(resolvedPath: string, policy: SandboxPolicy): string | null {
+	const normalized = path.resolve(resolvedPath)
+	for (const dir of policy.writePaths) {
+		const normalizedDir = path.resolve(dir)
+		const a = process.platform === "win32" ? normalized.toLowerCase() : normalized
+		const b = process.platform === "win32" ? normalizedDir.toLowerCase() : normalizedDir
+		if (a === b || a.startsWith(b + path.sep)) {
+			return null
+		}
+	}
+	return `Sandbox: read blocked — path "${resolvedPath}" is outside allowed directories`
+}
+
+/**
  * Validate a file path against the sandbox write policy.
  * Returns null if allowed, or an error message if blocked.
  */

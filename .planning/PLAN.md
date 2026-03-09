@@ -1,135 +1,135 @@
 # Execution Plan
 
-## task_1: Create sandbox.ts module
+## task_1: Add read tool path validation
 - **Assignee:** coder
+- **Files:** src/sandbox.ts, src/tools.ts
+
+### Action
+1. In src/sandbox.ts, add a `checkReadPath()` function that validates a resolved file path is within `policy.writePaths` (reuse the same logic as `checkWritePath` but with a 'read blocked' message). Export it.
+2. In src/tools.ts, update `createReadTool(cwd: string)` to accept an optional `sandbox?: SandboxPolicy` parameter. Inside `execute()`, after resolving `filePath`, call `checkReadPath(filePath, sandbox)` if sandbox is defined. If blocked, return the error message.
+3. Import `checkReadPath` from `./sandbox.js` at the top of tools.ts.
+4. In the `TOOL_FACTORIES` map (line 228), change the `read` factory from `(ctx) => createReadTool(ctx.cwd)` to `(ctx) => createReadTool(ctx.cwd, ctx.sandbox)` so sandbox is wired through.
+
+### Verify
+npx tsc --noEmit
+
+### Done
+createReadTool accepts sandbox policy, checkReadPath exists in sandbox.ts, TOOL_FACTORIES passes sandbox to read tool, tsc passes
+
+## task_2: Dashboard: localhost bind + CORS + body limit
+- **Assignee:** coder
+- **Files:** src/dashboard.ts
+
+### Action
+Three changes in src/dashboard.ts:
+
+1. **Bind to 127.0.0.1**: Change `server.listen(port, () => {` (line 217) to `server.listen(port, '127.0.0.1', () => {` so it only binds to localhost.
+
+2. **Restrict CORS**: Change `res.setHeader('Access-Control-Allow-Origin', '*')` (line 45) to `res.setHeader('Access-Control-Allow-Origin', 'http://localhost:' + port)`. This restricts CORS to only the dashboard's own origin.
+
+3. **Add body size limit**: Create a helper function at the top of the file:
+```typescript
+const MAX_BODY = 1024 * 1024 // 1MB
+function collectBody(req: http.IncomingMessage, res: http.ServerResponse, cb: (body: string) => void) {
+    let body = ''
+    let size = 0
+    req.on('data', (chunk: Buffer) => {
+        size += chunk.length
+        if (size > MAX_BODY) {
+            res.writeHead(413, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ error: 'Request body too large' }))
+            req.destroy()
+            return
+        }
+        body += chunk.toString()
+    })
+    req.on('end', () => { if (!req.destroyed) cb(body) })
+}
+```
+Then replace all three occurrences of the manual `req.on('data')` + `req.on('end')` pattern (in /api/queue/add, /api/queue/set-time) with calls to `collectBody(req, res, (body) => { ... })`.
+
+### Verify
+npx tsc --noEmit
+
+### Done
+Dashboard binds to 127.0.0.1, CORS restricted to localhost, all POST body reads use collectBody with 1MB limit, tsc passes
+
+## task_3: Fix shell injection in git commands
+- **Assignee:** coder
+- **Files:** src/planning.ts
+
+### Action
+In src/planning.ts around lines 372-384:
+1. Change `import { execSync } from 'node:child_process'` to also import `execFileSync`: `import { execSync, execFileSync } from 'node:child_process'`
+2. Replace line 373: `execSync(\`git add -- ${JSON.stringify(f)}\`, { cwd, stdio: 'pipe' })` with `execFileSync('git', ['add', '--', f], { cwd, stdio: 'pipe' })`
+3. Replace line 381: `execSync(\`git commit -m ${JSON.stringify(commitMsg)}\`, { cwd, stdio: 'pipe' })` with `execFileSync('git', ['commit', '-m', commitMsg], { cwd, stdio: 'pipe' })`
+
+This eliminates shell interpolation entirely. execFileSync bypasses the shell, so no injection is possible regardless of filename or commit message content.
+
+### Verify
+npx tsc --noEmit
+
+### Done
+Both git add and git commit use execFileSync with array args instead of execSync with string interpolation, tsc passes
+
+## task_4: Expand coder bash denylist
+- **Assignee:** coder
+- **Dependencies:** task_1
 - **Files:** src/sandbox.ts
 
 ### Action
-Create new file src/sandbox.ts with:
-1. `SandboxPolicy` interface with `writePaths: string[]` and `bash: BashPolicy`
-2. `BashPolicy` interface with `mode: 'allowlist' | 'denylist' | 'unrestricted'` and `patterns: string[]`
-3. `defaultPolicy(role: string, cwd: string): SandboxPolicy` — returns role-based defaults per the design doc:
-   - coder: denylist with dangerous patterns (rm -rf /, sudo, mkfs, dd if=, fork bomb, chmod 777, > /dev/sd)
-   - tester: allowlist (npm test, npx tsc, npx vitest, npx jest, node, cat, ls, head, tail, grep, find, wc)
-   - reviewer: allowlist (cat, ls, head, tail, grep, find, wc, git log, git diff, git show)
-   - architect: allowlist (cat, ls, head, tail, grep, find, wc, tree)
-   - planner: allowlist (cat, ls, find, wc)
-   - other: same as coder
-4. `checkWritePath(resolvedPath: string, policy: SandboxPolicy): string | null` — returns null if allowed, error message if blocked. Use path.resolve, case-insensitive on Windows (process.platform === 'win32').
-5. `checkBashCommand(command: string, policy: SandboxPolicy): string | null` — allowlist checks startsWith, denylist checks includes on trimmed command.
+In src/sandbox.ts, expand the `CODER_DENY_PATTERNS` array (lines 32-40) to add these additional patterns that block common sandbox escape vectors:
 
-Follow project conventions: ES modules with .js extensions, tabs, no semicolons, JSDoc file header, import type where possible.
+```typescript
+const CODER_DENY_PATTERNS = [
+    // Existing
+    'rm -rf /',
+    'sudo ',
+    'mkfs',
+    'dd if=',
+    ':(){ :|:& };:',
+    'chmod 777',
+    '> /dev/sd',
+    // New: glob-based destruction
+    'rm -rf /*',
+    // New: download-and-execute
+    '| sh', '| bash',
+    'curl ', 'wget ',
+    // New: interpreter escapes
+    'python -c', 'python3 -c',
+    'node -e', 'perl -e', 'ruby -e',
+    // New: network exfiltration
+    'nc ', 'ncat ',
+    // New: eval / encoded execution
+    'eval ', 'base64 -d',
+]
+```
 
-### Verify
-npx tsc --noEmit
-
-### Done
-src/sandbox.ts exists with all 5 exports, passes type-check
-
-## task_2: Wire sandbox into tools.ts
-- **Assignee:** coder
-- **Dependencies:** task_1
-- **Files:** src/tools.ts
-
-### Action
-Modify src/tools.ts to enforce sandbox policy:
-1. Import `SandboxPolicy`, `checkWritePath`, `checkBashCommand` from './sandbox.js'
-2. Add `sandbox?: SandboxPolicy` to the `ToolContext` interface
-3. Update `createWriteTool(cwd)` — add sandbox parameter. Before fs.writeFileSync, if sandbox is set, call checkWritePath(filePath, sandbox). If blocked, return error text instead of writing.
-4. Update `createEditTool(cwd)` — same guard as write: check path before fs.writeFileSync.
-5. Update `createBashTool(cwd)` — add sandbox parameter. Before execSync, if sandbox is set, call checkBashCommand(command, sandbox). If blocked, return error text.
-6. Update TOOL_FACTORIES: pass ctx.sandbox to write, edit, bash tool factories.
-7. Update `createAgentTools()` function signature: add optional `sandbox?: SandboxPolicy` parameter after `allowedTools`. Pass it into ToolContext.
-
-Keep backward-compatible: sandbox is optional, undefined means no enforcement.
+Keep all existing patterns. Only ADD new ones. Do not change any other code in the file.
 
 ### Verify
 npx tsc --noEmit
 
 ### Done
-tools.ts guards write/edit/bash with sandbox checks, createAgentTools accepts sandbox param
+CODER_DENY_PATTERNS has 20+ patterns covering destruction, download-execute, interpreter escape, network exfil, and eval vectors, tsc passes
 
-## task_3: Thread sandbox through runner and orchestrator
-- **Assignee:** coder
-- **Dependencies:** task_1, task_2
-- **Files:** src/runner.ts, src/orchestrator.ts
-
-### Action
-Wire sandbox from ExecuteOptions down to tool creation:
-
-**src/runner.ts:**
-1. Import `SandboxPolicy`, `defaultPolicy` from './sandbox.js'
-2. Add `sandbox?: SandboxPolicy | boolean` parameter to `runWithBuiltin()` (after skillRegistry)
-3. In runWithBuiltin: if sandbox is not false, compute policy = (sandbox === true || sandbox === undefined) ? defaultPolicy(agentDef.role, cwd) : sandbox. Pass policy to createAgentTools as the new sandbox param.
-4. Add `sandbox?: SandboxPolicy | boolean` parameter to public `runAgent()` function (after taskId). Pass it through to runWithBuiltin. For claude-code engine, sandbox is ignored (Claude Code has its own permission system).
-
-**src/orchestrator.ts:**
-1. Import `SandboxPolicy` type from './sandbox.js'
-2. Add `sandbox?: boolean | SandboxPolicy` to `ExecuteOptions` interface with JSDoc comment: 'Sandbox policy for builtin engine. true=role defaults (default), false=disabled, or custom SandboxPolicy.'
-3. In executeTeam(): extract sandbox option with `const sandbox = options?.sandbox ?? true`
-4. Pass sandbox as additional argument to ALL runAgent() calls in orchestrator.ts (there are ~10 call sites). Add it as the last argument after taskId.
-5. In planOnly(): also pass sandbox to runAgent calls.
-
-### Verify
-npx tsc --noEmit
-
-### Done
-Sandbox flows from ExecuteOptions → runAgent → runWithBuiltin → createAgentTools. Default is true (role-based).
-
-## task_4: Export sandbox API and add to agents
-- **Assignee:** coder
-- **Dependencies:** task_1
-- **Files:** src/index.ts, src/agents.ts
-
-### Action
-1. In src/index.ts: add export line: `export { type SandboxPolicy, type BashPolicy, defaultPolicy, checkWritePath, checkBashCommand } from './sandbox.js'`
-2. In src/agents.ts: add optional `sandbox?: SandboxPolicy` field to TeamAgentDef interface (import type from './sandbox.js'). This allows per-agent sandbox override via agent definition files. No need to parse from frontmatter yet — just add the type field.
-
-### Verify
-npx tsc --noEmit
-
-### Done
-SandboxPolicy exported from index.ts, TeamAgentDef has optional sandbox field
-
-## task_5: Update documentation
-- **Assignee:** coder
-- **Dependencies:** task_1
-- **Files:** README.md, README.zh-CN.md, BEST_PRACTICES.md
-
-### Action
-Add sandbox documentation to all three docs:
-
-**README.md** (English):
-- Add a '### Sandbox' subsection under the builtin engine section. Explain: write paths restricted to project dir, bash commands controlled per role (allowlist/denylist). Mention ExecuteOptions.sandbox (true/false/custom). Show the role default table from the design doc.
-
-**README.zh-CN.md** (Chinese):
-- Mirror the same sandbox section in Chinese.
-
-**BEST_PRACTICES.md** (Chinese):
-- Add a sandbox configuration section. Include: how to disable sandbox (sandbox: false), how to customize per-agent, what each role's defaults are, example of custom SandboxPolicy object.
-
-### Verify
-cat README.md | head -5
-
-### Done
-All three docs mention sandbox feature with role defaults table and configuration guidance
-
-## task_6: Build and type-check verification
+## task_5: Verify all fixes build correctly
 - **Assignee:** tester
-- **Dependencies:** task_2, task_3, task_4
-- **Files:** src/sandbox.ts, src/tools.ts, src/runner.ts, src/orchestrator.ts
+- **Dependencies:** task_1, task_2, task_3, task_4
+- **Files:** src/tools.ts, src/dashboard.ts, src/planning.ts, src/sandbox.ts
 
 ### Action
-Run full build and type-check to verify all changes compile correctly:
-1. Run `npx tsc --noEmit` — must pass with zero errors
-2. Run `npm run build` — must produce dist/ output without errors
-3. Verify src/sandbox.ts exists and exports the expected functions by reading dist/sandbox.js
-4. Spot-check that the sandbox guards are present in the compiled output (grep for 'checkWritePath' in dist/tools.js, grep for 'defaultPolicy' in dist/runner.js)
-
-Report any type errors or build failures with exact error messages.
+1. Run `npx tsc --noEmit` to verify the full project type-checks.
+2. Run `npm run build` to verify compilation succeeds.
+3. Verify the 5 fixes are correctly applied by reading the source files:
+   - src/sandbox.ts: checkReadPath function exists and is exported; CODER_DENY_PATTERNS has 20+ entries
+   - src/tools.ts: createReadTool accepts sandbox param; TOOL_FACTORIES.read passes ctx.sandbox
+   - src/dashboard.ts: server.listen binds to '127.0.0.1'; CORS uses localhost not '*'; collectBody helper with 1MB limit exists
+   - src/planning.ts: git add and git commit use execFileSync with array args
+4. Report pass/fail for each fix.
 
 ### Verify
-npm run build && npx tsc --noEmit
+npm run build
 
 ### Done
-Full build passes, type-check passes, sandbox guards present in compiled output
+tsc --noEmit and npm run build both pass; all 5 security fixes verified present in source
