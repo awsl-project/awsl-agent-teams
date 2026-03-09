@@ -12,7 +12,7 @@ import { execSync, spawn } from "node:child_process";
 import { executeTeam, type ExecuteOptions } from "./orchestrator.js";
 import { type Engine, detectEngine } from "./runner.js";
 import { loadAgents } from "./agents.js";
-import { acquireLock, releaseLock, checkLock } from "./lock.js";
+import { RunContext } from "./context.js";
 import { log } from "./log.js";
 import { appendHistory } from "./history.js";
 
@@ -268,38 +268,16 @@ export class TaskQueue {
 			log.section(`Queue: Executing ${nextTask.id}`);
 			log.info("queue", `Goal: ${nextTask.goal}`);
 
-			let lockAcquired = false;
+			const ctx = RunContext.tryAcquire(this.cwd, { description: `queue:${nextTask.id}` });
+			if (!ctx) {
+				log.warn("queue", `Cannot acquire lock for ${nextTask.id}, skipping`);
+				const revertData = this.load();
+				const revertTask = revertData.tasks.find(t => t.id === nextTask.id);
+				if (revertTask) { revertTask.status = "pending"; revertTask.startedAt = undefined; }
+				this.save(revertData);
+				break;
+			}
 			try {
-				// Try to acquire lock normally first
-				const lockResult = acquireLock(this.cwd, `queue:${nextTask.id}`);
-				lockAcquired = lockResult.acquired;
-				if (!lockAcquired) {
-					// Lock exists — check if it's stale (dead PID / timed out).
-					// checkLock() auto-cleans stale locks and returns null if removed.
-					const existing = checkLock(this.cwd);
-					if (existing) {
-						// Lock is held by a live process we don't own — cannot proceed
-						log.warn("queue", `Lock held by PID ${existing.pid} (${existing.description}), cannot execute ${nextTask.id}`);
-						// Revert to pending so it can be retried later
-						const revertData = this.load();
-						const revertTask = revertData.tasks.find(t => t.id === nextTask.id);
-						if (revertTask) { revertTask.status = "pending"; revertTask.startedAt = undefined; }
-						this.save(revertData);
-						break;
-					}
-					// Stale lock was auto-cleaned by checkLock, retry acquire
-					const retry = acquireLock(this.cwd, `queue:${nextTask.id}`);
-					lockAcquired = retry.acquired;
-					if (!lockAcquired) {
-						log.warn("queue", `Still cannot acquire lock for ${nextTask.id}, skipping`);
-						const revertData = this.load();
-						const revertTask = revertData.tasks.find(t => t.id === nextTask.id);
-						if (revertTask) { revertTask.status = "pending"; revertTask.startedAt = undefined; }
-						this.save(revertData);
-						break;
-					}
-				}
-
 				// Load agents
 				const agentsDirs = [
 					path.join(this.cwd, "agents"),
@@ -415,10 +393,7 @@ export class TaskQueue {
 
 				log.warn("queue", `${nextTask.id} error: ${err.message ?? String(err)}`);
 			} finally {
-				// Always release lock
-				if (lockAcquired) {
-					releaseLock(this.cwd);
-				}
+				ctx.release();
 			}
 		}
 
