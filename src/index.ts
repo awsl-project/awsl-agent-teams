@@ -28,5 +28,5 @@ export {
 	createReportTool,
 } from "./tools.js";
 export { appendHistory, loadHistory, clearHistory, getHistoryStats, type HistoryEntry, type HistoryData, type HistoryStats } from "./history.js";
-export { startDashboard } from "./dashboard.js";
+export { startDashboard, isPortInUse } from "./dashboard.js";
 export { LogStream, getLogStream, type LogLine } from "./logstream.js";

@@ -65,6 +65,10 @@ When the user's message contains what appears to be multiple actionable requirem
 
 **When NOT to trigger:** follow-up questions, discussion points, clarifications, or single requirements with sub-points that form one logical task.
 
+### Commit after every completed feature
+
+When a feature is fully implemented (code + docs + build passes), immediately create a git commit. Do not wait or batch multiple features into one commit. One feature = one commit.
+
 ### Code conventions
 
 - TypeScript strict mode

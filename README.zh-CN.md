@@ -309,7 +309,11 @@ Planned 3 task(s):
 ```bash
 awsl dashboard              # 在 http://localhost:3120 打开
 awsl dashboard --port 8080  # 自定义端口
+awsl dashboard --bg         # 后台启动仪表盘进程，打印 URL 后退出
+awsl dashboard stop         # 停止后台仪表盘进程
 ```
+
+后台模式（`--bg`）将仪表盘服务器作为独立进程启动，PID 保存到 `.planning/.dashboard.pid`，打印 URL 和停止命令。使用 `awsl dashboard stop` 读取 PID 文件、终止进程并清理。
 
 功能：
 - **RPG 风格状态栏** — 完成/失败计数、总耗时、成功率（像素进度条）
@@ -530,6 +534,7 @@ skills:
 ├── CHECKPOINT.json       # 限额恢复检查点（自动管理）
 ├── QUEUE.json            # 任务队列（自动管理）
 ├── HISTORY.json          # 睡前模式执行历史（自动管理）
+├── .dashboard.pid        # 后台仪表盘进程 PID（自动管理）
 └── task_*-SUMMARY.md     # 每任务结果
 ```
 
@@ -672,6 +677,8 @@ awsl queue remove q_1                          # 移除任务
 awsl queue start --engine claude-code          # 开始执行
 awsl queue clear                               # 清空队列
 awsl dashboard [--port N]                      # 打开睡前模式像素风仪表盘（默认端口 3120）
+awsl dashboard --bg                            # 后台启动仪表盘进程
+awsl dashboard stop                            # 停止后台仪表盘进程
 ```
 
 ## 环境变量

@@ -12,6 +12,7 @@
  *   awsl init
  */
 
+import * as fs from "node:fs";
 import * as path from "node:path";
 import { loadAgents } from "./agents.js";
 import { executeTeam } from "./orchestrator.js";
@@ -22,7 +23,7 @@ import { acquireLock, releaseLock, forceReleaseLock, checkLock, formatLockInfo }
 import { log } from "./log.js";
 import { runInstaller } from "./install.js";
 import { TaskQueue } from "./queue.js";
-import { startDashboard } from "./dashboard.js";
+import { startDashboard, isPortInUse } from "./dashboard.js";
 
 function usage() {
 	console.error(`
@@ -39,6 +40,8 @@ Commands:
   run <goal>               Full pipeline (terminal, needs API key)
   agents                   List available agents
   dashboard [--port N]     Open the sleep mode pixel dashboard (default: 3120)
+  dashboard --bg           Start dashboard in background (detached)
+  dashboard stop           Stop background dashboard
 
 CC Hybrid Mode (no API key needed):
   1. CC writes plan        → .planning/PLAN.md  (CC does the thinking)
@@ -264,12 +267,75 @@ async function main() {
 	// ── Dashboard command ───────────────────────────────────
 	if (command === "dashboard") {
 		const { cwd } = parseCwdAndForce(args);
+		const subCmd = args[1];
 		let port = 3120;
+		let bg = false;
 		for (let i = 1; i < args.length; i++) {
 			if (args[i] === "--port" && i + 1 < args.length) {
 				port = parseInt(args[++i], 10);
+			} else if (args[i] === "--bg") {
+				bg = true;
 			}
 		}
+
+		// ── dashboard stop ──
+		if (subCmd === "stop") {
+			const pidFile = path.join(cwd, ".planning", ".dashboard.pid");
+			try {
+				const pid = parseInt(fs.readFileSync(pidFile, "utf-8").trim(), 10);
+				process.kill(pid);
+				fs.unlinkSync(pidFile);
+				console.log(`Dashboard stopped (pid ${pid}).`);
+			} catch {
+				console.error("No running dashboard found.");
+				process.exit(1);
+			}
+			process.exit(0);
+		}
+
+		// ── dashboard --bg ──
+		if (bg) {
+			// Check if already running via PID file
+			const pidFile = path.join(cwd, ".planning", ".dashboard.pid");
+			if (fs.existsSync(pidFile)) {
+				const existingPid = parseInt(fs.readFileSync(pidFile, "utf-8").trim(), 10);
+				try {
+					process.kill(existingPid, 0); // signal 0 = just check if alive
+					console.error(`Dashboard is already running (pid ${existingPid}).`);
+					console.error(`  Stop it first: awsl dashboard stop`);
+					process.exit(1);
+				} catch {
+					// Process not running, clean up stale PID file
+					fs.unlinkSync(pidFile);
+				}
+			}
+
+			// Check port availability
+			if (await isPortInUse(port)) {
+				console.error(`Port ${port} is already in use. Use --port to specify another port.`);
+				process.exit(1);
+			}
+
+			const { spawn } = await import("node:child_process");
+			const selfArgs = [process.argv[1], "dashboard", "--port", String(port), "--cwd", cwd];
+			const child = spawn(process.execPath, selfArgs, {
+				detached: true,
+				stdio: "ignore",
+				cwd,
+			});
+			child.unref();
+
+			// Save PID for stop command
+			const planDir = path.join(cwd, ".planning");
+			if (!fs.existsSync(planDir)) fs.mkdirSync(planDir, { recursive: true });
+			fs.writeFileSync(path.join(planDir, ".dashboard.pid"), String(child.pid));
+
+			console.log(`Dashboard started in background (pid ${child.pid}).`);
+			console.log(`  http://localhost:${port}`);
+			console.log(`  Stop: awsl dashboard stop`);
+			process.exit(0);
+		}
+
 		startDashboard(cwd, port);
 		// Keep server running — don't call process.exit()
 		return;
@@ -560,7 +626,6 @@ async function main() {
 
 	try {
 		if (executePlan) {
-			const fs = await import("node:fs");
 			const planPath = path.join(cwd, ".planning", "PLAN.md");
 			if (!fs.existsSync(planPath)) {
 				console.error("No plan found at .planning/PLAN.md.");

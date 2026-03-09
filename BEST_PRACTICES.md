@@ -52,6 +52,8 @@ awsl run "goal" --engine claude-code
 排队多任务，通宵执行     →  awsl queue add "goal" + awsl queue start
 一句话排队多任务         →  awsl queue plan "先做A，然后B，最后C"
 查看睡前模式仪表盘        →  awsl dashboard
+后台启动仪表盘            →  awsl dashboard --bg
+停止后台仪表盘            →  awsl dashboard stop
 ```
 
 ### 怎么选模式？
@@ -1064,13 +1066,33 @@ awsl dashboard
 - Timeline 标题栏有"Clear History"按钮，可一键清除所有执行历史（带确认对话框，操作不可逆）
 - 操作通过 REST API 完成，实时刷新显示
 
+**后台启动仪表盘：**
+```bash
+# 后台模式 — 启动后立即返回终端，PID 保存到 .planning/.dashboard.pid
+awsl dashboard --bg
+# 输出：Dashboard running at http://localhost:3120 (PID 12345)
+#       Stop with: awsl dashboard stop
+
+# 停止后台仪表盘
+awsl dashboard stop
+# 输出：Dashboard stopped (PID 12345)
+```
+
+适用场景：
+- 不想占用一个终端窗口来跑仪表盘
+- 搭配 `awsl queue start` 使用，先启动仪表盘再启动队列
+- 远程服务器上长期运行仪表盘
+
 **典型远程监控工作流：**
 ```bash
 # 在服务器上启动
-awsl queue start --engine claude-code &
-awsl dashboard --port 3120
+awsl dashboard --bg --port 3120
+awsl queue start --engine claude-code
 
 # 在手机/其他设备浏览器打开
 # http://server-ip:3120
 # → 看进度、收通知、加任务
+
+# 队列跑完后停止仪表盘
+awsl dashboard stop
 ```

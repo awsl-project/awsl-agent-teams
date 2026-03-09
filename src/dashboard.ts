@@ -183,10 +183,33 @@ export function startDashboard(cwd: string, port: number = 3120): http.Server {
 		res.end(JSON.stringify({ error: "Not found" }));
 	});
 
+	server.on("error", (err: NodeJS.ErrnoException) => {
+		if (err.code === "EADDRINUSE") {
+			log.warn("dashboard", `Port ${port} is already in use. Use --port to specify another port, or run 'awsl dashboard stop' first.`);
+			process.exit(1);
+		}
+		throw err;
+	});
+
 	server.listen(port, () => {
 		log.info("dashboard", `Dashboard running at http://localhost:${port}`);
 		log.info("dashboard", `API: /api/history, /api/stats, /api/queue, /api/logs (SSE), /api/queue/add|remove|clear, /api/history/clear`);
 	});
 
 	return server;
+}
+
+/** Check if a port is in use. Resolves to true if occupied. */
+export function isPortInUse(port: number): Promise<boolean> {
+	return new Promise((resolve) => {
+		const net = require("node:net") as typeof import("node:net");
+		const tester = net.createServer()
+			.once("error", (err: NodeJS.ErrnoException) => {
+				resolve(err.code === "EADDRINUSE");
+			})
+			.once("listening", () => {
+				tester.close(() => resolve(false));
+			})
+			.listen(port);
+	});
 }

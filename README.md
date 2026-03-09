@@ -309,7 +309,11 @@ Pixel-art retro dashboard to visualize your overnight build history.
 ```bash
 awsl dashboard              # Open at http://localhost:3120
 awsl dashboard --port 8080  # Custom port
+awsl dashboard --bg         # Start as background process, print URL and exit
+awsl dashboard stop         # Stop background dashboard process
 ```
+
+Background mode (`--bg`) detaches the dashboard server, saves the PID to `.planning/.dashboard.pid`, and prints the URL and stop command. Use `awsl dashboard stop` to read the PID file, kill the process, and clean up.
 
 Features:
 - **RPG-style stats** — completed/failed counts, total time, success rate with pixel progress bars
@@ -527,6 +531,7 @@ State persists across sessions:
 ├── CHECKPOINT.json       # Rate-limit recovery checkpoint (auto-managed)
 ├── QUEUE.json            # Task queue for sleep mode (auto-managed)
 ├── HISTORY.json          # Sleep mode execution history (auto-managed)
+├── .dashboard.pid        # Background dashboard process PID (auto-managed)
 ├── research/
 │   ├── architecture.md   # Codebase analysis
 │   └── conventions.md    # Code style analysis
@@ -672,6 +677,8 @@ awsl queue remove q_1                         # Remove a task
 awsl queue start --engine claude-code         # Start queue execution
 awsl queue clear                              # Clear all tasks
 awsl dashboard [--port N]                     # Open the sleep mode pixel dashboard (default: 3120)
+awsl dashboard --bg                          # Start dashboard as background process
+awsl dashboard stop                          # Stop background dashboard process
 ```
 
 ## Environment Variables
