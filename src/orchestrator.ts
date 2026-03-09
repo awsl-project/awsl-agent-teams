@@ -484,7 +484,7 @@ Call the report tool with your JSON plan:
 
 				// Conductor: atomic git commit per task
 				if (autoCommit) {
-					const committed = atomicCommit(cwd, task.id, task.description.slice(0, 50));
+					const committed = atomicCommit(cwd, task.id, task.description.slice(0, 50), task.files);
 					if (committed) log.info("git", `Committed: ${task.id}`);
 				}
 
@@ -555,7 +555,8 @@ Call the report tool with your JSON plan:
 		if (autoCommit) {
 			const waveSuccess = wave.every(t => t.status === "done" || t.status === "verified");
 			if (waveSuccess) {
-				atomicCommit(cwd, `wave_${wi + 1}`, `Wave ${wi + 1}: ${wave.map(t => t.id).join(", ")}`);
+				const waveFiles = wave.flatMap(t => t.files ?? []);
+				atomicCommit(cwd, `wave_${wi + 1}`, `Wave ${wi + 1}: ${wave.map(t => t.id).join(", ")}`, waveFiles);
 				log.info("git", `Checkpoint: wave ${wi + 1}`);
 				await emit(hooks, { type: "checkpoint", wave: wi, tasks: wave, memory });
 			}
@@ -668,7 +669,7 @@ Call the report tool with your JSON plan:
 				task.result = result.result;
 				task.error = undefined;
 				memory.set(`result:${task.id}`, result.result, task.assignee);
-				if (autoCommit) atomicCommit(cwd, task.id, `retry: ${task.description.slice(0, 50)}`);
+				if (autoCommit) atomicCommit(cwd, task.id, `retry: ${task.description.slice(0, 50)}`, task.files);
 			}
 		}
 	}
@@ -721,7 +722,7 @@ Call the report tool with your JSON plan:
 							task.status = "done";
 							task.result = result.result;
 							memory.set(`result:${task.id}`, result.result, task.assignee);
-							if (autoCommit) atomicCommit(cwd, task.id, task.description.slice(0, 50));
+							if (autoCommit) atomicCommit(cwd, task.id, task.description.slice(0, 50), task.files);
 						} else {
 							task.status = "failed";
 							task.error = result.error ?? result.result;

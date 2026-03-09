@@ -162,19 +162,74 @@ export function parseStructuredTasks(raw: string): StructuredTask[] {
 
 import { execSync } from "node:child_process";
 
-export function atomicCommit(cwd: string, taskId: string, message: string): boolean {
+/**
+ * Collect files that actually changed in the working tree (staged + unstaged + untracked).
+ */
+function changedFiles(cwd: string): string[] {
 	try {
-		// Stage all changes
-		execSync("git add -A", { cwd, stdio: "pipe" });
-		// Check if there's anything to commit
-		const status = execSync("git status --porcelain", { cwd, encoding: "utf-8" }).trim();
-		if (!status) return false;
-		// Commit
+		// --porcelain gives "XY filename" lines; strip status prefix
+		const out = execSync("git status --porcelain", { cwd, encoding: "utf-8" }).trim();
+		if (!out) return [];
+		return out.split("\n").map(l => l.slice(3).trim()).filter(Boolean);
+	} catch {
+		return [];
+	}
+}
+
+/**
+ * Atomic commit scoped to task-declared files.
+ *
+ * Staging strategy (from safest to broadest):
+ *   1. If `taskFiles` is provided and non-empty, only stage those files
+ *      (intersected with actual working-tree changes to avoid errors).
+ *   2. Otherwise fall back to staging every changed file (`git add` each).
+ *
+ * This replaces the old `git add -A` which could capture unrelated dirty files.
+ */
+export function atomicCommit(cwd: string, taskId: string, message: string, taskFiles?: string[]): boolean {
+	try {
+		const dirty = changedFiles(cwd);
+		if (dirty.length === 0) return false;
+
+		let toStage: string[];
+
+		if (taskFiles && taskFiles.length > 0) {
+			// Normalize declared paths and intersect with actual changes
+			const declared = new Set(taskFiles.map(f => f.replace(/\\/g, "/")));
+			toStage = dirty.filter(f => {
+				const norm = f.replace(/\\/g, "/");
+				// Exact match or the dirty file is under a declared directory
+				return declared.has(norm) || [...declared].some(d => norm.startsWith(d + "/") || d.startsWith(norm + "/"));
+			});
+			// Always include .planning/ files produced by the orchestrator itself
+			for (const f of dirty) {
+				const norm = f.replace(/\\/g, "/");
+				if (norm.startsWith(".planning/") && !toStage.includes(f)) {
+					toStage.push(f);
+				}
+			}
+		} else {
+			// No declared files — stage all changed files (still per-file, not -A)
+			toStage = dirty;
+		}
+
+		if (toStage.length === 0) return false;
+
+		// Stage files individually
+		for (const f of toStage) {
+			execSync(`git add -- ${JSON.stringify(f)}`, { cwd, stdio: "pipe" });
+		}
+
+		// Check if anything actually staged
+		const staged = execSync("git diff --cached --name-only", { cwd, encoding: "utf-8" }).trim();
+		if (!staged) return false;
+
 		const commitMsg = `${taskId}: ${message}`;
 		execSync(`git commit -m ${JSON.stringify(commitMsg)}`, {
 			cwd,
 			stdio: "pipe",
 		});
+		log.info("git", `Committed ${toStage.length} file(s): ${toStage.slice(0, 5).join(", ")}${toStage.length > 5 ? "..." : ""}`);
 		return true;
 	} catch {
 		return false;
