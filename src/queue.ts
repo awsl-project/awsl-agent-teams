@@ -12,7 +12,7 @@ import { execSync, spawn } from "node:child_process";
 import { executeTeam, type ExecuteOptions } from "./orchestrator.js";
 import { type Engine, detectEngine } from "./runner.js";
 import { loadAgents } from "./agents.js";
-import { acquireLock, releaseLock, forceReleaseLock } from "./lock.js";
+import { acquireLock, releaseLock, checkLock } from "./lock.js";
 import { log } from "./log.js";
 import { appendHistory } from "./history.js";
 
@@ -70,7 +70,7 @@ export class TaskQueue {
 	 */
 	add(goal: string, options?: QueueTask["options"], extra?: { engine?: Engine; dependsOn?: string[] }): QueueTask {
 		const data = this.load();
-		const id = `q_${data.tasks.length + 1}`;
+		const id = `q_${this.nextId(data)}`;
 		const task: QueueTask = {
 			id,
 			goal,
@@ -132,8 +132,14 @@ export class TaskQueue {
 
 		while (true) {
 			const data = this.load();
+			const pendingTasks = data.tasks.filter(t => t.status === "pending");
 
-			// Find next runnable pending task
+			if (pendingTasks.length === 0) {
+				// Genuinely nothing left to run
+				break;
+			}
+
+			// Find next runnable pending task (all deps satisfied)
 			const nextTask = data.tasks.find((task, idx) => {
 				if (task.status !== "pending") return false;
 
@@ -158,7 +164,20 @@ export class TaskQueue {
 			});
 
 			if (!nextTask) {
-				// No runnable task — we're done
+				// Pending tasks exist but none are runnable — dependency deadlock
+				const blocked = pendingTasks.map(t => `${t.id} (deps: ${t.dependsOn?.join(",") ?? "none"})`);
+				log.warn("queue", `Dependency deadlock: ${blocked.length} task(s) blocked:\n  ${blocked.join("\n  ")}`);
+				// Mark blocked tasks as failed
+				for (const t of pendingTasks) {
+					const freshData = this.load();
+					const freshTask = freshData.tasks.find(ft => ft.id === t.id);
+					if (freshTask && freshTask.status === "pending") {
+						freshTask.status = "failed";
+						freshTask.completedAt = new Date().toISOString();
+						freshTask.error = "Dependency deadlock: required dependency failed or missing";
+						this.save(freshData);
+					}
+				}
 				break;
 			}
 
@@ -172,15 +191,34 @@ export class TaskQueue {
 
 			let lockAcquired = false;
 			try {
-				// Acquire lock (force to override stale locks)
-				forceReleaseLock(this.cwd);
+				// Try to acquire lock normally first
 				const lockResult = acquireLock(this.cwd, `queue:${nextTask.id}`);
 				lockAcquired = lockResult.acquired;
 				if (!lockAcquired) {
-					log.warn("queue", `Could not acquire lock for ${nextTask.id}, forcing...`);
-					forceReleaseLock(this.cwd);
+					// Lock exists — check if it's stale (dead PID / timed out).
+					// checkLock() auto-cleans stale locks and returns null if removed.
+					const existing = checkLock(this.cwd);
+					if (existing) {
+						// Lock is held by a live process we don't own — cannot proceed
+						log.warn("queue", `Lock held by PID ${existing.pid} (${existing.description}), cannot execute ${nextTask.id}`);
+						// Revert to pending so it can be retried later
+						const revertData = this.load();
+						const revertTask = revertData.tasks.find(t => t.id === nextTask.id);
+						if (revertTask) { revertTask.status = "pending"; revertTask.startedAt = undefined; }
+						this.save(revertData);
+						break;
+					}
+					// Stale lock was auto-cleaned by checkLock, retry acquire
 					const retry = acquireLock(this.cwd, `queue:${nextTask.id}`);
 					lockAcquired = retry.acquired;
+					if (!lockAcquired) {
+						log.warn("queue", `Still cannot acquire lock for ${nextTask.id}, skipping`);
+						const revertData = this.load();
+						const revertTask = revertData.tasks.find(t => t.id === nextTask.id);
+						if (revertTask) { revertTask.status = "pending"; revertTask.startedAt = undefined; }
+						this.save(revertData);
+						break;
+					}
 				}
 
 				// Load agents
@@ -204,9 +242,8 @@ export class TaskQueue {
 					replan: nextTask.options.replan ?? true,
 					qualityGate: true,
 					engine,
-					// These fields will be available once task_3 is complete:
-					// maxRateLimitRetries: 20,
-					// resumeFromCheckpoint: true,
+					maxRateLimitRetries: 20,
+					resumeFromCheckpoint: true,
 				};
 
 				// Execute team
@@ -363,10 +400,11 @@ ${description}`;
 			throw new Error("LLM returned empty or invalid task list");
 		}
 
-		// Add tasks to queue, mapping position references to actual IDs
+		// Add tasks to queue, mapping position references to actual IDs.
+		// We pre-compute the IDs so dependency refs can resolve correctly.
 		const added: QueueTask[] = [];
 		const data = this.load();
-		const baseIndex = data.tasks.length; // offset for existing tasks
+		const firstId = this.nextId(data);
 
 		for (let i = 0; i < planned.length; i++) {
 			const p = planned[i];
@@ -379,7 +417,7 @@ ${description}`;
 					// Position reference (1-indexed) → actual queue ID
 					const refIdx = parseInt(ref, 10);
 					if (!isNaN(refIdx) && refIdx >= 1 && refIdx <= i) {
-						return `q_${baseIndex + refIdx}`;
+						return `q_${firstId + refIdx - 1}`;
 					}
 					// Already a q_N reference
 					if (ref.startsWith("q_")) return ref;
@@ -453,6 +491,21 @@ ${description}`;
 			});
 			child.on("error", (err) => reject(err));
 		});
+	}
+
+	// ─── Private helpers ─────────────────────────────────────
+
+	/** Generate next unique ID by finding max existing q_N and adding 1. */
+	private nextId(data: QueueData): number {
+		let max = 0;
+		for (const t of data.tasks) {
+			const m = t.id.match(/^q_(\d+)$/);
+			if (m) {
+				const n = parseInt(m[1], 10);
+				if (n > max) max = n;
+			}
+		}
+		return max + 1;
 	}
 
 	// ─── Private persistence ─────────────────────────────────
