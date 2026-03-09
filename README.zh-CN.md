@@ -301,6 +301,10 @@ Planned 3 task(s):
 
 `queue start` 运行时，带有未来 `runAt` 时间戳的任务会被跳过，直到到达调度时间（每 30 秒轮询一次）。`queue list` 和 `queue show` 会显示调度时间。
 
+### 自动提交
+
+每个队列任务完成后（无论成功或失败），会自动将 QUEUE.json 和 HISTORY.json 的状态变更提交到 git。这样即使通宵无人值守执行，也可以通过 `git log` 追踪队列进度。
+
 ### 限额自动恢复
 
 执行过程中遇到 token 限额时：

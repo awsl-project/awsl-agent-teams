@@ -301,6 +301,10 @@ Ordering keywords are automatically detected:
 
 When `queue start` runs, tasks with a `runAt` timestamp in the future are skipped until their scheduled time arrives (polling every 30 seconds). `queue list` and `queue show` display the scheduled time.
 
+### Auto-Commit
+
+Each queue task automatically commits QUEUE.json and HISTORY.json to git upon completion (whether success or failure). This lets you track queue progress via `git log` even when running unattended overnight.
+
 ### Rate Limit Recovery
 
 When a token rate limit is hit during execution:
