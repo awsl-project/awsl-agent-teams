@@ -127,6 +127,22 @@ export class TaskQueue {
 	}
 
 	/**
+	 * Update the runAt time for a pending task. Pass null to clear.
+	 */
+	setRunAt(id: string, runAt: string | null): boolean {
+		const data = this.load();
+		const task = data.tasks.find(t => t.id === id);
+		if (!task || task.status !== "pending") return false;
+		if (runAt) {
+			task.runAt = runAt;
+		} else {
+			delete task.runAt;
+		}
+		this.save(data);
+		return true;
+	}
+
+	/**
 	 * Main daemon loop — execute pending tasks sequentially.
 	 */
 	async start(defaultEngine?: Engine): Promise<void> {

@@ -334,6 +334,7 @@ Features:
 - **Project sidebar** — All projects with color-coded badges and task counts
 - **Queue monitor** — Live view of current queue status with auto-refresh (30s)
 - **Queue operations** — Add, remove, and clear tasks directly from the dashboard UI
+- **Queue scheduling** — Datetime picker on the add-task form to set `runAt`; queue table shows a "Run At" column with effective time (own time shown directly, inherited from dependency chain shown with arrow indicator); click a pending task's time cell to edit/clear the scheduled time
 - **Clear History** — One-click button to clear all execution history (deletes HISTORY.json)
 - **Live log stream** — Real-time SSE-based log panel showing agent stdout/stderr as it happens
 - **Browser notifications** — Alerts on task failure and queue completion (requires permission)
@@ -347,6 +348,7 @@ API endpoints:
 - `POST /api/queue/add` — add task `{goal, engine?, quick?, dependsOn?}`
 - `DELETE /api/queue/remove?id=q_1` — remove a task
 - `POST /api/queue/clear` — clear all tasks
+- `POST /api/queue/set-time` — set/change/clear scheduled time `{id, runAt}`
 - `POST /api/history/clear` — clear execution history
 
 ## Enable AWSL in Any Project

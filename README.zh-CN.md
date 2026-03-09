@@ -334,6 +334,7 @@ awsl dashboard stop         # 停止后台仪表盘进程
 - **项目侧边栏** — 所有项目列表，彩色徽章 + 任务计数
 - **队列监控** — 当前队列状态实时刷新（30 秒间隔）
 - **队列操作** — 直接在看板上添加、删除、清空队列任务
+- **队列定时调度** — 添加任务表单中的日期时间选择器可设置 `runAt`；队列表格新增"执行时间"列，显示生效时间（任务自身时间直接显示，从依赖链继承的时间带箭头标识）；点击 pending 任务的时间单元格可编辑/清除调度时间
 - **清除历史** — 一键清除所有执行历史记录（删除 HISTORY.json）
 - **实时日志流** — 基于 SSE 的实时日志面板，展示 agent 的 stdout/stderr
 - **浏览器通知** — 任务失败和队列完成时弹出提醒（需授权）
@@ -347,6 +348,7 @@ API 端点：
 - `POST /api/queue/add` — 添加任务 `{goal, engine?, quick?, dependsOn?}`
 - `DELETE /api/queue/remove?id=q_1` — 删除任务
 - `POST /api/queue/clear` — 清空所有任务
+- `POST /api/queue/set-time` — 设置/修改/清除调度时间 `{id, runAt}`
 - `POST /api/history/clear` — 清除执行历史
 
 ## 在任意项目中启用 AWSL

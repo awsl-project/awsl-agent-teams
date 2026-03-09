@@ -131,16 +131,39 @@ export function startDashboard(cwd: string, port: number = 3120): http.Server {
 			req.on("data", (chunk: Buffer) => { body += chunk.toString(); });
 			req.on("end", () => {
 				try {
-					const { goal, engine, quick, dependsOn } = JSON.parse(body);
+					const { goal, engine, quick, dependsOn, runAt } = JSON.parse(body);
 					if (!goal || typeof goal !== "string") {
 						res.writeHead(400, { "Content-Type": "application/json" });
 						res.end(JSON.stringify({ error: "goal is required" }));
 						return;
 					}
 					const queue = new TaskQueue(cwd);
-					const task = queue.add(goal, { quick: !!quick }, { engine, dependsOn });
+					const task = queue.add(goal, { quick: !!quick }, { engine, dependsOn, runAt });
 					res.writeHead(200, { "Content-Type": "application/json" });
 					res.end(JSON.stringify(task));
+				} catch {
+					res.writeHead(400, { "Content-Type": "application/json" });
+					res.end(JSON.stringify({ error: "Invalid JSON body" }));
+				}
+			});
+			return;
+		}
+
+		if (req.method === "POST" && url.pathname === "/api/queue/set-time") {
+			let body = "";
+			req.on("data", (chunk: Buffer) => { body += chunk.toString(); });
+			req.on("end", () => {
+				try {
+					const { id, runAt } = JSON.parse(body);
+					if (!id) {
+						res.writeHead(400, { "Content-Type": "application/json" });
+						res.end(JSON.stringify({ error: "id is required" }));
+						return;
+					}
+					const queue = new TaskQueue(cwd);
+					const ok = queue.setRunAt(id, runAt || null);
+					res.writeHead(ok ? 200 : 404, { "Content-Type": "application/json" });
+					res.end(JSON.stringify({ updated: ok }));
 				} catch {
 					res.writeHead(400, { "Content-Type": "application/json" });
 					res.end(JSON.stringify({ error: "Invalid JSON body" }));

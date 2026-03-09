@@ -701,6 +701,7 @@ a { color: var(--blue); text-decoration: none; }
     <h2>&#128221; Queue</h2>
     <div class="queue-form">
       <input type="text" id="qGoal" placeholder="Task goal..." onkeydown="if(event.key==='Enter')addTask()">
+      <input type="datetime-local" id="qRunAt" title="Scheduled time (optional)" style="font-family:var(--font);font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--ink);outline:none;width:170px;">
       <label><input type="checkbox" id="qQuick"> quick</label>
       <button onclick="addTask()">Add</button>
     </div>
@@ -949,6 +950,43 @@ function renderTimeline(entries) {
   }
 }
 
+function getEffectiveRunAt(task, tasks) {
+  // Own runAt takes priority
+  if (task.runAt) return { time: task.runAt, inherited: false };
+  // Check dependency chain — find the latest runAt from deps
+  if (task.dependsOn && task.dependsOn.length > 0) {
+    var latest = null;
+    for (var i = 0; i < task.dependsOn.length; i++) {
+      var dep = task.dependsOn[i];
+      if (dep === 'all') {
+        // Check all prior tasks
+        for (var j = 0; j < tasks.length; j++) {
+          if (tasks[j].id === task.id) break;
+          var pr = getEffectiveRunAt(tasks[j], tasks);
+          if (pr && (!latest || pr.time > latest)) latest = pr.time;
+        }
+      } else {
+        var dt = tasks.find(function(t) { return t.id === dep; });
+        if (dt) {
+          var dr = getEffectiveRunAt(dt, tasks);
+          if (dr && (!latest || dr.time > latest)) latest = dr.time;
+        }
+      }
+    }
+    if (latest) return { time: latest, inherited: true };
+  }
+  return null;
+}
+
+function fmtRunAt(info) {
+  if (!info) return '-';
+  var d = new Date(info.time);
+  var s = String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0')
+    + ' ' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+  if (info.inherited) return '<span style="color:var(--ink4)" title="Inherited from dependency">' + s + ' &#8593;</span>';
+  return s;
+}
+
 function renderQueue(tasks) {
   var el = document.getElementById('queueContent');
   var actions = document.getElementById('queueActions');
@@ -957,7 +995,7 @@ function renderQueue(tasks) {
     actions.style.display = 'none';
     return;
   }
-  var h = '<table class="q-table"><thead><tr><th>ID</th><th>Goal</th><th>Status</th><th>Deps</th><th></th></tr></thead><tbody>';
+  var h = '<table class="q-table"><thead><tr><th>ID</th><th>Goal</th><th>Status</th><th>Run At</th><th>Deps</th><th></th></tr></thead><tbody>';
   for (var i = 0; i < tasks.length; i++) {
     var t = tasks[i], st = '';
     if (t.status === 'running') st = '<span class="q-running">\u25B6 running</span>';
@@ -966,7 +1004,12 @@ function renderQueue(tasks) {
     else st = '\u00B7 ' + (t.status || 'pending');
     var deps = t.dependsOn && t.dependsOn.length > 0 ? esc(t.dependsOn.join(', ')) : '-';
     var del = t.status === 'pending' ? '<button class="q-del" onclick="removeTask(\'' + esc(t.id) + '\')">\u00D7</button>' : '';
-    h += '<tr class="' + (t.status||'pending') + '"><td>' + esc(t.id) + '</td><td title="' + esc(t.goal||'').replace(/"/g,'&quot;') + '">' + esc(trunc(t.goal,50)) + '</td><td>' + st + '</td><td>' + deps + '</td><td>' + del + '</td></tr>';
+    var effTime = getEffectiveRunAt(t, tasks);
+    var timeCell = fmtRunAt(effTime);
+    if (t.status === 'pending') {
+      timeCell = '<span class="q-time-edit" style="cursor:pointer;border-bottom:1px dashed var(--ink4)" onclick="editRunAt(\'' + esc(t.id) + '\',\'' + esc(t.runAt||'') + '\')" title="Click to set/change time">' + timeCell + '</span>';
+    }
+    h += '<tr class="' + (t.status||'pending') + '"><td>' + esc(t.id) + '</td><td title="' + esc(t.goal||'').replace(/"/g,'&quot;') + '">' + esc(trunc(t.goal,50)) + '</td><td>' + st + '</td><td>' + timeCell + '</td><td>' + deps + '</td><td>' + del + '</td></tr>';
   }
   h += '</tbody></table>';
   el.innerHTML = h;
@@ -1131,15 +1174,72 @@ async function addTask() {
   var goal = document.getElementById('qGoal').value.trim();
   if (!goal) return;
   var quick = document.getElementById('qQuick').checked;
+  var runAtInput = document.getElementById('qRunAt').value;
+  var runAt = runAtInput ? new Date(runAtInput).toISOString() : undefined;
   try {
     await fetch('/api/queue/add', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ goal: goal, quick: quick })
+      body: JSON.stringify({ goal: goal, quick: quick, runAt: runAt })
     });
   } catch(e) {}
   document.getElementById('qGoal').value = '';
+  document.getElementById('qRunAt').value = '';
   if (await load()) render();
+}
+
+async function editRunAt(id, currentRunAt) {
+  var input = document.createElement('input');
+  input.type = 'datetime-local';
+  if (currentRunAt) {
+    var d = new Date(currentRunAt);
+    input.value = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0')
+      + 'T' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+  }
+  // Create a temporary dialog
+  var overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.3);z-index:300;display:flex;align-items:center;justify-content:center;';
+  var box = document.createElement('div');
+  box.style.cssText = 'background:var(--card);border-radius:12px;padding:20px;box-shadow:0 8px 32px rgba(0,0,0,0.15);min-width:280px;font-family:var(--font);';
+  box.innerHTML = '<div style="font-size:14px;font-weight:600;margin-bottom:12px;">Set run time for ' + esc(id) + '</div>';
+  input.style.cssText = 'font-family:var(--font);font-size:13px;padding:6px 10px;border:1px solid var(--border);border-radius:8px;width:100%;margin-bottom:12px;';
+  box.appendChild(input);
+  var btns = document.createElement('div');
+  btns.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;';
+  var clearBtn = document.createElement('button');
+  clearBtn.textContent = 'Clear';
+  clearBtn.style.cssText = 'font-family:var(--font);font-size:12px;padding:6px 12px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--red);cursor:pointer;';
+  var cancelBtn = document.createElement('button');
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.style.cssText = 'font-family:var(--font);font-size:12px;padding:6px 12px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--ink2);cursor:pointer;';
+  var saveBtn = document.createElement('button');
+  saveBtn.textContent = 'Save';
+  saveBtn.style.cssText = 'font-family:var(--font);font-size:12px;padding:6px 12px;border:1px solid var(--blue);border-radius:8px;background:var(--blue);color:#fff;cursor:pointer;';
+  btns.appendChild(clearBtn); btns.appendChild(cancelBtn); btns.appendChild(saveBtn);
+  box.appendChild(btns);
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+
+  function close() { document.body.removeChild(overlay); }
+  overlay.addEventListener('click', function(e) { if (e.target === overlay) close(); });
+  cancelBtn.onclick = close;
+
+  saveBtn.onclick = async function() {
+    var val = input.value;
+    if (val) {
+      await fetch('/api/queue/set-time', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: id, runAt: new Date(val).toISOString() }) });
+    }
+    close();
+    if (await load()) render();
+  };
+
+  clearBtn.onclick = async function() {
+    await fetch('/api/queue/set-time', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: id, runAt: null }) });
+    close();
+    if (await load()) render();
+  };
+
+  input.focus();
 }
 
 async function removeTask(id) {
