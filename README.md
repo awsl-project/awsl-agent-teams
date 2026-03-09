@@ -7,6 +7,32 @@ Two modes, one goal: **ship quality code fast**.
 
 > **[Installation Guide](./INSTALL.md)** | **[Best Practices](./BEST_PRACTICES.md)**
 
+## Why AWSL?
+
+### The Problem
+
+When you use Claude Code to build a project, you're working within a single conversation — one context window, one agent, one shot. This works fine for small tasks, but as projects grow larger, problems emerge:
+
+- **Context window exhaustion** — Long sessions accumulate noise. The LLM's attention degrades as conversation grows, leading to forgotten requirements, repeated mistakes, and hallucinated state.
+- **No parallelism** — Tasks that could run concurrently are executed sequentially. A 10-task project takes 10x the time of one task.
+- **No built-in quality gate** — The same agent that writes the code also "reviews" it. There's no adversarial check, no independent verification. Bugs slip through because the writer is the checker.
+- **No recovery from failure** — If Claude Code crashes, you lose the entire conversation context. You restart from scratch, re-explaining everything.
+- **Monolithic commits** — An entire feature lands in one giant commit. If something breaks, you can't bisect. If you want to revert part of it, you can't.
+
+### The Idea
+
+AWSL treats software development the way a real engineering team works — **specialized roles, parallel execution, independent review, and persistent state**.
+
+Instead of one agent doing everything in a single conversation, AWSL decomposes your goal into a **Directed Acyclic Graph (DAG)** of micro-tasks, assigns each to a specialized agent (coder, reviewer, tester, architect), and executes them in **topologically-sorted waves** where independent tasks run concurrently.
+
+Every agent starts with a **fresh 200K token context** — no accumulated noise, no degraded attention. Cross-task knowledge flows through file artifacts and structured memory, not through an ever-growing chat history.
+
+### Design Philosophy
+
+**Conductor + Guardian: Separation of Concerns**
+
+AWSL's architecture splits orchestration into two independent layers:
+
 ```
   Conductor (macro)              Guardian (micro)
   ┌──────────────────┐          ┌──────────────────┐
@@ -18,6 +44,55 @@ Two modes, one goal: **ship quality code fast**.
   │ Dynamic re-plan   │          │ Micro-task sizing│
   └──────────────────┘          └──────────────────┘
 ```
+
+- **Conductor** handles the **what** and **when** — decompose the goal, schedule waves, manage dependencies, checkpoint progress, recover from failures.
+- **Guardian** handles the **how** — enforce TDD for coders, run two-stage review for reviewers, guide Socratic exploration for architects. Guardian skills are injected per-role automatically.
+
+This separation means orchestration logic and quality enforcement evolve independently. You can customize agents without touching the scheduler, or change the execution strategy without affecting quality gates.
+
+**File-as-State: Crash-Proof by Design**
+
+All critical state lives in the `.planning/` directory as plain files — task plans, execution progress, completion summaries, verification results. Nothing important exists only in memory. If the process dies, the next run reads the files and picks up where it left off. No conversation replay, no re-prompting.
+
+**Zero API Key Required**
+
+Both modes piggyback on your existing Claude Code subscription. CC Mode uses Claude Code's built-in Agent tool; Terminal Mode spawns `claude -p` subprocesses. No separate Anthropic API key, no token billing surprises.
+
+### What You Get
+
+| Advantage | How |
+|-----------|-----|
+| **4-10x faster for large projects** | Wave parallelism — independent tasks run concurrently via parallel agents |
+| **Higher code quality** | Writer ≠ Reviewer. Dedicated reviewer agent catches spec deviations, security issues, and code smells that the coder misses |
+| **Fresh context per task** | Every agent gets a clean 200K token window. No context rot, no attention degradation |
+| **Crash recovery** | `.planning/` persists all state. Process dies → restart → resume from last checkpoint |
+| **Bisectable git history** | One atomic commit per completed task. `git bisect` works. Partial reverts work |
+| **Self-healing** | Test failure → auto-fix agent → re-verify (up to 3 rounds). Task failure → retry with error context (up to 2x) → replan with different approach |
+| **Spec compliance** | Reviewer→Fixer loop catches requirements that single-pass sessions miss. Benchmarks show terminal mode produces more spec-compliant code |
+| **No vendor lock-in** | Built-in engine supports any LLM provider (Anthropic, OpenAI, etc.). Claude Code engine uses your existing subscription |
+| **Customizable teams** | Drop a markdown file in `agents/` to create a domain expert. Frontend specialist, security reviewer, API expert — your team, your rules |
+
+### Benchmarks: Single Agent vs Agent Team
+
+Real benchmark on the same task — **User Auth + TODO REST API** (Express + TypeScript + Zod + JWT + bcrypt + Vitest):
+
+```
+                        Single CC Session       AWSL Terminal Mode
+                        ─────────────────       ──────────────────
+Time                    ~6 min                  ~23 min
+Tests                   58 tests                47 tests
+Source code             526 lines (9 files)     378 lines (10 files)
+Git history             1 commit                17 commits (per-task)
+Spec compliance         Partial                 High (reviewer loop)
+Config management       JWT secret hardcoded    Extracted to config.ts
+Store efficiency        Linear scan O(n)        Indexed Map O(1)
+Code duplication        5+ repeated patterns    Minimal
+Self-healing            None                    3 auto-fix rounds
+```
+
+Terminal mode is slower but produces **leaner, cleaner, more spec-compliant code** — that's the value of the reviewer→fixer feedback loop.
+
+CC mode is **4x faster** and writes more tests — ideal when a human is in the loop to catch what the single pass misses.
 
 ## Two Modes
 
