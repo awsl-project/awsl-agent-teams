@@ -196,6 +196,7 @@ awsl run "目标" --engine claude-code [选项]
 | **跨波次上下文** | 第 N+1 波次的智能体可看到第 N 波次的实际文件内容 |
 | **限额自动恢复** | Token 限额 → 保存检查点 → 指数退避等待（1m→2m→5m→10m→15m）→ 自动重试（最多 20 次） |
 | **任务队列（睡前模式）** | 排队多个目标 → `awsl queue start` → 无人值守顺序执行，自带限额恢复 |
+| **灵活计划解析** | 规划师输出支持 JSON、XML、Markdown 三种格式 — 不同模型的格式差异也能正确解析 |
 
 ### 输出示例
 
@@ -314,6 +315,7 @@ awsl dashboard --port 8080  # 自定义端口
 - **项目侧边栏** — 所有项目列表，彩色徽章 + 任务计数
 - **队列监控** — 当前队列状态实时刷新（30 秒间隔）
 - **队列操作** — 直接在看板上添加、删除、清空队列任务
+- **清除历史** — 一键清除所有执行历史记录（删除 HISTORY.json）
 - **实时日志流** — 基于 SSE 的实时日志面板，展示 agent 的 stdout/stderr
 - **浏览器通知** — 任务失败和队列完成时弹出提醒（需授权）
 - **像素艺术风格** — Press Start 2P 字体、复古动画
@@ -326,6 +328,7 @@ API 端点：
 - `POST /api/queue/add` — 添加任务 `{goal, engine?, quick?, dependsOn?}`
 - `DELETE /api/queue/remove?id=q_1` — 删除任务
 - `POST /api/queue/clear` — 清空所有任务
+- `POST /api/history/clear` — 清除执行历史
 
 ## 架构
 

@@ -196,6 +196,7 @@ Phase 4:  Re-plan       on task failure → retry 2x → replan with different a
 | **Cross-wave context** | Wave N+1 agents see actual file contents from Wave N |
 | **Rate limit recovery** | Token limit hit → save checkpoint → exponential backoff (1m→2m→5m→10m→15m) → auto-retry (max 20) |
 | **Task queue (sleep mode)** | Queue multiple goals → `awsl queue start` → unattended sequential execution with auto rate-limit recovery |
+| **Flexible plan parsing** | Planner output parsed as JSON, XML, or markdown — robust against format variations from different models |
 
 ### Example Output
 
@@ -314,6 +315,7 @@ Features:
 - **Project sidebar** — All projects with color-coded badges and task counts
 - **Queue monitor** — Live view of current queue status with auto-refresh (30s)
 - **Queue operations** — Add, remove, and clear tasks directly from the dashboard UI
+- **Clear History** — One-click button to clear all execution history (deletes HISTORY.json)
 - **Live log stream** — Real-time SSE-based log panel showing agent stdout/stderr as it happens
 - **Browser notifications** — Alerts on task failure and queue completion (requires permission)
 - **Pixel art aesthetic** — Press Start 2P font, retro animations
@@ -326,6 +328,7 @@ API endpoints:
 - `POST /api/queue/add` — add task `{goal, engine?, quick?, dependsOn?}`
 - `DELETE /api/queue/remove?id=q_1` — remove a task
 - `POST /api/queue/clear` — clear all tasks
+- `POST /api/history/clear` — clear execution history
 
 ## Architecture
 
