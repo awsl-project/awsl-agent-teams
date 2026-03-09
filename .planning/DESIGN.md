@@ -1,31 +1,25 @@
 ## AWSL_RESULT
 
-### 分析结论
+### Design: Make `verify` a True Master Switch
 
-Timeline 里的 `[clear]` 实际上是**项目筛选重置**（清除 `filterProj`），它本身功能正常——只在选中某个项目筛选后才显示。
+**Problem:** `--no-verify` only skips Phase 3 (reviewer agent). Phase 3b (provider verify + auto-fix loop) runs unconditionally — `runFullVerification()` still invokes tsc/npm test/eslint, and the coder agent still attempts auto-fixes.
 
-真正缺失的是：**清除历史记录**功能未接入 Dashboard。
+**Solution:** One-line change in `src/orchestrator.ts` — wrap the Phase 3b block (lines 699–739) with `if (verifyEnabled)`.
 
-### 现状
+| When `verify=false` | Effect |
+|---|---|
+| Phase 3: Reviewer agent | Skipped (already was) |
+| Phase 3b: Provider verify (tsc, test, eslint) | **Now skipped** |
+| Phase 3b: Auto-fix coder loop | **Now skipped** |
+| Task auto-retry | Still runs (independent concern) |
+| `awsl verify` CLI command | Unaffected (standalone) |
 
-| 组件 | 状态 |
-|------|------|
-| `clearHistory()` 后端函数 | 已实现 (`src/history.ts:98-107`) |
-| `POST /api/history/clear` API | 未实现 |
-| Dashboard "Clear History" 按钮 | 未实现 |
-| 筛选 `[clear]` 重置 | 正常工作 (`dashboard.html:909`) |
+**Key decisions:**
+1. **Reuse existing `verifyEnabled` flag** — no new config options needed
+2. **Don't disable task auto-retry** — retry handles execution failures, not verification; user didn't request it
+3. **Don't touch standalone `awsl verify`** — it's a separate CLI command, not part of `executeTeam`
+4. **YAGNI on granular sub-options** — `verifyReviewer` / `verifyCode` / `autoFix` can be added later if needed
 
-### 设计方案：3 处改动，2 个文件
+**Files to change:** `src/orchestrator.ts` (1 line change), plus docs (README.md, README.zh-CN.md, BEST_PRACTICES.md)
 
-1. **`src/dashboard.ts`** — import 加上 `clearHistory`，新增 `POST /api/history/clear` 端点（仿照已有的 `/api/queue/clear`）
-2. **`public/dashboard.html`** — Timeline 卡片底部加 "Clear History" 按钮（复用 Queue 的 `queue-actions` 样式）
-3. **`public/dashboard.html`** — 加 JS `clearHistory()` 函数，带 `confirm()` 确认弹窗，调用 API 后刷新
-
-### 关键决策
-- 用 `confirm()` 防止误删（历史不可恢复）
-- 复用已有 `clearHistory()` 后端函数，不写新逻辑
-- UI 模式完全对齐 Queue 的 "Clear All" 按钮
-- 不动现有的筛选 `[clear]`，它工作正常
-
-### 产出文件
-- `memory/design-timeline-clear.md` — 完整设计文档
+**Design stored in shared memory as `design`.**
