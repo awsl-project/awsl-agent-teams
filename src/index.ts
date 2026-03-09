@@ -29,3 +29,4 @@ export {
 } from "./tools.js";
 export { appendHistory, loadHistory, clearHistory, getHistoryStats, type HistoryEntry, type HistoryData, type HistoryStats } from "./history.js";
 export { startDashboard } from "./dashboard.js";
+export { LogStream, getLogStream, type LogLine } from "./logstream.js";

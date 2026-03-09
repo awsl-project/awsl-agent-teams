@@ -309,10 +309,23 @@ awsl dashboard --port 8080  # 自定义端口
 功能：
 - **RPG 风格状态栏** — 完成/失败计数、总耗时、成功率（像素进度条）
 - **日历热力图** — GitHub 贡献图风格，展示每日活动（最近 90 天）
+- **耗时趋势图** — SVG 折线图，展示最近 30 天的构建耗时变化
 - **时间线** — 按日期分组的运行记录，支持按项目筛选
 - **项目侧边栏** — 所有项目列表，彩色徽章 + 任务计数
 - **队列监控** — 当前队列状态实时刷新（30 秒间隔）
-- **像素艺术风格** — Press Start 2P 字体、CRT 扫描线、霓虹辉光、复古动画
+- **队列操作** — 直接在看板上添加、删除、清空队列任务
+- **实时日志流** — 基于 SSE 的实时日志面板，展示 agent 的 stdout/stderr
+- **浏览器通知** — 任务失败和队列完成时弹出提醒（需授权）
+- **像素艺术风格** — Press Start 2P 字体、复古动画
+
+API 端点：
+- `GET /api/history` — 执行历史
+- `GET /api/stats` — 聚合统计
+- `GET /api/queue` — 当前队列状态
+- `GET /api/logs` — SSE 实时 agent 日志流
+- `POST /api/queue/add` — 添加任务 `{goal, engine?, quick?, dependsOn?}`
+- `DELETE /api/queue/remove?id=q_1` — 删除任务
+- `POST /api/queue/clear` — 清空所有任务
 
 ## 架构
 

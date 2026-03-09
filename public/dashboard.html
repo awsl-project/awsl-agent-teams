@@ -486,11 +486,154 @@ a { color: var(--blue); text-decoration: none; }
   66%  { content: '...'; }
 }
 
+/* ─── 趋势图 ──────────────────────────────────── */
+
+.trend-wrap {
+  margin-bottom: 28px;
+  border: 2px solid var(--border);
+  background: #fff;
+  padding: 16px;
+}
+
+.trend-wrap h2 {
+  font-size: 8px;
+  color: var(--ink2);
+  margin-bottom: 10px;
+  font-weight: normal;
+}
+
+.trend-svg { width: 100%; display: block; }
+.trend-svg text { font-family: var(--font); fill: var(--ink3); }
+.trend-svg .grid-line { stroke: var(--bg3); stroke-dasharray: 2 2; }
+.trend-svg .data-line { fill: none; stroke: var(--blue); stroke-width: 2; }
+.trend-svg .data-dot { fill: var(--blue); cursor: pointer; }
+.trend-svg .data-dot:hover { fill: var(--ink); r: 5; }
+.trend-svg .axis-line { stroke: var(--border); }
+
+/* ─── 队列表单 ──────────────────────────────────── */
+
+.queue-form {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  align-items: center;
+}
+
+.queue-form input[type="text"] {
+  flex: 1;
+  font-family: var(--font);
+  font-size: 8px;
+  padding: 6px 8px;
+  border: 2px solid var(--border);
+  background: var(--bg);
+  color: var(--ink);
+  outline: none;
+}
+
+.queue-form input[type="text"]:focus { border-color: var(--blue); }
+
+.queue-form label {
+  font-size: 7px;
+  color: var(--ink3);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.queue-form button, .queue-actions button {
+  font-family: var(--font);
+  font-size: 7px;
+  padding: 5px 10px;
+  border: 2px solid var(--border);
+  background: #fff;
+  color: var(--ink2);
+  cursor: pointer;
+}
+
+.queue-form button:hover, .queue-actions button:hover {
+  background: var(--bg2);
+  border-color: var(--ink3);
+}
+
+.queue-actions {
+  margin-top: 8px;
+  text-align: right;
+}
+
+.q-del {
+  font-family: var(--font);
+  font-size: 7px;
+  color: var(--ink4);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.q-del:hover { color: var(--red); }
+
+/* ─── 日志面板 ──────────────────────────────────── */
+
+.log-panel {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  height: 32px;
+  background: #1a1a2e;
+  border-top: 2px solid var(--border);
+  z-index: 200;
+  transition: height 0.2s;
+  display: flex;
+  flex-direction: column;
+}
+
+.log-panel.open { height: 260px; }
+
+.log-title {
+  height: 32px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  font-family: var(--font);
+  font-size: 8px;
+  color: #4a9;
+  cursor: pointer;
+  flex-shrink: 0;
+  gap: 8px;
+  user-select: none;
+}
+
+.log-title:hover { background: #222240; }
+
+.log-dot {
+  width: 6px; height: 6px;
+  background: #333;
+  transition: background 0.15s;
+}
+
+.log-dot.active { background: #4a9; }
+
+.log-toggle { margin-left: auto; color: #666; }
+
+.log-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 12px;
+  font-family: monospace;
+  font-size: 9px;
+  line-height: 1.6;
+}
+
+.log-line { white-space: pre-wrap; word-break: break-all; }
+.log-line.stdout { color: #aaa; }
+.log-line.stderr { color: #c55; }
+.log-ts { color: #555; }
+.log-task { color: #5789b8; }
+
 /* ─── footer ──────────────────────────────────── */
 
 .foot {
   margin-top: 40px;
   padding-top: 12px;
+  padding-bottom: 40px;
   border-top: 1px solid var(--bg3);
   font-size: 7px;
   color: var(--ink4);
@@ -544,6 +687,12 @@ a { color: var(--blue); text-decoration: none; }
   </div>
   <div class="heatmap-tip" id="hmTip"></div>
 
+  <!-- 趋势图 -->
+  <div class="trend-wrap" id="trendSection" style="display:none">
+    <h2>duration trend</h2>
+    <div id="trendChart"></div>
+  </div>
+
   <!-- 两栏 -->
   <div class="cols">
     <aside class="sidebar">
@@ -562,7 +711,15 @@ a { color: var(--blue); text-decoration: none; }
   <!-- 队列 -->
   <div class="queue-wrap" id="queueWrap">
     <h2>queue</h2>
+    <div class="queue-form">
+      <input type="text" id="qGoal" placeholder="task goal..." onkeydown="if(event.key==='Enter')addTask()">
+      <label><input type="checkbox" id="qQuick"> quick</label>
+      <button onclick="addTask()">ADD</button>
+    </div>
     <div id="queueContent"></div>
+    <div class="queue-actions" id="queueActions" style="display:none">
+      <button onclick="clearQueue()">CLEAR ALL</button>
+    </div>
   </div>
 </div>
 
@@ -574,6 +731,14 @@ a { color: var(--blue); text-decoration: none; }
 </div>
 
 <div class="foot">awsl sleep mode dashboard &middot; auto-refresh 30s</div>
+
+<div class="log-panel" id="logPanel">
+  <div class="log-title" onclick="toggleLog()">
+    <span class="log-dot" id="logDot"></span>
+    LIVE LOG <span class="log-toggle" id="logToggle">&#9650;</span>
+  </div>
+  <div class="log-body" id="logBody"></div>
+</div>
 
 <script>
 var hist = null, queue = null, filterProj = null;
@@ -769,11 +934,13 @@ function renderTimeline(entries) {
 
 function renderQueue(tasks) {
   var el = document.getElementById('queueContent');
+  var actions = document.getElementById('queueActions');
   if (!tasks || tasks.length === 0) {
     el.innerHTML = '<div style="font-size:7px;color:var(--ink4);">empty</div>';
+    actions.style.display = 'none';
     return;
   }
-  var h = '<table class="q-table"><thead><tr><th>id</th><th>goal</th><th>status</th><th>deps</th></tr></thead><tbody>';
+  var h = '<table class="q-table"><thead><tr><th>id</th><th>goal</th><th>status</th><th>deps</th><th></th></tr></thead><tbody>';
   for (var i = 0; i < tasks.length; i++) {
     var t = tasks[i], st = '';
     if (t.status === 'running') st = '<span class="q-running">\u25B6 running</span>';
@@ -781,10 +948,12 @@ function renderQueue(tasks) {
     else if (t.status === 'failed') st = '<span class="q-failed">\u2717 failed</span>';
     else st = '\u00B7 ' + (t.status || 'pending');
     var deps = t.dependsOn && t.dependsOn.length > 0 ? esc(t.dependsOn.join(', ')) : '-';
-    h += '<tr class="' + (t.status||'pending') + '"><td>' + esc(t.id) + '</td><td title="' + esc(t.goal||'').replace(/"/g,'&quot;') + '">' + esc(trunc(t.goal,50)) + '</td><td>' + st + '</td><td>' + deps + '</td></tr>';
+    var del = t.status === 'pending' ? '<button class="q-del" onclick="removeTask(\'' + esc(t.id) + '\')">\u00D7</button>' : '';
+    h += '<tr class="' + (t.status||'pending') + '"><td>' + esc(t.id) + '</td><td title="' + esc(t.goal||'').replace(/"/g,'&quot;') + '">' + esc(trunc(t.goal,50)) + '</td><td>' + st + '</td><td>' + deps + '</td><td>' + del + '</td></tr>';
   }
   h += '</tbody></table>';
   el.innerHTML = h;
+  actions.style.display = tasks.length > 0 ? 'block' : 'none';
 }
 
 function render() {
@@ -799,7 +968,8 @@ function render() {
   document.getElementById('empty').style.display = 'none';
   document.getElementById('app').style.display = 'block';
   var s = stats(entries);
-  renderStats(s); renderHeatmap(s.byD); renderProjects(s.byP); renderTimeline(entries); renderQueue(qt);
+  renderStats(s); renderHeatmap(s.byD); renderTrend(s.byD); renderProjects(s.byP); renderTimeline(entries); renderQueue(qt);
+  checkNotifications(qt);
 }
 
 document.getElementById('filterClear').onclick = function() { filterProj = null; render(); };
@@ -810,10 +980,185 @@ document.addEventListener('mousemove', function(e) {
 
 async function init() {
   clock(); setInterval(clock, 10000);
+  initNotifications();
   var ok = await load();
   document.getElementById('loading').style.display = 'none';
   if (ok) render();
   setInterval(async function() { if (await load()) render(); }, 30000);
+}
+
+// ─── Trend chart (SVG) ─────────────────────────────
+
+function renderTrend(byD) {
+  var sec = document.getElementById('trendSection');
+  var el = document.getElementById('trendChart');
+
+  // Collect dates with data, last 30
+  var keys = Object.keys(byD).sort().slice(-30);
+  if (keys.length < 2) { sec.style.display = 'none'; return; }
+  sec.style.display = 'block';
+
+  // Sum durations per day in minutes
+  var points = [];
+  var maxY = 1;
+  for (var i = 0; i < keys.length; i++) {
+    var dur = 0;
+    for (var j = 0; j < byD[keys[i]].length; j++) dur += (byD[keys[i]][j].duration || 0);
+    var m = Math.round(dur / 60000);
+    if (m > maxY) maxY = m;
+    points.push({ date: keys[i], val: m });
+  }
+
+  // SVG dimensions
+  var W = 800, H = 160, pad = { l: 40, r: 16, t: 12, b: 28 };
+  var cw = W - pad.l - pad.r, ch = H - pad.t - pad.b;
+
+  var svg = '<svg class="trend-svg" viewBox="0 0 ' + W + ' ' + H + '">';
+
+  // Grid lines
+  var steps = 4;
+  for (var g = 0; g <= steps; g++) {
+    var gy = pad.t + ch - (g / steps) * ch;
+    svg += '<line class="grid-line" x1="' + pad.l + '" y1="' + gy + '" x2="' + (W - pad.r) + '" y2="' + gy + '"/>';
+    svg += '<text x="' + (pad.l - 4) + '" y="' + (gy + 3) + '" text-anchor="end" font-size="7">' + Math.round(maxY * g / steps) + 'm</text>';
+  }
+
+  // Axes
+  svg += '<line class="axis-line" x1="' + pad.l + '" y1="' + (H - pad.b) + '" x2="' + (W - pad.r) + '" y2="' + (H - pad.b) + '"/>';
+
+  // Data line + dots
+  var coords = [];
+  for (var p = 0; p < points.length; p++) {
+    var x = pad.l + (p / (points.length - 1)) * cw;
+    var y = pad.t + ch - (points[p].val / maxY) * ch;
+    coords.push(x + ',' + y);
+  }
+  svg += '<polyline class="data-line" points="' + coords.join(' ') + '"/>';
+
+  for (var p = 0; p < points.length; p++) {
+    var x = pad.l + (p / (points.length - 1)) * cw;
+    var y = pad.t + ch - (points[p].val / maxY) * ch;
+    svg += '<circle class="data-dot" cx="' + x + '" cy="' + y + '" r="3"><title>' + points[p].date + ': ' + points[p].val + ' min</title></circle>';
+
+    // X-axis labels (every ~5th)
+    if (p % Math.max(1, Math.floor(points.length / 6)) === 0 || p === points.length - 1) {
+      svg += '<text x="' + x + '" y="' + (H - pad.b + 14) + '" text-anchor="middle" font-size="6">' + points[p].date.slice(5) + '</text>';
+    }
+  }
+
+  svg += '</svg>';
+  el.innerHTML = svg;
+}
+
+// ─── Browser notifications ────────────────────────
+
+var notifEnabled = false;
+var prevQueueState = {};
+
+function initNotifications() {
+  if ('Notification' in window && Notification.permission !== 'denied') {
+    Notification.requestPermission().then(function(p) {
+      notifEnabled = (p === 'granted');
+    });
+  }
+}
+
+function checkNotifications(tasks) {
+  if (!notifEnabled || !tasks || tasks.length === 0) { prevQueueState = {}; return; }
+  var newState = {};
+  for (var i = 0; i < tasks.length; i++) newState[tasks[i].id] = tasks[i].status;
+
+  // Detect newly failed tasks
+  for (var id in newState) {
+    if (newState[id] === 'failed' && prevQueueState[id] && prevQueueState[id] !== 'failed') {
+      var t = tasks.find(function(t) { return t.id === id; });
+      notify('Task ' + id + ' failed', t ? (t.error || t.goal || '') : '');
+    }
+  }
+
+  // Detect queue completion (was running/pending → now all done/failed)
+  var wasPending = false;
+  for (var pid in prevQueueState) {
+    if (prevQueueState[pid] === 'pending' || prevQueueState[pid] === 'running') { wasPending = true; break; }
+  }
+  var nowPending = tasks.some(function(t) { return t.status === 'pending' || t.status === 'running'; });
+  if (wasPending && !nowPending) {
+    var done = tasks.filter(function(t) { return t.status === 'done'; }).length;
+    var fail = tasks.filter(function(t) { return t.status === 'failed'; }).length;
+    notify('Queue complete', done + ' done, ' + fail + ' failed');
+  }
+
+  prevQueueState = newState;
+}
+
+function notify(title, body) {
+  try { new Notification('awsl: ' + title, { body: body.slice(0, 200) }); } catch(e) {}
+}
+
+// ─── Queue operations ─────────────────────────────
+
+async function addTask() {
+  var goal = document.getElementById('qGoal').value.trim();
+  if (!goal) return;
+  var quick = document.getElementById('qQuick').checked;
+  try {
+    await fetch('/api/queue/add', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ goal: goal, quick: quick })
+    });
+  } catch(e) {}
+  document.getElementById('qGoal').value = '';
+  if (await load()) render();
+}
+
+async function removeTask(id) {
+  try {
+    await fetch('/api/queue/remove?id=' + encodeURIComponent(id), { method: 'DELETE' });
+  } catch(e) {}
+  if (await load()) render();
+}
+
+async function clearQueue() {
+  try {
+    await fetch('/api/queue/clear', { method: 'POST' });
+  } catch(e) {}
+  if (await load()) render();
+}
+
+// ─── Log panel (SSE) ──────────────────────────────
+
+var logOpen = false;
+var logEs = null;
+
+function toggleLog() {
+  logOpen = !logOpen;
+  document.getElementById('logPanel').classList.toggle('open', logOpen);
+  document.getElementById('logToggle').innerHTML = logOpen ? '&#9660;' : '&#9650;';
+  if (logOpen && !logEs) startLogStream();
+}
+
+function startLogStream() {
+  logEs = new EventSource('/api/logs');
+  logEs.onmessage = function(e) {
+    try {
+      var line = JSON.parse(e.data);
+      var el = document.getElementById('logBody');
+      var div = document.createElement('div');
+      div.className = 'log-line ' + (line.stream || 'stdout');
+      div.innerHTML = '<span class="log-ts">' + (line.timestamp || '').slice(11, 19) + '</span> '
+        + '<span class="log-task">[' + esc(line.taskId || '?') + '/' + esc(line.agent || '?') + ']</span> '
+        + esc(line.text || '');
+      el.appendChild(div);
+      el.scrollTop = el.scrollHeight;
+      // Blink activity dot
+      var dot = document.getElementById('logDot');
+      dot.classList.add('active');
+      setTimeout(function() { dot.classList.remove('active'); }, 300);
+      // Keep max 1000 lines in DOM
+      while (el.children.length > 1000) el.removeChild(el.firstChild);
+    } catch(ex) {}
+  };
 }
 
 init();

@@ -866,3 +866,41 @@ awsl dashboard
 | **中断恢复** | Ctrl+C 中断后，已完成任务状态保留。重新 `queue start` 会跳过已完成的任务 |
 | **失败处理** | 单个任务失败不影响后续无依赖任务的执行 |
 | **日志** | 所有日志输出到 stderr，可重定向：`awsl queue start 2>queue.log` |
+
+### 仪表盘进阶功能
+
+`awsl dashboard` 不只是看历史，还能实时监控和操作队列。
+
+**实时日志流：**
+- 点击底部 "LIVE LOG" 栏展开日志面板
+- 通过 SSE (Server-Sent Events) 实时显示 agent 的 stdout/stderr
+- 按任务 ID 和 agent 名称着色，自动滚动
+- 适合远程监控：浏览器打开 `http://<IP>:3120` 即可
+
+**浏览器通知：**
+- 页面首次打开时会请求通知权限（点允许）
+- 任务失败时弹出 "Task q_N failed: ..."
+- 队列全部完成时弹出 "Queue complete: X done, Y failed"
+- **注意：** 需要浏览器标签页保持打开状态；HTTPS 或 localhost 下才有效
+
+**耗时趋势图：**
+- 在热力图下方，展示最近 30 天的每日构建总耗时
+- 纯 SVG 折线图，hover 可看具体数值
+- 帮助发现构建越来越慢、rate limit 越来越频繁等趋势
+
+**队列操作面板：**
+- 直接在看板输入框添加任务，不用切终端
+- 每个 pending 任务旁有删除按钮 (×)
+- 底部有"CLEAR ALL"清空按钮
+- 操作通过 REST API 完成，实时刷新显示
+
+**典型远程监控工作流：**
+```bash
+# 在服务器上启动
+awsl queue start --engine claude-code &
+awsl dashboard --port 3120
+
+# 在手机/其他设备浏览器打开
+# http://server-ip:3120
+# → 看进度、收通知、加任务
+```

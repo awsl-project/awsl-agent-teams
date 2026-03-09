@@ -22,6 +22,7 @@ import type { SharedMemory } from "./memory.js";
 import { createAgentTools } from "./tools.js";
 import { SkillRegistry } from "./skills.js";
 import { log } from "./log.js";
+import { getLogStream } from "./logstream.js";
 
 export type Engine = "claude-code" | "builtin";
 
@@ -80,6 +81,7 @@ async function runWithClaudeCode(
 	memory: SharedMemory,
 	teamRoster: string,
 	skillRegistry?: SkillRegistry,
+	taskId?: string,
 ): Promise<RunResult> {
 	const skills = skillRegistry ?? new SkillRegistry();
 	const skillInstructions = skills.buildInstructions(agentDef.role, agentDef.skills);
@@ -161,12 +163,27 @@ ${memSummary === "(empty)" ? "No shared data yet." : memSummary}
 
 		let stdout = "";
 		let stderr = "";
+		const logStream = getLogStream();
+		const logTaskId = taskId ?? agentDef.name;
 
-		child.stdout.on("data", (data: Buffer) => { stdout += data.toString(); });
+		child.stdout.on("data", (data: Buffer) => {
+			const chunk = data.toString();
+			stdout += chunk;
+			for (const line of chunk.split("\n")) {
+				if (line.trim()) {
+					logStream.push({ timestamp: new Date().toISOString(), taskId: logTaskId, agent: agentDef.name, stream: "stdout", text: line });
+				}
+			}
+		});
 		child.stderr.on("data", (data: Buffer) => {
 			const chunk = data.toString();
 			stderr += chunk;
 			process.stderr.write(chunk);
+			for (const line of chunk.split("\n")) {
+				if (line.trim()) {
+					logStream.push({ timestamp: new Date().toISOString(), taskId: logTaskId, agent: agentDef.name, stream: "stderr", text: line });
+				}
+			}
 		});
 
 		child.on("close", (code) => {
@@ -354,11 +371,12 @@ export async function runAgent(
 	maxTurns = 30,
 	skillRegistry?: SkillRegistry,
 	engine?: Engine,
+	taskId?: string,
 ): Promise<RunResult> {
 	const resolved = detectEngine(engine);
 
 	if (resolved === "claude-code") {
-		return runWithClaudeCode(agentDef, task, cwd, memory, teamRoster, skillRegistry);
+		return runWithClaudeCode(agentDef, task, cwd, memory, teamRoster, skillRegistry, taskId);
 	}
 	return runWithBuiltin(agentDef, task, cwd, memory, teamRoster, defaultModel, maxTurns, skillRegistry);
 }

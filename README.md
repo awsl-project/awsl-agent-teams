@@ -309,10 +309,23 @@ awsl dashboard --port 8080  # Custom port
 Features:
 - **RPG-style stats** — completed/failed counts, total time, success rate with pixel progress bars
 - **Calendar heatmap** — GitHub-style contribution graph showing daily activity (last 90 days)
+- **Duration trend chart** — SVG line chart showing build time trends over the last 30 days
 - **Timeline** — Vertical timeline of all runs, grouped by date, filterable by project
 - **Project sidebar** — All projects with color-coded badges and task counts
 - **Queue monitor** — Live view of current queue status with auto-refresh (30s)
-- **Pixel art aesthetic** — Press Start 2P font, CRT scanlines, neon glow, retro animations
+- **Queue operations** — Add, remove, and clear tasks directly from the dashboard UI
+- **Live log stream** — Real-time SSE-based log panel showing agent stdout/stderr as it happens
+- **Browser notifications** — Alerts on task failure and queue completion (requires permission)
+- **Pixel art aesthetic** — Press Start 2P font, retro animations
+
+API endpoints:
+- `GET /api/history` — execution history
+- `GET /api/stats` — aggregate statistics
+- `GET /api/queue` — current queue state
+- `GET /api/logs` — SSE stream of real-time agent logs
+- `POST /api/queue/add` — add task `{goal, engine?, quick?, dependsOn?}`
+- `DELETE /api/queue/remove?id=q_1` — remove a task
+- `POST /api/queue/clear` — clear all tasks
 
 ## Architecture
 
