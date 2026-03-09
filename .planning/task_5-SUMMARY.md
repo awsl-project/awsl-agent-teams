@@ -1,28 +1,30 @@
-# task_5: Add sandbox documentation to all three docs:
+# task_5: 1. Run `npx tsc --noEmit` to verify the full project type-ch
 
-**README.md** 
-
-Assignee: coder
+Assignee: tester
 Status: done
 
 ## Result
-Type-check passes clean (no output = no errors).
+All verifications complete. Here's the full report:
 
 ## AWSL_RESULT
 
-**Modified files:**
+### Task 5: Verification — All 5 Security Fixes PASS
 
-1. **README.md** — Added `## Sandbox (Builtin Engine)` section (lines 477-502) between Guardian and Built-in Agents. Includes: `ExecuteOptions.sandbox` config table, role defaults table with patterns, allowlist/denylist explanation, Windows compatibility note, per-agent override mention.
+**Build checks:**
 
-2. **README.zh-CN.md** — Added matching `## 沙箱（内置引擎）` section (lines 477-502) in Chinese. Same structure and content mirrored.
+| Check | Result |
+|-------|--------|
+| `npx tsc --noEmit` | PASS — zero errors |
+| `npm run build` | PASS — compiled clean |
 
-3. **BEST_PRACTICES.md** — Added `## 9. 沙箱配置（内置引擎）` section with:
-   - Sandbox on/off/custom code example
-   - Role defaults table with Chinese explanations
-   - Per-agent custom `SandboxPolicy` TypeScript example
-   - How to disable sandbox
-   - How allowlist/denylist/write-path checking works
-   - Caveats table (builtin-only, not perfect isolation, default-on, extensible)
-   - Renumbered sections 10-18 (was 9-17)
+**Fix verification:**
 
-**Verification:** `npx tsc --noEmit` — passes with no errors
+| # | Fix | Status | Evidence |
+|---|-----|--------|----------|
+| FIX 1 | **Read tool path validation** | PASS | `checkReadPath()` exported at `sandbox.ts:101`; `createReadTool()` accepts `sandbox?` param at `tools.ts:21`; calls `checkReadPath` at `tools.ts:33-35`; `TOOL_FACTORIES.read` passes `ctx.sandbox` at `tools.ts:232`; re-exported from `index.ts:34` |
+| FIX 2 | **Dashboard security hardening** | PASS | `server.listen(port, '127.0.0.1', ...)` at `dashboard.ts:230`; CORS uses `"http://localhost:" + port` (not `*`) at `dashboard.ts:62`; `collectBody()` helper at `dashboard.ts:21-35` with `MAX_BODY = 1MB`, returns 413 on oversize |
+| FIX 3 | **Shell injection prevention** | PASS | `execFileSync` imported at `planning.ts:316`; `git add` uses `execFileSync("git", ["add", "--", f], ...)` at `planning.ts:373`; `git commit` uses `execFileSync("git", ["commit", "-m", commitMsg], ...)` at `planning.ts:381-384` |
+| FIX 4 | **Expanded CODER_DENY_PATTERNS** | PASS | 20 patterns total at `sandbox.ts:32-52` — covers glob destruction, download-and-execute, interpreter escapes, network exfiltration, eval/encoded execution |
+| FIX 5 | **Public API export** | PASS | `checkReadPath` re-exported from `index.ts:34` |
+
+**Result: 5/5 fixes verified, build clean, all PASS.**
