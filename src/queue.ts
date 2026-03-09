@@ -41,6 +41,7 @@ export interface QueueTask {
 	};
 	status: "pending" | "running" | "done" | "failed" | "paused";
 	scheduledAt?: string;
+	runAt?: string;       // ISO timestamp — task won't start before this time
 	dependsOn?: string[];
 	result?: { success: boolean; summary: string };
 	startedAt?: string;
@@ -68,7 +69,7 @@ export class TaskQueue {
 	/**
 	 * Add a new task to the queue.
 	 */
-	add(goal: string, options?: QueueTask["options"], extra?: { engine?: Engine; dependsOn?: string[] }): QueueTask {
+	add(goal: string, options?: QueueTask["options"], extra?: { engine?: Engine; dependsOn?: string[]; runAt?: string }): QueueTask {
 		const data = this.load();
 		const id = `q_${this.nextId(data)}`;
 		const task: QueueTask = {
@@ -80,6 +81,7 @@ export class TaskQueue {
 		};
 		if (extra?.engine) task.engine = extra.engine;
 		if (extra?.dependsOn) task.dependsOn = extra.dependsOn;
+		if (extra?.runAt) task.runAt = extra.runAt;
 		data.tasks.push(task);
 		this.save(data);
 		return task;
@@ -156,9 +158,24 @@ export class TaskQueue {
 				break;
 			}
 
-			// Find next runnable pending task (all deps satisfied)
+			// Find next runnable pending task (all deps satisfied + runAt check)
+			const now = Date.now();
+			let earliestRunAt: number | null = null;
+
 			const nextTask = data.tasks.find((task, idx) => {
 				if (task.status !== "pending") return false;
+
+				// Check scheduled time
+				if (task.runAt) {
+					const runTime = Date.parse(task.runAt);
+					if (!isNaN(runTime) && runTime > now) {
+						// Not yet time — track earliest for sleep
+						if (earliestRunAt === null || runTime < earliestRunAt) {
+							earliestRunAt = runTime;
+						}
+						return false;
+					}
+				}
 
 				// Check dependency constraints
 				if (task.dependsOn && task.dependsOn.length > 0) {
@@ -181,6 +198,19 @@ export class TaskQueue {
 			});
 
 			if (!nextTask) {
+				// If tasks are waiting on runAt, sleep until the earliest one
+				if (earliestRunAt !== null) {
+					const waitMs = earliestRunAt - Date.now();
+					if (waitMs > 0) {
+						const waitMin = Math.ceil(waitMs / 60000);
+						const runAtStr = new Date(earliestRunAt).toLocaleTimeString();
+						log.info("queue", `Next task scheduled at ${runAtStr}, waiting ${waitMin} min...`);
+						await new Promise(r => setTimeout(r, Math.min(waitMs, 30000)));
+						continue; // Re-check after sleep (poll every 30s max)
+					}
+					continue;
+				}
+
 				// Pending tasks exist but none are runnable — dependency deadlock
 				const blocked = pendingTasks.map(t => `${t.id} (deps: ${t.dependsOn?.join(",") ?? "none"})`);
 				log.warn("queue", `Dependency deadlock: ${blocked.length} task(s) blocked:\n  ${blocked.join("\n  ")}`);

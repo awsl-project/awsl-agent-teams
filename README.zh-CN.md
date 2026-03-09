@@ -243,6 +243,12 @@ awsl queue add "构建用户认证模块" --engine claude-code
 awsl queue add "添加支付集成" --depends-on q_1
 awsl queue add "写端到端测试" --depends-on all  # 等待所有前置任务完成
 
+# 定时调度任务
+awsl queue add "跑完整测试" --at "03:00"              # 今天（如已过则明天）
+awsl queue add "部署到测试环境" --at "2026-03-10 03:00" # 指定日期时间
+awsl queue add "清理临时文件" --at "+30m"               # 30 分钟后
+awsl queue add "大规模重构" --at "+2h"                  # 2 小时后
+
 # 或者：用自然语言一句话描述，自动拆分为多个任务并推断依赖
 awsl queue plan "先构建用户认证，然后加支付模块，最后写集成测试" --engine claude-code
 
@@ -289,6 +295,11 @@ Planned 3 task(s):
 | `--concurrency <n>` | 最大并行智能体数 |
 | `--model <model>` | 覆盖默认模型 |
 | `--depends-on <ids>` | 逗号分隔的任务 ID，或 `all` |
+| `--at <time>` | 定时调度：`"03:00"`、`"2026-03-10 03:00"`、`"+30m"`、`"+2h"` |
+
+### 定时执行
+
+`queue start` 运行时，带有未来 `runAt` 时间戳的任务会被跳过，直到到达调度时间（每 30 秒轮询一次）。`queue list` 和 `queue show` 会显示调度时间。
 
 ### 限额自动恢复
 
@@ -670,6 +681,8 @@ awsl agents                  # 列出所有智能体
 awsl queue add "构建 REST API" --quick        # 添加任务
 awsl queue add "添加认证" --depends-on q_1     # 带依赖的任务
 awsl queue add "写测试" --depends-on all       # 等待所有前置任务
+awsl queue add "通宵构建" --at "03:00"         # 定时调度到凌晨 3 点
+awsl queue add "延后任务" --at "+2h"           # 2 小时后执行
 awsl queue plan "先认证，然后支付，最后测试"    # 自然语言 → 自动拆分
 awsl queue list                                # 查看队列
 awsl queue show q_1                            # 查看单个任务详情

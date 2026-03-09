@@ -50,6 +50,7 @@ awsl run "goal" --engine claude-code
 执行已有计划             →  awsl run --execute-plan
 检查代码质量             →  awsl review
 排队多任务，通宵执行     →  awsl queue add "goal" + awsl queue start
+定时调度任务             →  awsl queue add "goal" --at "03:00"
 一句话排队多任务         →  awsl queue plan "先做A，然后B，最后C"
 查看睡前模式仪表盘        →  awsl dashboard
 后台启动仪表盘            →  awsl dashboard --bg
@@ -955,6 +956,29 @@ awsl queue add "多依赖任务" --depends-on q_1,q_2
 awsl queue add "最后执行" --depends-on all
 ```
 
+### 定时调度（`--at`）
+
+用 `--at` 参数可以让任务在指定时间才开始执行，而不是排到就立刻跑。
+
+```bash
+# 时间格式
+awsl queue add "goal" --at "03:00"              # 今天凌晨 3 点（已过则明天）
+awsl queue add "goal" --at "2026-03-10 03:00"   # 指定日期时间
+awsl queue add "goal" --at "+30m"               # 30 分钟后
+awsl queue add "goal" --at "+2h"                # 2 小时后
+```
+
+**工作原理：**
+- `queue start` 执行时，`runAt` 在未来的任务会被跳过
+- 调度器每 30 秒轮询一次，到时间自动开始执行
+- `queue list` 和 `queue show` 会显示调度时间
+- 可以与 `--depends-on` 组合使用 — 同时满足依赖完成 + 到达调度时间才会执行
+
+**适用场景：**
+- 凌晨 3 点跑大任务（避开白天的 rate limit 高峰）
+- 排队多个任务，间隔执行（避免连续触发限额）
+- 延后执行不紧急的任务
+
 ### 队列选项
 
 ```bash
@@ -963,7 +987,8 @@ awsl queue add "goal" \
   --quick \                  # 跳过 brainstorm/research
   --concurrency 3 \          # 并行度
   --model anthropic:... \    # 模型
-  --depends-on q_1,q_2       # 依赖
+  --depends-on q_1,q_2 \     # 依赖
+  --at "03:00"               # 定时调度
 ```
 
 ### QUEUE.json 格式
@@ -988,8 +1013,9 @@ awsl queue add "goal" \
       "goal": "添加认证",
       "status": "running",
       "dependsOn": ["q_1"],
+      "runAt": "2024-01-16T03:00:00.000Z",
       "scheduledAt": "2024-01-15T22:00:05.000Z",
-      "startedAt": "2024-01-15T22:25:01.000Z"
+      "startedAt": "2024-01-16T03:00:01.000Z"
     }
   ],
   "createdAt": "2024-01-15T22:00:00.000Z",

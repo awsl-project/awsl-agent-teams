@@ -243,6 +243,12 @@ awsl queue add "Build user auth module" --engine claude-code
 awsl queue add "Add payment integration" --depends-on q_1
 awsl queue add "Write E2E tests" --depends-on all  # waits for ALL prior tasks
 
+# Schedule tasks for later
+awsl queue add "Run full test suite" --at "03:00"          # today (or tomorrow if past)
+awsl queue add "Deploy to staging" --at "2026-03-10 03:00" # specific datetime
+awsl queue add "Cleanup temp files" --at "+30m"            # 30 minutes from now
+awsl queue add "Heavy refactor" --at "+2h"                 # 2 hours from now
+
 # Or: describe everything in natural language — auto-split into tasks with dependencies
 awsl queue plan "First build user auth with JWT, then add payment with Stripe, finally write E2E tests" --engine claude-code
 
@@ -289,6 +295,11 @@ Ordering keywords are automatically detected:
 | `--concurrency <n>` | Max parallel agents |
 | `--model <model>` | Override default model |
 | `--depends-on <ids>` | Comma-separated task IDs, or `all` |
+| `--at <time>` | Schedule task for later: `"03:00"`, `"2026-03-10 03:00"`, `"+30m"`, `"+2h"` |
+
+### Scheduled Execution
+
+When `queue start` runs, tasks with a `runAt` timestamp in the future are skipped until their scheduled time arrives (polling every 30 seconds). `queue list` and `queue show` display the scheduled time.
 
 ### Rate Limit Recovery
 
@@ -670,6 +681,8 @@ awsl agents                  # List all agents
 awsl queue add "Build REST API" --quick      # Add task to queue
 awsl queue add "Add auth" --depends-on q_1   # Add with dependency
 awsl queue add "Write tests" --depends-on all # Wait for all prior tasks
+awsl queue add "Nightly build" --at "03:00"  # Schedule for 3:00 AM
+awsl queue add "Later task" --at "+2h"       # Schedule 2 hours from now
 awsl queue plan "First auth, then payments, finally tests"  # Natural language → auto-split
 awsl queue list                               # Show queue status
 awsl queue show q_1                           # Show detailed info for a single task

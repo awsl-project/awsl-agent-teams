@@ -50,7 +50,7 @@ CC Hybrid Mode (no API key needed):
   4. awsl verify           → .planning/VERIFICATION.md (code: run tests/lint)
 
 Queue Commands (sleep mode):
-  queue add <goal> [opts]  Add a task to the queue
+  queue add <goal> [opts]  Add a task to the queue (--at <time> to schedule)
   queue plan <text> [opts] Parse natural language into multiple queue tasks
   queue list               List queue tasks and status
   queue show <id>          Show detailed info for a queue task
@@ -89,6 +89,50 @@ function parseCwdAndForce(args: string[]): { cwd: string; force: boolean } {
 		}
 	}
 	return { cwd, force };
+}
+
+/**
+ * Parse a human-friendly time string into an ISO timestamp.
+ * Supported formats:
+ *   "03:00"            → today (or tomorrow if already past) at 03:00
+ *   "2026-03-10 03:00" → absolute datetime
+ *   "+30m"             → 30 minutes from now
+ *   "+2h"              → 2 hours from now
+ * Returns ISO string or null if unparseable.
+ */
+function parseTimeString(input: string): string | null {
+	const trimmed = input.trim();
+
+	// Relative: +Nm or +Nh
+	const relMatch = trimmed.match(/^\+(\d+)(m|h)$/);
+	if (relMatch) {
+		const amount = parseInt(relMatch[1], 10);
+		const unit = relMatch[2];
+		const ms = unit === "h" ? amount * 3600000 : amount * 60000;
+		return new Date(Date.now() + ms).toISOString();
+	}
+
+	// HH:MM only — today or tomorrow
+	const timeOnlyMatch = trimmed.match(/^(\d{1,2}):(\d{2})$/);
+	if (timeOnlyMatch) {
+		const h = parseInt(timeOnlyMatch[1], 10);
+		const m = parseInt(timeOnlyMatch[2], 10);
+		if (h > 23 || m > 59) return null;
+		const d = new Date();
+		d.setHours(h, m, 0, 0);
+		if (d.getTime() <= Date.now()) {
+			d.setDate(d.getDate() + 1); // already past → tomorrow
+		}
+		return d.toISOString();
+	}
+
+	// Full datetime — try native parsing
+	const parsed = Date.parse(trimmed);
+	if (!isNaN(parsed)) {
+		return new Date(parsed).toISOString();
+	}
+
+	return null;
 }
 
 async function main() {
@@ -355,6 +399,7 @@ async function main() {
 			let model: string | undefined;
 			let dependsOn: string[] | undefined;
 			let agentsDirs: string[] | undefined;
+			let runAt: string | undefined;
 			const goalParts: string[] = [];
 
 			for (let i = 2; i < args.length; i++) {
@@ -364,6 +409,7 @@ async function main() {
 				else if (a === "--concurrency" && i + 1 < args.length) { concurrency = parseInt(args[++i], 10); }
 				else if (a === "--model" && i + 1 < args.length) { model = args[++i]; }
 				else if (a === "--depends-on" && i + 1 < args.length) { dependsOn = args[++i].split(",").map(s => s.trim()); }
+				else if (a === "--at" && i + 1 < args.length) { runAt = args[++i]; }
 				else if (a === "--agents-dir" && i + 1 < args.length) {
 					agentsDirs = agentsDirs ?? [];
 					agentsDirs.push(path.resolve(args[++i]));
@@ -375,8 +421,19 @@ async function main() {
 
 			const goal = goalParts.join(" ").trim();
 			if (!goal) {
-				console.error("Usage: awsl queue add <goal> [--quick] [--engine <type>] [--concurrency N]");
+				console.error("Usage: awsl queue add <goal> [--quick] [--engine <type>] [--at <time>]");
 				process.exit(1);
+			}
+
+			// Parse --at time string into ISO
+			let resolvedRunAt: string | undefined;
+			if (runAt) {
+				const parsed = parseTimeString(runAt);
+				if (!parsed) {
+					console.error(`Invalid time format: "${runAt}". Use HH:MM, YYYY-MM-DD HH:MM, or +Nm/+Nh.`);
+					process.exit(1);
+				}
+				resolvedRunAt = parsed;
 			}
 
 			const task = queue.add(goal, {
@@ -384,12 +441,13 @@ async function main() {
 				concurrency,
 				quick,
 				agentsDirs,
-			}, { engine, dependsOn });
+			}, { engine, dependsOn, runAt: resolvedRunAt });
 
 			console.log(`Added: ${task.id} — "${goal}"`);
 			if (dependsOn) console.log(`  Depends on: ${dependsOn.join(", ")}`);
 			if (quick) console.log(`  Mode: quick`);
 			if (engine) console.log(`  Engine: ${engine}`);
+			if (resolvedRunAt) console.log(`  Run at: ${new Date(resolvedRunAt).toLocaleString()}`);
 		}
 		else if (subCmd === "plan") {
 			// Parse options
@@ -442,6 +500,7 @@ async function main() {
 					const goal = t.goal.length > 40 ? t.goal.slice(0, 37) + "..." : t.goal;
 					console.log(`  ${t.id.padEnd(8)} ${status} ${goal}`);
 					if (t.dependsOn?.length) console.log(`           deps: ${t.dependsOn.join(", ")}`);
+					if (t.runAt) console.log(`           run at: ${new Date(t.runAt).toLocaleString()}`);
 					if (t.error) console.log(`           error: ${t.error.slice(0, 60)}`);
 				}
 				console.log();
@@ -475,6 +534,7 @@ async function main() {
 			console.log(`  Goal:       ${task.goal}`);
 			console.log(`  Status:     ${task.status}`);
 			if (task.engine) console.log(`  Engine:     ${task.engine}`);
+			if (task.runAt) console.log(`  Run at:     ${new Date(task.runAt).toLocaleString()}`);
 			if (task.dependsOn?.length) console.log(`  Depends on: ${task.dependsOn.join(", ")}`);
 
 			// Options
