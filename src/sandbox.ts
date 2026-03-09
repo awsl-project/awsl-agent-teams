@@ -37,6 +37,18 @@ const CODER_DENY_PATTERNS = [
 	":(){ :|:& };:",
 	"chmod 777",
 	"> /dev/sd",
+	// glob-based destruction
+	"rm -rf /*",
+	// download-and-execute
+	"| sh", "| bash",
+	"curl ", "wget ",
+	// interpreter escapes
+	"python -c", "python3 -c",
+	"node -e", "perl -e", "ruby -e",
+	// network exfiltration
+	"nc ", "ncat ",
+	// eval / encoded execution
+	"eval ", "base64 -d",
 ]
 
 // ─── Role-based allowlists ──────────────────────────────────────────
