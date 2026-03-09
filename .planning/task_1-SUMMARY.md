@@ -1,21 +1,21 @@
-# task_1: In src/queue.ts:
-1. Add import: `import { atomicCommit } fro
+# task_1: Create new file src/sandbox.ts with:
+1. `SandboxPolicy` inte
 
 Assignee: coder
 Status: done
 
 ## Result
+All 5 exports present. The file is complete and type-checks clean.
+
 ## AWSL_RESULT
 
-### Task Complete: Add atomicCommit to queue.ts
+**Created:** `src/sandbox.ts` (117 lines)
 
-**File modified:** `src/queue.ts`
+**Exports:**
+1. `SandboxPolicy` interface — `writePaths: string[]`, `bash: BashPolicy`
+2. `BashPolicy` interface — `mode: 'allowlist' | 'denylist' | 'unrestricted'`, `patterns: string[]`
+3. `defaultPolicy(role, cwd)` — role-based defaults for coder/tester/reviewer/architect/planner
+4. `checkWritePath(resolvedPath, policy)` — path validation with Windows case-insensitive support
+5. `checkBashCommand(command, policy)` — allowlist (startsWith) / denylist (includes) checking
 
-**Changes applied:**
-1. **Line 18** — Added `import { atomicCommit } from "./planning.js";`
-2. **Lines 359-364** — Auto-commit after task completion (success or failure), using `nextTask.id` for the commit message
-3. **Lines 402-407** — Auto-commit after task error (catch path), using `nextTask.id` for the commit message
-
-Both calls are wrapped in `try/catch` so commit failures are logged as warnings but don't interrupt queue execution. Used `nextTask` (always in scope) instead of `freshTask` (could be undefined outside the `if` block) to avoid potential runtime errors.
-
-**Verification:** `npx tsc --noEmit` — passed with zero errors.
+**Verification:** `npx tsc --noEmit` — passes with no errors
