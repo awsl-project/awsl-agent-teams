@@ -1,37 +1,22 @@
-# task_4: Run the full build and type-check to verify no regressions:
+# task_4: Update all three documentation files to reflect the new RunC
 
-
-Assignee: tester
+Assignee: coder
 Status: done
 
 ## Result
-All checks pass. Here's the verification summary:
+All three docs now mention `RunContext`/`context.ts`:
+
+- **README.md:440** — Key module note after architecture diagram
+- **README.zh-CN.md:440** — Chinese mirror
+- **BEST_PRACTICES.md:338-343** — Usage guide in the lock management section
 
 ## AWSL_RESULT
 
-### Build & Type-Check Verification — All Passed
+### Delivered: Documentation updated for RunContext
 
-**Build results:**
-- `npx tsc --noEmit` — zero errors
-- `npm run build` — compiled successfully
+**Files modified:**
+- `README.md` — Added "Key module" note for `context.ts` in the Architecture section
+- `README.zh-CN.md` — Mirrored the same in Chinese ("核心模块")
+- `BEST_PRACTICES.md` — Added "RunContext（推荐）" subsection in §7 并发锁保护, covering `acquire()`, `tryAcquire()`, signal handler fix, and cleanup patterns
 
-**File separation verified:**
-
-| Check | Result |
-|-------|--------|
-| Phase 3 (LLM reviewer) writes `REVIEW.md` | `orchestrator.ts:677` — `planning.write("REVIEW.md", ...)` |
-| Phase 3b (deterministic) writes `VERIFICATION.md` | `verify.ts:325` — writes to `.planning/VERIFICATION.md` |
-| Auto-fix reads **both** files | `orchestrator.ts:718` — `"Read .planning/VERIFICATION.md and .planning/REVIEW.md. Fix all FAIL and CRITICAL items from both files."` |
-| No cross-contamination | `planning.write("VERIFICATION.md"...)` does NOT appear in orchestrator.ts — only `verify.ts` writes it |
-
-**CLI & installer references confirmed:**
-- `cli.ts:50` — documents `VERIFICATION.md` for deterministic checks
-- `cli.ts:51` — documents `REVIEW.md` for static code review
-- `install.ts:169,173` — auto-fix skill reads both files
-- `install.ts:296-297` — status skill lists both files
-
-**Files verified (no modifications needed):**
-- `src/orchestrator.ts`
-- `src/cli.ts`
-- `src/install.ts`
-- `src/verify.ts`
+**Verification:** `grep -c context` across all three files returns 19 matches (up from ~12 before). All three docs now reference `RunContext` and `context.ts`.
