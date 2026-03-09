@@ -140,7 +140,29 @@ Vitest + supertest for tests. Data in memory, no DB." --engine claude-code
 
 ### PLAN.md 格式
 
-CC 会按这个格式写计划，你也可以手动编辑：
+代码支持三种格式，按优先级排序：
+
+**1. JSON（推荐，planner 默认输出）：**
+
+```json
+{
+  "summary": "计划摘要",
+  "tasks": [
+    {
+      "id": "task_1",
+      "name": "创建用户模型",
+      "assignee": "coder",
+      "dependencies": [],
+      "files": ["src/models/user.ts", "src/types.ts"],
+      "action": "创建 User 接口和 Prisma schema...",
+      "verify": "npx tsc --noEmit",
+      "done": "User 模型定义完成，类型检查通过"
+    }
+  ]
+}
+```
+
+**2. Markdown 标题格式（手动编辑友好）：**
 
 ```markdown
 ## task-1: 创建用户模型
@@ -159,6 +181,22 @@ CC 会按这个格式写计划，你也可以手动编辑：
 - **Verify:** npm test -- user.test.ts
 - **Done:** 所有用户 API 测试通过
 ```
+
+**3. XML `<task>` 块：**
+
+```xml
+<task>
+  <name>创建用户模型</name>
+  <assignee>coder</assignee>
+  <dependencies></dependencies>
+  <files>src/models/user.ts, src/types.ts</files>
+  <action>创建 User 接口和 Prisma schema...</action>
+  <verify>npx tsc --noEmit</verify>
+  <done>User 模型定义完成</done>
+</task>
+```
+
+> Markdown 标题支持多种格式：`## task-1: 名称`、`## 1. 名称 (coder)`、`### 名称` 都可以。字段标签支持中英文（如 `**角色:**` 和 `**Role:**`）。
 
 ### WAVES.md（代码自动生成）
 
@@ -381,6 +419,12 @@ verify 字段决定了 `awsl verify` 能否自动跑测试。**必须是可执�
 - 通常是 PLAN.md 格式问题
 - 看错误信息，修改 PLAN.md，重新 validate
 - 常见：依赖环、未知 role、重复 task id
+
+**planner 输出解析失败（"No parseable tasks"）：**
+- 解析器支持三种格式：JSON（优先）、XML `<task>` 块、Markdown 标题格式
+- 大多数情况下 planner 会输出 JSON，但某些模型可能输出纯 markdown
+- Markdown 格式要求：`## task-1: 名称` 标题 + `- **Role:** coder` 等字段
+- 排查：查看 `.planning/` 目录下是否有 PLAN.md，手动确认格式是否正确
 
 **verify 失败（测试/lint/类型检查不过）：**
 - **终端模式：** 代码自动启动修复 agent → 重新 verify → 最多 3 轮，全自动
@@ -892,6 +936,7 @@ awsl dashboard
 - 直接在看板输入框添加任务，不用切终端
 - 每个 pending 任务旁有删除按钮 (×)
 - 底部有"CLEAR ALL"清空按钮
+- Timeline 标题栏有"Clear History"按钮，可一键清除所有执行历史（带确认对话框，操作不可逆）
 - 操作通过 REST API 完成，实时刷新显示
 
 **典型远程监控工作流：**
