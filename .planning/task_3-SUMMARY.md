@@ -1,26 +1,20 @@
-# task_3: Wire sandbox from ExecuteOptions down to tool creation:
-
-**s
+# task_3: In src/planning.ts around lines 372-384:
+1. Change `import {
 
 Assignee: coder
 Status: done
 
 ## Result
-All 12 `runAgent()` calls in orchestrator now pass `sandbox`. 12 calls in total, all covered.
+tsc passes clean.
 
 ## AWSL_RESULT
 
-**Modified files:**
+### Task 3: Replace shell-interpolated git commands with execFileSync — Complete
 
-1. **`src/runner.ts`**
-   - **Imports:** Added `SandboxPolicy` (type-only) and `defaultPolicy` from `./sandbox.js`
-   - **`runWithBuiltin()`:** Added `sandbox?: SandboxPolicy | boolean` parameter; computes `policy` — `defaultPolicy(role, cwd)` when true/undefined, passthrough when custom, undefined when false; passes policy to `createAgentTools()`
-   - **`runAgent()`:** Added `sandbox?: SandboxPolicy | boolean` as last parameter; passes to `runWithBuiltin()`; ignored for claude-code engine (has its own permission system)
+| File | Change |
+|------|--------|
+| `src/planning.ts:316` | Import updated: added `execFileSync` alongside `execSync` |
+| `src/planning.ts:373` | `git add` now uses `execFileSync("git", ["add", "--", f], ...)` — no shell interpolation |
+| `src/planning.ts:381` | `git commit` now uses `execFileSync("git", ["commit", "-m", commitMsg], ...)` — no shell interpolation |
 
-2. **`src/orchestrator.ts`**
-   - **Import:** Added `SandboxPolicy` type from `./sandbox.js`
-   - **`ExecuteOptions`:** Added `sandbox?: boolean | SandboxPolicy` with JSDoc
-   - **`executeTeam()`:** Extracts `sandbox = options?.sandbox ?? true`; passes to all 9 `runAgent()` calls (brainstorm, research×2, plan, execute, verify, fix, retry, replan, replan-retry)
-   - **`planOnly()`:** Added `sandbox` to options type; extracts with default `true`; passes to all 3 `runAgent()` calls
-
-**Verification:** `npx tsc --noEmit` — passes with no errors
+**Security fix**: Both `git add` and `git commit` now bypass the shell entirely via `execFileSync` with array arguments, eliminating command injection through crafted filenames or commit messages. Verification: `npx tsc --noEmit` passes clean.
