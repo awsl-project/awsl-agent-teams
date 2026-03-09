@@ -9,6 +9,10 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { parse as parseYaml } from "yaml";
+import { Type } from "@sinclair/typebox";
+import { Value } from "@sinclair/typebox/value";
+import { log } from "./log.js";
 
 export interface TeamAgentDef {
 	name: string;
@@ -23,21 +27,37 @@ export interface TeamAgentDef {
 	source: "file" | "builtin";
 }
 
-/** Simple frontmatter parser — no yaml dependency needed */
-function parseFrontmatter(content: string): { meta: Record<string, string>; body: string } {
-	const match = content.match(/^---\s*\n([\s\S]*?)\n---\s*\n([\s\S]*)$/);
+const AgentFrontmatterSchema = Type.Object({
+	name: Type.String(),
+	role: Type.Optional(Type.String()),
+	description: Type.Optional(Type.String()),
+	model: Type.Optional(Type.String()),
+	tools: Type.Optional(Type.Union([Type.String(), Type.Array(Type.String())])),
+	skills: Type.Optional(Type.Union([Type.String(), Type.Array(Type.String())])),
+	thinking: Type.Optional(Type.Union([Type.String(), Type.Boolean(), Type.Number()])),
+});
+
+function normalizeStringArray(val: unknown): string[] {
+	if (typeof val === "string") return val.split(",").map(s => s.trim()).filter(Boolean);
+	if (Array.isArray(val)) return val as string[];
+	return [];
+}
+
+/** Parse YAML frontmatter from agent markdown files */
+function parseFrontmatter(content: string): { meta: Record<string, unknown>; body: string } {
+	// Normalize CRLF to LF for consistent parsing on Windows
+	const normalized = content.replace(/\r\n/g, "\n");
+	const match = normalized.match(/^---\s*\n([\s\S]*?)\n---\s*\n([\s\S]*)$/);
 	if (!match) return { meta: {}, body: content };
 
-	const meta: Record<string, string> = {};
-	for (const line of match[1].split("\n")) {
-		const idx = line.indexOf(":");
-		if (idx > 0) {
-			const key = line.slice(0, idx).trim();
-			const val = line.slice(idx + 1).trim().replace(/^["']|["']$/g, "");
-			if (key && val) meta[key] = val;
-		}
+	try {
+		const parsed = parseYaml(match[1]);
+		const meta = (parsed && typeof parsed === "object") ? parsed as Record<string, unknown> : {};
+		return { meta, body: match[2] };
+	} catch (err) {
+		log.warn("agents", `YAML parse error: ${err instanceof Error ? err.message : String(err)}`);
+		return { meta: {}, body: content };
 	}
-	return { meta, body: match[2] };
 }
 
 function loadFromDir(dir: string): TeamAgentDef[] {
@@ -50,16 +70,26 @@ function loadFromDir(dir: string): TeamAgentDef[] {
 		if (!fs.statSync(filePath).isFile()) continue;
 
 		const { meta, body } = parseFrontmatter(fs.readFileSync(filePath, "utf-8"));
-		if (!meta.name) continue;
+		if (typeof meta.name !== "string") continue;
+
+		if (!Value.Check(AgentFrontmatterSchema, meta)) {
+			for (const error of Value.Errors(AgentFrontmatterSchema, meta)) {
+				log.warn("agents", `${file}: ${error.path} — ${error.message}`);
+			}
+			continue;
+		}
+
+		const tools = normalizeStringArray(meta.tools);
+		const skills = normalizeStringArray(meta.skills);
 
 		agents.push({
 			name: meta.name,
-			role: meta.role ?? "custom",
-			description: meta.description ?? "",
-			model: meta.model,
-			tools: meta.tools?.split(",").map(s => s.trim()).filter(Boolean),
-			skills: meta.skills?.split(",").map(s => s.trim()).filter(Boolean),
-			thinkingLevel: meta.thinking,
+			role: (typeof meta.role === "string" ? meta.role : undefined) ?? "custom",
+			description: (typeof meta.description === "string" ? meta.description : undefined) ?? "",
+			model: typeof meta.model === "string" ? meta.model : undefined,
+			tools: tools.length > 0 ? tools : undefined,
+			skills: skills.length > 0 ? skills : undefined,
+			thinkingLevel: meta.thinking !== undefined ? String(meta.thinking) : undefined,
 			systemPrompt: body.trim(),
 			source: "file",
 		});

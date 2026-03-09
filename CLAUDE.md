@@ -39,6 +39,32 @@ When implementing a new feature, you MUST also update:
 
 This is a hard requirement, not optional. Features without documentation are incomplete.
 
+### Auto-queue for batch requirements
+
+When the user's message contains what appears to be multiple actionable requirements (numbered list, bullet points, or clearly separate tasks), follow this procedure:
+
+**Step 1: Analyze and extract**
+- Parse the user's message carefully
+- List each distinct requirement with a one-line summary
+- Show the extracted list to the user in this format:
+
+```
+检测到 N 条需求：
+1. <requirement summary>
+2. <requirement summary>
+...
+
+要使用 /awsl-plan 生成执行计划吗？
+```
+
+**Step 2: On confirmation**, use `/awsl-plan` with all requirements combined as the goal.
+
+**Step 3: Show the plan summary**, then ask: "要立刻开始执行吗？"
+
+**Step 4: On confirmation**, execute with `/awsl-go`.
+
+**When NOT to trigger:** follow-up questions, discussion points, clarifications, or single requirements with sub-points that form one logical task.
+
 ### Code conventions
 
 - TypeScript strict mode

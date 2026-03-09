@@ -197,6 +197,7 @@ awsl run "目标" --engine claude-code [选项]
 | **限额自动恢复** | Token 限额 → 保存检查点 → 指数退避等待（1m→2m→5m→10m→15m）→ 自动重试（最多 20 次） |
 | **任务队列（睡前模式）** | 排队多个目标 → `awsl queue start` → 无人值守顺序执行，自带限额恢复 |
 | **灵活计划解析** | 规划师输出支持 JSON、XML、Markdown 三种格式 — 不同模型的格式差异也能正确解析 |
+| **验证器 provider** | 并行执行，每个 provider 独立超时（tsc 120s，测试 180s，eslint 60s），5 分钟结果缓存 |
 
 ### 输出示例
 
@@ -333,6 +334,60 @@ API 端点：
 - `POST /api/queue/clear` — 清空所有任务
 - `POST /api/history/clear` — 清除执行历史
 
+## 在任意项目中启用 AWSL
+
+想在自己的项目中使用 AWSL？只需两步：
+
+### 第一步：全局安装技能
+
+```bash
+cd /path/to/awsl-agent-teams
+npm run build
+node dist/cli.js init --global    # 安装到 ~/.claude/skills/
+```
+
+这会让 `/awsl`、`/awsl-plan`、`/awsl-go` 等命令在 Claude Code 的**所有项目**中可用。
+
+### 第二步：在项目中添加 CLAUDE.md
+
+在你的项目根目录创建 `CLAUDE.md`，写入 AWSL 规则。推荐模板：
+
+```markdown
+# CLAUDE.md
+
+## AWSL 自动队列
+
+当用户的消息包含多条可执行需求（编号列表、分点、或明显独立的任务）时：
+
+第一步 — 分析并提取每条需求，展示给用户确认：
+  检测到 N 条需求：
+  1. <需求摘要>
+  2. <需求摘要>
+  要使用 /awsl-plan 生成执行计划吗？
+
+第二步 — 用户确认后，使用 /awsl-plan 将所有需求作为目标生成计划。
+第三步 — 展示计划摘要，询问："要立刻开始执行吗？"
+第四步 — 用户确认后，使用 /awsl-go 执行。
+
+不触发的情况：追问、讨论、单个需求的子项。
+```
+
+### 使用方式
+
+现在在 Claude Code 中，直接分点甩需求：
+
+```
+1. 添加 JWT 用户认证
+2. 构建 Stripe 支付模块
+3. 写集成测试
+```
+
+Claude Code 会自动识别批量需求，通过 `/awsl-plan` 生成计划，确认后执行。
+
+### 可选：自定义智能体
+
+如需领域专业团队，在项目中创建 `agents/*.md` 文件（参见[自定义智能体](#自定义智能体)）。
+
 ## 架构
 
 ```
@@ -433,10 +488,28 @@ model: anthropic:claude-sonnet-4-20250514
 | `name` | 智能体标识（必填） |
 | `role` | `planner`、`architect`、`coder`、`reviewer`、`tester` 或 `custom` |
 | `description` | 该智能体的功能描述 |
-| `tools` | 逗号分隔：`read,write,edit,bash` |
-| `skills` | 要激活的 Guardian 技能：`tdd,debug,brainstorm,review,planning` |
+| `tools` | 逗号分隔字符串（`read,write,edit,bash`）或 YAML 数组 |
+| `skills` | 要激活的 Guardian 技能：逗号分隔字符串或 YAML 数组 |
 | `thinking` | LLM 思考级别：`low`、`medium`、`high` |
 | `model` | 覆盖模型：`anthropic:claude-sonnet-4-20250514`、`openai:gpt-4o` |
+
+`tools` 和 `skills` 也支持 **YAML 数组语法**：
+
+```yaml
+---
+name: api-expert
+role: coder
+tools:
+  - read
+  - write
+  - bash
+skills:
+  - tdd
+  - debug
+---
+```
+
+> 无效的 frontmatter 会输出友好错误信息（含文件名和具体校验问题）— 该智能体被跳过，不会静默出错。
 
 ## .planning/ 目录
 

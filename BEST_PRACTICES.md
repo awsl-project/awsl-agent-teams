@@ -222,6 +222,12 @@ Wave 2: task-2          ← 依赖 task-1，等 Wave 1 完成
 - 自动检测并运行：`tsc --noEmit`、`npm test`、`eslint`
 - 输出 `.planning/VERIFICATION.md`
 
+**验证器超时和缓存：**
+- TypeScript 类型检查：120 秒超时
+- 测试运行（npm test）：180 秒超时
+- ESLint：60 秒超时
+- 重复运行 `awsl verify` 时，未变更的检查会使用缓存（5 分钟有效），跳过不必要的重新执行
+
 ## 5. 自定义 Agent 团队
 
 在 `agents/` 目录放 markdown 文件，CC 会读取并注入到对应 role 的子 agent prompt。
@@ -259,6 +265,19 @@ description: 前端代码审查 + 无障碍检查
 - 性能：不必要的 re-render、大 bundle、图片未优化
 - 响应式：移动端适配
 ```
+
+**YAML 数组语法（推荐）：**
+tools 和 skills 现在支持 YAML 数组格式：
+```yaml
+tools:
+  - read
+  - write
+  - bash
+```
+传统逗号分隔格式仍然兼容：`tools: read,write,bash`
+
+**Schema 校验：**
+frontmatter 现在会做 TypeBox schema 校验。无效配置会输出友好错误（含文件名和具体问题），该 agent 被跳过。
 
 **规则：**
 - role 决定 Guardian 技能注入（`coder` → TDD，`reviewer` → 两阶段审查，`tester` → 系统化调试）
@@ -679,7 +698,110 @@ awsl run --execute-plan --engine claude-code
 - **检查 git log** — wave checkpoint 提交记录清晰标记了哪些任务已完成
 - **崩溃后先 `/awsl-status`** — 了解当前状态再决定下一步
 
-## 14. 不要做的事
+## 14. 在其他项目中启用 AWSL
+
+AWSL 不只能在 awsl-agent-teams 仓库里用。任何项目都可以两步启用。
+
+### 第一步：全局安装技能（只需一次）
+
+```bash
+cd /path/to/awsl-agent-teams
+npm run build
+node dist/cli.js init --global
+```
+
+之后在 Claude Code 中的任何项目都能用 `/awsl`、`/awsl-plan`、`/awsl-go` 等命令。
+
+### 第二步：在项目中放 CLAUDE.md
+
+在你的项目根目录创建 `CLAUDE.md`，加入自动队列规则：
+
+```markdown
+# CLAUDE.md
+
+## AWSL 自动队列
+
+当用户的消息包含多条可执行需求（编号列表、分点、或明显独立的任务）时：
+
+第一步 — 分析并提取每条需求，展示给用户确认：
+  检测到 N 条需求：
+  1. <需求摘要>
+  2. <需求摘要>
+  要使用 /awsl-plan 生成执行计划吗？
+
+第二步 — 用户确认后，使用 /awsl-plan 将所有需求作为目标生成计划。
+第三步 — 展示计划摘要，询问："要立刻开始执行吗？"
+第四步 — 用户确认后，使用 /awsl-go 执行。
+
+不触发的情况：追问、讨论、单个需求的子项。
+```
+
+### 效果
+
+在 Claude Code 中直接分点甩需求：
+
+```
+1. 添加 JWT 用户认证
+2. 构建 Stripe 支付模块
+3. 写集成测试
+```
+
+Claude Code 会自动：
+- 识别这是批量需求（≥2 条）
+- 调用 `/awsl-plan` 生成计划
+- 展示计划摘要
+- 问你"要立刻开始执行吗？"
+- 确认后自动执行
+
+### 进阶：项目专属 CLAUDE.md
+
+除了自动队列规则，还可以在 CLAUDE.md 中加入项目特定的指令：
+
+```markdown
+# CLAUDE.md
+
+## 项目信息
+- 技术栈：React 18 + TypeScript + Zustand + Tailwind
+- 测试框架：Vitest + Testing Library
+- 构建工具：Vite
+
+## AWSL 自动队列
+（同上）
+
+## 代码规范
+- 函数组件 + hooks，不用 class 组件
+- 状态管理只用 Zustand，不用 Redux
+- CSS 只用 Tailwind utility classes
+```
+
+这些信息会被 Claude Code 和 AWSL 智能体读取，产出更贴合项目的代码。
+
+### 可选：自定义智能体
+
+在项目根目录创建 `agents/` 目录，放入领域专家的 `.md` 文件：
+
+```
+my-project/
+├── CLAUDE.md              ← 项目指令 + 自动队列规则
+├── agents/
+│   ├── react-dev.md       ← React 前端专家
+│   └── ui-reviewer.md     ← UI 审查专家
+├── src/
+└── ...
+```
+
+详见 [自定义 Agent 团队](#5-自定义-agent-团队)。
+
+### 总结
+
+| 步骤 | 操作 | 频率 |
+|------|------|------|
+| 全局安装技能 | `node dist/cli.js init --global` | 一次 |
+| 项目放 CLAUDE.md | 加自动队列规则 | 每个项目一次 |
+| 放 agents/*.md | 领域专家定义 | 可选 |
+| 分点甩需求 | 直接列出，自动走队列 | 每次使用 |
+
+## 15. 不要做的事
 
 | 不要 | 为什么 | 应该 |
 |------|--------|------|
@@ -693,7 +815,7 @@ awsl run --execute-plan --engine claude-code
 | 不写测试框架 | Agent 可能选错框架 | 在 goal 里明确：用 Vitest / Jest / pytest |
 | 大项目不加集成测试 task | 单元测试通过不代表整体工作 | PLAN.md 最后加一个集成测试 task |
 
-## 15. 限额自动恢复
+## 16. 限额自动恢复
 
 AWSL 自动检测 token 限额错误并等待恢复，不需要手动干预。
 
@@ -768,7 +890,7 @@ await executeTeam(goal, agents, cwd, model, concurrency, {
 - 崩溃后重启，检查点仍然有效 — 自动恢复
 - 退避等待期间进程保持前台运行（不要关终端！）
 
-## 16. 任务队列（睡前模式）
+## 17. 任务队列（睡前模式）
 
 排队多个目标，一键启动，通宵执行。每个任务自带限额恢复能力。
 

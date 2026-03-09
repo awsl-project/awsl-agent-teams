@@ -241,7 +241,7 @@ async function main() {
 	if (command === "verify") {
 		const { cwd } = parseCwdAndForce(args);
 
-		const result = runFullVerification(cwd);
+		const result = await runFullVerification(cwd);
 
 		console.log("\n" + "=".repeat(60));
 		console.log(result.summary);

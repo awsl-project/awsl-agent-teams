@@ -197,6 +197,7 @@ Phase 4:  Re-plan       on task failure → retry 2x → replan with different a
 | **Rate limit recovery** | Token limit hit → save checkpoint → exponential backoff (1m→2m→5m→10m→15m) → auto-retry (max 20) |
 | **Task queue (sleep mode)** | Queue multiple goals → `awsl queue start` → unattended sequential execution with auto rate-limit recovery |
 | **Flexible plan parsing** | Planner output parsed as JSON, XML, or markdown — robust against format variations from different models |
+| **Verify providers** | Parallel execution with per-provider timeouts (tsc 120s, tests 180s, eslint 60s) and 5-minute result caching |
 
 ### Example Output
 
@@ -333,6 +334,60 @@ API endpoints:
 - `POST /api/queue/clear` — clear all tasks
 - `POST /api/history/clear` — clear execution history
 
+## Enable AWSL in Any Project
+
+Want to use AWSL in your own projects? Two steps:
+
+### Step 1: Install Skills Globally
+
+```bash
+cd /path/to/awsl-agent-teams
+npm run build
+node dist/cli.js init --global    # installs to ~/.claude/skills/
+```
+
+This makes `/awsl`, `/awsl-plan`, `/awsl-go`, etc. available in Claude Code for **all** projects.
+
+### Step 2: Add CLAUDE.md to Your Project
+
+Create a `CLAUDE.md` in your project root with AWSL rules. Recommended starter:
+
+```markdown
+# CLAUDE.md
+
+## AWSL Auto-Queue
+
+When the user's message contains multiple actionable requirements (numbered list, bullet points, or separate tasks):
+
+Step 1 — Analyze and extract each requirement, then show:
+  检测到 N 条需求：
+  1. <summary>
+  2. <summary>
+  要使用 /awsl-plan 生成执行计划吗？
+
+Step 2 — On confirmation, use /awsl-plan with all requirements as the goal.
+Step 3 — Show the plan summary, ask: "要立刻开始执行吗？"
+Step 4 — On confirmation, execute with /awsl-go.
+
+Do NOT trigger for: follow-up questions, discussion, or single tasks with sub-points.
+```
+
+### Usage
+
+Now in Claude Code, just list your requirements:
+
+```
+1. Add user authentication with JWT
+2. Build payment module with Stripe
+3. Write integration tests
+```
+
+Claude Code will automatically detect the batch requirements, generate a plan via `/awsl-plan`, and ask for confirmation before executing.
+
+### Optional: Custom Agents
+
+For domain-specific teams, create `agents/*.md` files in your project (see [Custom Agents](#custom-agents)).
+
 ## Architecture
 
 ```
@@ -433,10 +488,28 @@ Use proper HTTP status codes and error formats.
 | `name` | Agent identifier (required) |
 | `role` | `planner`, `architect`, `coder`, `reviewer`, `tester`, or `custom` |
 | `description` | What this agent does |
-| `tools` | Comma-separated: `read,write,edit,bash` |
-| `skills` | Guardian skills to activate: `tdd,debug,brainstorm,review,planning` |
+| `tools` | Comma-separated string (`read,write,edit,bash`) or YAML array |
+| `skills` | Guardian skills to activate: comma-separated string or YAML array |
 | `thinking` | LLM thinking level: `low`, `medium`, `high` |
 | `model` | Override model: `anthropic:claude-sonnet-4-20250514`, `openai:gpt-4o` |
+
+**YAML array syntax** is also supported for `tools` and `skills`:
+
+```yaml
+---
+name: api-expert
+role: coder
+tools:
+  - read
+  - write
+  - bash
+skills:
+  - tdd
+  - debug
+---
+```
+
+> Invalid frontmatter triggers a friendly error message with the file name and specific validation issue — the agent is skipped, not silently broken.
 
 ## .planning/ Directory
 

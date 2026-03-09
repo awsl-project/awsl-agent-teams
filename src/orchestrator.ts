@@ -678,7 +678,7 @@ Do NOT output any text before or after the JSON. Do NOT use markdown prose forma
 		let fixAttempt = 0;
 		let verifyPassed = false;
 		while (fixAttempt < maxFixAttempts && !verifyPassed) {
-			const codeVerify = runFullVerification(cwd);
+			const codeVerify = await runFullVerification(cwd);
 			if (codeVerify.passed) {
 				verifyPassed = true;
 				break;
@@ -696,7 +696,7 @@ Do NOT output any text before or after the JSON. Do NOT use markdown prose forma
 			await runAgent(coder, fixPrompt, cwd, memory, roster, defaultModel, 30, skills, engine);
 
 			// Re-run verification after fix attempt
-			const reVerify = runFullVerification(cwd);
+			const reVerify = await runFullVerification(cwd);
 			verifyPassed = reVerify.passed;
 
 			// Track attempts
@@ -831,9 +831,18 @@ ${failedTasksForReplan.length > 0 ? failedTasksForReplan.map(t => `- ${t.id}: ${
 		log.info("conductor", `  [${icon}] ${t.id} (${t.assignee}): ${t.status}`);
 	}
 
-	const summary = success
+	// Build detailed summary with per-task results
+	const taskSummaries = tasks
+		.filter(t => t.status === "verified" || t.status === "done")
+		.map(t => {
+			const brief = t.result ? t.result.slice(0, 200).split("\n")[0] : t.description;
+			return `- ${t.id}: ${brief}`;
+		})
+		.join("\n");
+	const headline = success
 		? `All ${tasks.length} tasks completed.`
 		: `${doneCount}/${tasks.length} tasks completed.`;
+	const summary = taskSummaries ? `${headline}\n${taskSummaries}` : headline;
 
 	return { success, tasks, summary, memory, planning };
 }
