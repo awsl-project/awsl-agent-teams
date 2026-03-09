@@ -474,6 +474,33 @@ Guardian skills auto-activate based on agent role:
 
 **Socratic Brainstorm** — Explore requirements through targeted questions. Challenge assumptions. Document decisions.
 
+## Sandbox (Builtin Engine)
+
+The builtin engine enforces a sandbox policy on every agent. Write operations are restricted to the project directory, and bash commands are filtered per role.
+
+**Configuration via `ExecuteOptions.sandbox`:**
+
+| Value | Behavior |
+|-------|----------|
+| `true` (default) | Use role-based defaults |
+| `false` | Disable sandbox entirely |
+| `SandboxPolicy` object | Custom rules |
+
+**Default policies by role:**
+
+| Role | Write Paths | Bash Mode | Patterns |
+|------|------------|-----------|----------|
+| `coder` | `[cwd]` | denylist | `rm -rf /`, `sudo `, `mkfs`, `dd if=`, `chmod 777`, `> /dev/sd` |
+| `tester` | `[cwd]` | allowlist | `npm test`, `npx tsc`, `npx vitest`, `npx jest`, `node `, `cat `, `ls`, `grep `, `find ` |
+| `reviewer` | `[cwd]` | allowlist | `cat `, `ls`, `grep `, `find `, `git log`, `git diff`, `git show` |
+| `architect` | `[cwd]` | allowlist | `cat `, `ls`, `grep `, `find `, `tree ` |
+| `planner` | `[cwd]` | allowlist | `cat `, `ls`, `find `, `wc ` |
+
+- **Allowlist**: command must start with an allowed prefix — anything else is blocked
+- **Denylist**: command must not contain any denied pattern — everything else is allowed
+- Path validation is case-insensitive on Windows
+- Per-agent override via `sandbox` field in `TeamAgentDef` or agent frontmatter
+
 ## Built-in Agents
 
 | Name | Role | Description |

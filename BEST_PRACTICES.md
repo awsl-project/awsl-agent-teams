@@ -384,7 +384,75 @@ Guardian 是质量保证层，按 role 自动注入到每个子 agent：
 2. Stage 2：代码质量（安全、性能、可维护性）
 3. Critical 发现 → 任务失败，必须修复
 
-## 9. 测试策略
+## 9. 沙箱配置（内置引擎）
+
+内置引擎（`--engine builtin`）默认对每个智能体启用沙箱，限制写路径和 bash 命令。
+
+### 开关控制
+
+```typescript
+await executeTeam(goal, agents, cwd, model, concurrency, {
+  sandbox: true,   // 默认：使用角色默认策略
+  // sandbox: false,  // 完全禁用沙箱
+  // sandbox: { writePaths: [...], bash: { mode: "...", patterns: [...] } },  // 自定义
+});
+```
+
+### 各角色默认策略
+
+| 角色 | 写路径 | Bash 模式 | 说明 |
+|------|--------|-----------|------|
+| `coder` | `[cwd]` | 黑名单（denylist） | 禁止 `rm -rf /`、`sudo`、`mkfs` 等危险命令，其他放行 |
+| `tester` | `[cwd]` | 白名单（allowlist） | 只允许 `npm test`、`npx tsc`、`npx vitest`、`node`、`cat`、`ls` 等 |
+| `reviewer` | `[cwd]` | 白名单（allowlist） | 只允许 `cat`、`ls`、`grep`、`git log`、`git diff`、`git show` |
+| `architect` | `[cwd]` | 白名单（allowlist） | 只允许 `cat`、`ls`、`grep`、`find`、`tree` |
+| `planner` | `[cwd]` | 白名单（allowlist） | 只允许 `cat`、`ls`、`find`、`wc` |
+
+### 按智能体自定义
+
+在 `TeamAgentDef` 或智能体定义文件中覆盖：
+
+```typescript
+// 代码中
+const agentDef: TeamAgentDef = {
+  name: "my-coder",
+  role: "coder",
+  sandbox: {
+    writePaths: ["/project", "/tmp/build"],
+    bash: {
+      mode: "allowlist",
+      patterns: ["npm ", "node ", "npx ", "git "]
+    }
+  }
+}
+```
+
+### 禁用沙箱
+
+```typescript
+// 全局禁用
+await executeTeam(goal, agents, cwd, model, concurrency, {
+  sandbox: false,
+});
+```
+
+### 工作原理
+
+- **白名单模式**：命令必须以允许列表中的某个前缀开头，否则拒绝
+- **黑名单模式**：命令不能包含禁止列表中的任何模式，否则拒绝
+- **写路径**：`write`/`edit` 工具写入前检查路径是否在 `writePaths` 内
+- **Windows 兼容**：路径比较不区分大小写
+
+### 注意事项
+
+| 项目 | 说明 |
+|------|------|
+| **仅限 builtin 引擎** | claude-code 引擎由 Claude Code 自身管理权限，不受此沙箱影响 |
+| **不是完美隔离** | 没有容器化，聪明的 agent 理论上可绕过 bash 模式匹配 |
+| **默认开启** | 不需要额外配置，角色默认策略自动生效 |
+| **可扩展** | 未来可添加网络隔离、资源限制等，不影响现有接口 |
+
+## 10. 测试策略
 
 AWSL 在三个环节自动处理测试，大多数情况不需要额外操作。
 
@@ -456,7 +524,7 @@ verify 字段决定了 `awsl verify` 能否自动跑测试。**必须是可执�
 - Python：pytest
 - Go：标准 testing 包
 
-## 10. 处理失败
+## 11. 处理失败
 
 **validate 失败：**
 - 通常是 PLAN.md 格式问题
@@ -485,7 +553,7 @@ verify 字段决定了 `awsl verify` 能否自动跑测试。**必须是可执�
 - Goal 写得太模糊 → 重写，更具体
 - `/awsl-status` 或 `.planning/STATE.md` 查看详情
 
-## 11. 典型工作流
+## 12. 典型工作流
 
 ### 新项目从零开始
 
@@ -612,7 +680,7 @@ cd my-project
 awsl run "Build a REST API with auth" --engine builtin
 ```
 
-## 12. 静态代码审查
+## 13. 静态代码审查
 
 `awsl review` 是无需 LLM 的确定性代码扫描，可以独立使用：
 
@@ -646,7 +714,7 @@ Review: 0 critical, 3 warnings, 1 info across 14 files.
 
 > **注意区分：** `awsl review`（CLI 静态扫描）和 Phase 3 LLM 审查者都写入 `REVIEW.md`，但终端模式流水线中是 LLM 审查者写入。确定性检查（tsc、eslint、测试）的结果写入 `VERIFICATION.md`。Auto-fix 读取两个文件。
 
-## 13. 断点续跑（崩溃恢复）
+## 14. 断点续跑（崩溃恢复）
 
 CC 意外退出（断网、关机、kill -9）后，AWSL 可以从断点恢复继续执行。
 
@@ -748,7 +816,7 @@ awsl run --execute-plan --engine claude-code
 - **检查 git log** — wave checkpoint 提交记录清晰标记了哪些任务已完成
 - **崩溃后先 `/awsl-status`** — 了解当前状态再决定下一步
 
-## 14. 在其他项目中启用 AWSL
+## 15. 在其他项目中启用 AWSL
 
 AWSL 不只能在 awsl-agent-teams 仓库里用。任何项目都可以两步启用。
 
@@ -851,7 +919,7 @@ my-project/
 | 放 agents/*.md | 领域专家定义 | 可选 |
 | 分点甩需求 | 直接列出，自动走队列 | 每次使用 |
 
-## 15. 不要做的事
+## 16. 不要做的事
 
 | 不要 | 为什么 | 应该 |
 |------|--------|------|
@@ -865,7 +933,7 @@ my-project/
 | 不写测试框架 | Agent 可能选错框架 | 在 goal 里明确：用 Vitest / Jest / pytest |
 | 大项目不加集成测试 task | 单元测试通过不代表整体工作 | PLAN.md 最后加一个集成测试 task |
 
-## 16. 限额自动恢复
+## 17. 限额自动恢复
 
 AWSL 自动检测 token 限额错误并等待恢复，不需要手动干预。
 
@@ -940,7 +1008,7 @@ await executeTeam(goal, agents, cwd, model, concurrency, {
 - 崩溃后重启，检查点仍然有效 — 自动恢复
 - 退避等待期间进程保持前台运行（不要关终端！）
 
-## 17. 任务队列（睡前模式）
+## 18. 任务队列（睡前模式）
 
 排队多个目标，一键启动，通宵执行。每个任务自带限额恢复能力。
 

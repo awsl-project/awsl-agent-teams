@@ -1,21 +1,25 @@
-# task_2: Update all three documentation files to mention the new auto
+# task_2: Modify src/tools.ts to enforce sandbox policy:
+1. Import `Sa
 
 Assignee: coder
 Status: done
 
 ## Result
-Build passes. 
+All changes are in place and type-check passes.
 
 ## AWSL_RESULT
 
-### Task Complete: Update documentation for queue auto-commit
+**Modified:** `src/tools.ts`
 
-**Files modified:**
+**Changes:**
+1. **Imports:** Added `SandboxPolicy` (type-only), `checkWritePath`, `checkBashCommand` from `./sandbox.js`
+2. **`createWriteTool(cwd, sandbox?)`** — checks `checkWritePath` before `fs.writeFileSync`; returns error text if blocked
+3. **`createEditTool(cwd, sandbox?)`** — same guard before `fs.writeFileSync`
+4. **`createBashTool(cwd, sandbox?)`** — checks `checkBashCommand` before `execSync`; returns error text if blocked
+5. **`ToolContext`** — added `sandbox?: SandboxPolicy` field
+6. **`TOOL_FACTORIES`** — passes `ctx.sandbox` to write, edit, bash factories
+7. **`createAgentTools()`** — added optional `sandbox?: SandboxPolicy` parameter (last arg), threaded into `ToolContext`
 
-| File | Change |
-|---|---|
-| `README.md` (line 304) | Added "Auto-Commit" subsection in the Task Queue section explaining that each queue task auto-commits QUEUE.json + HISTORY.json on completion |
-| `README.zh-CN.md` (line 304) | Added mirrored "自动提交" subsection in Chinese |
-| `BEST_PRACTICES.md` (line 1110) | Added "自动提交" row to the queue 注意事项 table |
+**Backward-compatible:** all sandbox params are optional; `undefined` means no enforcement.
 
-**Verification:** `grep -l 'auto-commit\|自动.*commit' README.md README.zh-CN.md BEST_PRACTICES.md` — all three files match.
+**Verification:** `npx tsc --noEmit` — passes with no errors

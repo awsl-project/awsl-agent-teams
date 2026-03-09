@@ -474,6 +474,33 @@ Guardian 技能根据智能体角色自动激活：
 
 **苏格拉底式头脑风暴** — 通过针对性问题探索需求，挑战假设，记录决策。
 
+## 沙箱（内置引擎）
+
+内置引擎对每个智能体强制执行沙箱策略。写操作限制在项目目录内，bash 命令按角色过滤。
+
+**通过 `ExecuteOptions.sandbox` 配置：**
+
+| 值 | 行为 |
+|---|------|
+| `true`（默认） | 使用基于角色的默认策略 |
+| `false` | 完全禁用沙箱 |
+| `SandboxPolicy` 对象 | 自定义规则 |
+
+**各角色默认策略：**
+
+| 角色 | 写路径 | Bash 模式 | 模式列表 |
+|------|--------|-----------|----------|
+| `coder` | `[cwd]` | 黑名单 | `rm -rf /`、`sudo `、`mkfs`、`dd if=`、`chmod 777`、`> /dev/sd` |
+| `tester` | `[cwd]` | 白名单 | `npm test`、`npx tsc`、`npx vitest`、`npx jest`、`node `、`cat `、`ls`、`grep `、`find ` |
+| `reviewer` | `[cwd]` | 白名单 | `cat `、`ls`、`grep `、`find `、`git log`、`git diff`、`git show` |
+| `architect` | `[cwd]` | 白名单 | `cat `、`ls`、`grep `、`find `、`tree ` |
+| `planner` | `[cwd]` | 白名单 | `cat `、`ls`、`find `、`wc ` |
+
+- **白名单**：命令必须以允许的前缀开头 — 其他一律拒绝
+- **黑名单**：命令不能包含任何禁止的模式 — 其他一律允许
+- Windows 上路径校验不区分大小写
+- 可通过 `TeamAgentDef` 的 `sandbox` 字段或智能体 frontmatter 按智能体覆盖
+
 ## 内置智能体
 
 | 名称 | 角色 | 说明 |
