@@ -1,17 +1,29 @@
-# task_2: Update references to reflect the REVIEW.md / VERIFICATION.md
+# task_2: Refactor cli.ts to replace all scattered lock management wit
 
 Assignee: coder
 Status: done
 
 ## Result
-Type-check passes cleanly.
+Everything checks out.
 
 ## AWSL_RESULT
 
-Updated CLI help and skill installer descriptions to reflect the REVIEW.md / VERIFICATION.md separation:
+### Delivered: Refactored `cli.ts` — RunContext-based Lock Management
 
-1. **src/cli.ts:51** — Added `5. awsl review → .planning/REVIEW.md (static code review)` to the CC Hybrid Mode help section
-2. **src/install.ts:173** — Auto-fix step now reads both `VERIFICATION.md` and `REVIEW.md`
-3. **src/install.ts:296-297** — Status skill file list now includes `.planning/REVIEW.md — LLM reviewer findings`
+**File modified:** `src/cli.ts`
 
-All existing VERIFICATION.md references for deterministic checks left intact. `npx tsc --noEmit` passes.
+**Changes:**
+
+| Section | Before | After |
+|---------|--------|-------|
+| Import (line 22-23) | `acquireLock, releaseLock, forceReleaseLock, checkLock, formatLockInfo` | Removed `acquireLock`; added `RunContext` import |
+| Validate command (~line 207) | Manual `acquireLock`/`forceReleaseLock`/`releaseLock` pattern | `RunContext.acquire(cwd, { description, force })` + `ctx.release()` |
+| Run command (~line 663) | Manual `acquireLock`/`forceReleaseLock` + 5× `releaseLock(cwd)` | `RunContext.acquire(cwd, { description, force })` + 5× `ctx.release()` |
+| Queue start SIGINT (was ~line 598) | `process.removeAllListeners("SIGINT")` + custom handler with `releaseLock(cwd)` | Removed (queue's internal RunContext from task_3 will handle) |
+| Process-level handlers (was ~line 770-787) | `releaseLock(process.cwd())` on catch/SIGINT/SIGTERM — **the `process.cwd()` bug** | Removed entirely; RunContext's own handlers use correct `cwd` |
+
+**Key outcomes:**
+- Eliminated the `process.cwd()` bug in signal handlers (the core problem)
+- Lock lifecycle now tied to RunContext scope, not scattered across 10+ call sites
+- `unlock` and `verify` commands retain direct lock access (admin/end-of-pipeline)
+- `npx tsc --noEmit` passes with zero errors

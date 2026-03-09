@@ -1,15 +1,19 @@
 {
-  "wave": 0,
+  "wave": 1,
   "completedTasks": [
-    "task_1"
+    "task_1",
+    "task_2",
+    "task_3"
   ],
   "taskResults": {
-    "task_1": "Compiles cleanly with no errors.\n\n## AWSL_RESULT\n\n### Delivered: `RunContext` — Lifecycle-Aware Lock Management\n\n**Files created/modified:**\n- `src/context.ts` — New file with `RunContext` class and `RunContextOptions` interface\n- `src/index.ts` — Added re-export line\n\n**API surface:**\n\n| API | Description |\n|-----|-------------|\n| `RunContext.acquire(cwd, opts)` | Factory: acquires lock, registers SIGINT/SIGTERM handlers, throws on failure |\n| `RunContext.tryAcquire(cwd, opts)` | Returns `RunContext | null` instead of throwing (queue-friendly) |\n| `ctx.release()` | Releases lock, deregisters signal handlers, idempotent (no-op if already released) |\n| `ctx.run(fn)` | Wraps async fn in try/finally for auto-release |\n| `ctx.cwd` | The locked working directory |\n| `ctx.sessionId` | Session ID from the lock |\n\n**Key design decisions:**\n- `checkLock(cwd)` called after `acquireLock` to retrieve the `sessionId` (since `acquireLock` doesn't return it)\n- Signal handlers stored in a `Map` and cleaned up on release to prevent listener leaks\n- `released` flag prevents double-release\n- Force mode: `forceReleaseLock` → retry `acquireLock`\n\n**Verification:** `npx tsc --noEmit` passes with zero errors."
+    "task_1": "Compiles cleanly with no errors.\n\n## AWSL_RESULT\n\n### Delivered: `RunContext` — Lifecycle-Aware Lock Management\n\n**Files created/modified:**\n- `src/context.ts` — New file with `RunContext` class and `RunContextOptions` interface\n- `src/index.ts` — Added re-export line\n\n**API surface:**\n\n| API | Description |\n|-----|-------------|\n| `RunContext.acquire(cwd, opts)` | Factory: acquires lock, registers SIGINT/SIGTERM handlers, throws on failure |\n| `RunContext.tryAcquire(cwd, opts)` | Returns `RunContext | null` instead of throwing (queue-friendly) |\n| `ctx.release()` | Releases lock, deregisters signal handlers, idempotent (no-op if already released) |\n| `ctx.run(fn)` | Wraps async fn in try/finally for auto-release |\n| `ctx.cwd` | The locked working directory |\n| `ctx.sessionId` | Session ID from the lock |\n\n**Key design decisions:**\n- `checkLock(cwd)` called after `acquireLock` to retrieve the `sessionId` (since `acquireLock` doesn't return it)\n- Signal handlers stored in a `Map` and cleaned up on release to prevent listener leaks\n- `released` flag prevents double-release\n- Force mode: `forceReleaseLock` → retry `acquireLock`\n\n**Verification:** `npx tsc --noEmit` passes with zero errors.",
+    "task_2": "Everything checks out.\n\n## AWSL_RESULT\n\n### Delivered: Refactored `cli.ts` — RunContext-based Lock Management\n\n**File modified:** `src/cli.ts`\n\n**Changes:**\n\n| Section | Before | After |\n|---------|--------|-------|\n| Import (line 22-23) | `acquireLock, releaseLock, forceReleaseLock, checkLock, formatLockInfo` | Removed `acquireLock`; added `RunContext` import |\n| Validate command (~line 207) | Manual `acquireLock`/`forceReleaseLock`/`releaseLock` pattern | `RunContext.acquire(cwd, { description, force })` + `ctx.release()` |\n| Run command (~line 663) | Manual `acquireLock`/`forceReleaseLock` + 5× `releaseLock(cwd)` | `RunContext.acquire(cwd, { description, force })` + 5× `ctx.release()` |\n| Queue start SIGINT (was ~line 598) | `process.removeAllListeners(\"SIGINT\")` + custom handler with `releaseLock(cwd)` | Removed (queue's internal RunContext from task_3 will handle) |\n| Process-level handlers (was ~line 770-787) | `releaseLock(process.cwd())` on catch/SIGINT/SIGTERM — **the `process.cwd()` bug** | Removed entirely; RunContext's own handlers use correct `cwd` |\n\n**Key outcomes:**\n- Eliminated the `process.cwd()` bug in signal handlers (the core problem)\n- Lock lifecycle now tied to RunContext scope, not scattered across 10+ call sites\n- `unlock` and `verify` commands retain direct lock access (admin/end-of-pipeline)\n- `npx tsc --noEmit` passes with zero errors",
+    "task_3": "`execSync` was already unused before my changes — not something introduced by this task, so I'll leave it as-is.\n\n## AWSL_RESULT\n\n### Delivered: `queue.ts` refactored to use `RunContext`\n\n**File modified:** `src/queue.ts`\n\n**Changes:**\n1. **Import**: Replaced `import { acquireLock, releaseLock, checkLock } from \"./lock.js\"` → `import { RunContext } from \"./context.js\"`\n2. **Lock acquisition** (was lines 271-301): Replaced ~30 lines of manual lock management (`lockAcquired` boolean, `acquireLock`, `checkLock` stale-lock retry, double `acquireLock`) with 6-line `RunContext.tryAcquire()` + null check\n3. **Lock release** (was lines 417-422): Replaced `if (lockAcquired) releaseLock(this.cwd)` with `ctx.release()` — unconditional since `ctx` is only created on success and `release()` is idempotent\n\n**Net effect:** ~20 fewer lines of lock retry logic removed. Zero references to `acquireLock`, `releaseLock`, `checkLock`, or `lockAcquired` remain.\n\n**Verification:** `npx tsc --noEmit` passes with zero errors."
   },
   "failedTasks": [],
   "taskErrors": {},
   "rateLimitRetries": 0,
-  "savedAt": "2026-03-09T17:53:55.087Z",
+  "savedAt": "2026-03-09T17:57:17.468Z",
   "memory": {
     "result:architect:session": {
       "value": "b3d9d320-a573-4bdf-a104-9cd39b01fe97",
@@ -42,14 +46,24 @@
       "timestamp": 1773078774178
     },
     "result:coder:session": {
-      "value": "7e9c168e-d598-4b07-bff9-92e27c298761",
+      "value": "7f2567cd-e7da-44ce-81d2-d285f25cf99f",
       "author": "coder",
-      "timestamp": 1773078834589
+      "timestamp": 1773079037281
     },
     "result:task_1": {
       "value": "Compiles cleanly with no errors.\n\n## AWSL_RESULT\n\n### Delivered: `RunContext` — Lifecycle-Aware Lock Management\n\n**Files created/modified:**\n- `src/context.ts` — New file with `RunContext` class and `RunContextOptions` interface\n- `src/index.ts` — Added re-export line\n\n**API surface:**\n\n| API | Description |\n|-----|-------------|\n| `RunContext.acquire(cwd, opts)` | Factory: acquires lock, registers SIGINT/SIGTERM handlers, throws on failure |\n| `RunContext.tryAcquire(cwd, opts)` | Returns `RunContext | null` instead of throwing (queue-friendly) |\n| `ctx.release()` | Releases lock, deregisters signal handlers, idempotent (no-op if already released) |\n| `ctx.run(fn)` | Wraps async fn in try/finally for auto-release |\n| `ctx.cwd` | The locked working directory |\n| `ctx.sessionId` | Session ID from the lock |\n\n**Key design decisions:**\n- `checkLock(cwd)` called after `acquireLock` to retrieve the `sessionId` (since `acquireLock` doesn't return it)\n- Signal handlers stored in a `Map` and cleaned up on release to prevent listener leaks\n- `released` flag prevents double-release\n- Force mode: `forceReleaseLock` → retry `acquireLock`\n\n**Verification:** `npx tsc --noEmit` passes with zero errors.",
       "author": "coder",
       "timestamp": 1773078834589
+    },
+    "result:task_3": {
+      "value": "`execSync` was already unused before my changes — not something introduced by this task, so I'll leave it as-is.\n\n## AWSL_RESULT\n\n### Delivered: `queue.ts` refactored to use `RunContext`\n\n**File modified:** `src/queue.ts`\n\n**Changes:**\n1. **Import**: Replaced `import { acquireLock, releaseLock, checkLock } from \"./lock.js\"` → `import { RunContext } from \"./context.js\"`\n2. **Lock acquisition** (was lines 271-301): Replaced ~30 lines of manual lock management (`lockAcquired` boolean, `acquireLock`, `checkLock` stale-lock retry, double `acquireLock`) with 6-line `RunContext.tryAcquire()` + null check\n3. **Lock release** (was lines 417-422): Replaced `if (lockAcquired) releaseLock(this.cwd)` with `ctx.release()` — unconditional since `ctx` is only created on success and `release()` is idempotent\n\n**Net effect:** ~20 fewer lines of lock retry logic removed. Zero references to `acquireLock`, `releaseLock`, `checkLock`, or `lockAcquired` remain.\n\n**Verification:** `npx tsc --noEmit` passes with zero errors.",
+      "author": "coder",
+      "timestamp": 1773079016097
+    },
+    "result:task_2": {
+      "value": "Everything checks out.\n\n## AWSL_RESULT\n\n### Delivered: Refactored `cli.ts` — RunContext-based Lock Management\n\n**File modified:** `src/cli.ts`\n\n**Changes:**\n\n| Section | Before | After |\n|---------|--------|-------|\n| Import (line 22-23) | `acquireLock, releaseLock, forceReleaseLock, checkLock, formatLockInfo` | Removed `acquireLock`; added `RunContext` import |\n| Validate command (~line 207) | Manual `acquireLock`/`forceReleaseLock`/`releaseLock` pattern | `RunContext.acquire(cwd, { description, force })` + `ctx.release()` |\n| Run command (~line 663) | Manual `acquireLock`/`forceReleaseLock` + 5× `releaseLock(cwd)` | `RunContext.acquire(cwd, { description, force })` + 5× `ctx.release()` |\n| Queue start SIGINT (was ~line 598) | `process.removeAllListeners(\"SIGINT\")` + custom handler with `releaseLock(cwd)` | Removed (queue's internal RunContext from task_3 will handle) |\n| Process-level handlers (was ~line 770-787) | `releaseLock(process.cwd())` on catch/SIGINT/SIGTERM — **the `process.cwd()` bug** | Removed entirely; RunContext's own handlers use correct `cwd` |\n\n**Key outcomes:**\n- Eliminated the `process.cwd()` bug in signal handlers (the core problem)\n- Lock lifecycle now tied to RunContext scope, not scattered across 10+ call sites\n- `unlock` and `verify` commands retain direct lock access (admin/end-of-pipeline)\n- `npx tsc --noEmit` passes with zero errors",
+      "author": "coder",
+      "timestamp": 1773079037281
     }
   },
   "goal": "把锁管理抽成一个带生命周期的运行上下文对象，统一持有实际 cwd，不要在进程级 handler 里重新用 process.cwd() 推断"
