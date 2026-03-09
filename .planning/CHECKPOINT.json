@@ -1,19 +1,21 @@
 {
-  "wave": 0,
+  "wave": 1,
   "completedTasks": [
     "task_1",
     "task_2",
-    "task_3"
+    "task_3",
+    "task_4"
   ],
   "taskResults": {
     "task_1": "tsc passes clean.\n\n## AWSL_RESULT\n\n### Task 1: Add read tool path validation — Complete\n\n**Changes made:**\n\n| File | Change |\n|------|--------|\n| `src/sandbox.ts` | Added `checkReadPath()` — validates resolved path is within `policy.writePaths`, returns error message if blocked |\n| `src/tools.ts` | `createReadTool()` now accepts optional `sandbox?: SandboxPolicy`; calls `checkReadPath` before reading; imported `checkReadPath` |\n| `src/tools.ts` | `TOOL_FACTORIES.read` now passes `ctx.sandbox` to `createReadTool` |\n| `src/index.ts` | Added `checkReadPath` to public exports |\n\n**Verification:** `npx tsc --noEmit` passes with zero errors.",
     "task_2": "All changes applied correctly. tsc passes clean.\n\n## AWSL_RESULT\n\n### Completed: Dashboard security hardening (task_2)\n\n**File modified**: `src/dashboard.ts`\n\n**3 security fixes applied:**\n\n| # | Fix | Line(s) | Detail |\n|---|-----|---------|--------|\n| 1 | **Bind to 127.0.0.1** | 230 | `server.listen(port, '127.0.0.1', ...)` — no longer network-accessible |\n| 2 | **Restrict CORS** | 62 | `Access-Control-Allow-Origin: http://localhost:<port>` — no more wildcard `*` |\n| 3 | **Body size limit** | 20-35 | `collectBody()` helper with 1MB limit, returns 413 on oversize; replaced both manual `req.on('data')`/`req.on('end')` patterns in `/api/queue/add` (L147) and `/api/queue/set-time` (L168) |\n\n**Verification**: `npx tsc --noEmit` — passes clean, zero errors.",
-    "task_3": "tsc passes clean.\n\n## AWSL_RESULT\n\n### Task 3: Replace shell-interpolated git commands with execFileSync — Complete\n\n| File | Change |\n|------|--------|\n| `src/planning.ts:316` | Import updated: added `execFileSync` alongside `execSync` |\n| `src/planning.ts:373` | `git add` now uses `execFileSync(\"git\", [\"add\", \"--\", f], ...)` — no shell interpolation |\n| `src/planning.ts:381` | `git commit` now uses `execFileSync(\"git\", [\"commit\", \"-m\", commitMsg], ...)` — no shell interpolation |\n\n**Security fix**: Both `git add` and `git commit` now bypass the shell entirely via `execFileSync` with array arguments, eliminating command injection through crafted filenames or commit messages. Verification: `npx tsc --noEmit` passes clean."
+    "task_3": "tsc passes clean.\n\n## AWSL_RESULT\n\n### Task 3: Replace shell-interpolated git commands with execFileSync — Complete\n\n| File | Change |\n|------|--------|\n| `src/planning.ts:316` | Import updated: added `execFileSync` alongside `execSync` |\n| `src/planning.ts:373` | `git add` now uses `execFileSync(\"git\", [\"add\", \"--\", f], ...)` — no shell interpolation |\n| `src/planning.ts:381` | `git commit` now uses `execFileSync(\"git\", [\"commit\", \"-m\", commitMsg], ...)` — no shell interpolation |\n\n**Security fix**: Both `git add` and `git commit` now bypass the shell entirely via `execFileSync` with array arguments, eliminating command injection through crafted filenames or commit messages. Verification: `npx tsc --noEmit` passes clean.",
+    "task_4": "tsc passes clean.\n\n## AWSL_RESULT\n\n### Task 4: Expand CODER_DENY_PATTERNS — Complete\n\n**File modified:** `src/sandbox.ts`\n\n**13 new patterns added** (7 existing + 13 new = 20 total):\n\n| Category | Patterns Added |\n|----------|---------------|\n| Glob-based destruction | `rm -rf /*` |\n| Download-and-execute | `\\| sh`, `\\| bash`, `curl `, `wget ` |\n| Interpreter escapes | `python -c`, `python3 -c`, `node -e`, `perl -e`, `ruby -e` |\n| Network exfiltration | `nc `, `ncat ` |\n| Eval / encoded execution | `eval `, `base64 -d` |\n\n**Verification:** `npx tsc --noEmit` passes with zero errors."
   },
   "failedTasks": [],
   "taskErrors": {},
   "rateLimitRetries": 0,
-  "savedAt": "2026-03-09T21:07:04.098Z",
+  "savedAt": "2026-03-09T21:07:37.131Z",
   "memory": {
     "result:architect:session": {
       "value": "391c4b54-4f5c-4602-ae21-7e2abb29e12b",
@@ -46,9 +48,9 @@
       "timestamp": 1773090292961
     },
     "result:coder:session": {
-      "value": "ea3bd971-0dca-404c-bf17-254ca5c345be",
+      "value": "2155126d-8194-4d10-9a8c-210a4535c3a3",
       "author": "coder",
-      "timestamp": 1773090423902
+      "timestamp": 1773090456990
     },
     "result:task_1": {
       "value": "tsc passes clean.\n\n## AWSL_RESULT\n\n### Task 1: Add read tool path validation — Complete\n\n**Changes made:**\n\n| File | Change |\n|------|--------|\n| `src/sandbox.ts` | Added `checkReadPath()` — validates resolved path is within `policy.writePaths`, returns error message if blocked |\n| `src/tools.ts` | `createReadTool()` now accepts optional `sandbox?: SandboxPolicy`; calls `checkReadPath` before reading; imported `checkReadPath` |\n| `src/tools.ts` | `TOOL_FACTORIES.read` now passes `ctx.sandbox` to `createReadTool` |\n| `src/index.ts` | Added `checkReadPath` to public exports |\n\n**Verification:** `npx tsc --noEmit` passes with zero errors.",
@@ -64,6 +66,11 @@
       "value": "tsc passes clean.\n\n## AWSL_RESULT\n\n### Task 3: Replace shell-interpolated git commands with execFileSync — Complete\n\n| File | Change |\n|------|--------|\n| `src/planning.ts:316` | Import updated: added `execFileSync` alongside `execSync` |\n| `src/planning.ts:373` | `git add` now uses `execFileSync(\"git\", [\"add\", \"--\", f], ...)` — no shell interpolation |\n| `src/planning.ts:381` | `git commit` now uses `execFileSync(\"git\", [\"commit\", \"-m\", commitMsg], ...)` — no shell interpolation |\n\n**Security fix**: Both `git add` and `git commit` now bypass the shell entirely via `execFileSync` with array arguments, eliminating command injection through crafted filenames or commit messages. Verification: `npx tsc --noEmit` passes clean.",
       "author": "coder",
       "timestamp": 1773090423903
+    },
+    "result:task_4": {
+      "value": "tsc passes clean.\n\n## AWSL_RESULT\n\n### Task 4: Expand CODER_DENY_PATTERNS — Complete\n\n**File modified:** `src/sandbox.ts`\n\n**13 new patterns added** (7 existing + 13 new = 20 total):\n\n| Category | Patterns Added |\n|----------|---------------|\n| Glob-based destruction | `rm -rf /*` |\n| Download-and-execute | `\\| sh`, `\\| bash`, `curl `, `wget ` |\n| Interpreter escapes | `python -c`, `python3 -c`, `node -e`, `perl -e`, `ruby -e` |\n| Network exfiltration | `nc `, `ncat ` |\n| Eval / encoded execution | `eval `, `base64 -d` |\n\n**Verification:** `npx tsc --noEmit` passes with zero errors.",
+      "author": "coder",
+      "timestamp": 1773090456990
     }
   },
   "goal": "检查有没有安全问题 如果有就直接修复"

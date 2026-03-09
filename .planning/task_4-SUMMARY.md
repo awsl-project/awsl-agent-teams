@@ -1,16 +1,25 @@
-# task_4: 1. In src/index.ts: add export line: `export { type SandboxP
+# task_4: In src/sandbox.ts, expand the `CODER_DENY_PATTERNS` array (l
 
 Assignee: coder
 Status: done
 
 ## Result
-Type-check passes clean.
+tsc passes clean.
 
 ## AWSL_RESULT
 
-**Modified files:**
+### Task 4: Expand CODER_DENY_PATTERNS — Complete
 
-1. **`src/index.ts`** — Added export line for `SandboxPolicy`, `BashPolicy`, `defaultPolicy`, `checkWritePath`, `checkBashCommand` from `./sandbox.js`
-2. **`src/agents.ts`** — Added `import type { SandboxPolicy }` and optional `sandbox?: SandboxPolicy` field to `TeamAgentDef` interface
+**File modified:** `src/sandbox.ts`
 
-**Verification:** `npx tsc --noEmit` — passes with no errors
+**13 new patterns added** (7 existing + 13 new = 20 total):
+
+| Category | Patterns Added |
+|----------|---------------|
+| Glob-based destruction | `rm -rf /*` |
+| Download-and-execute | `\| sh`, `\| bash`, `curl `, `wget ` |
+| Interpreter escapes | `python -c`, `python3 -c`, `node -e`, `perl -e`, `ruby -e` |
+| Network exfiltration | `nc `, `ncat ` |
+| Eval / encoded execution | `eval `, `base64 -d` |
+
+**Verification:** `npx tsc --noEmit` passes with zero errors.
