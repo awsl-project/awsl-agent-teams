@@ -1,23 +1,35 @@
 {
   "design": {
-    "title": "Make verify a true master switch",
-    "summary": "When verify=false, Phase 3 (reviewer), Phase 3b (provider verify + auto-fix loop) must all be skipped. Currently only Phase 3 is gated.",
-    "change": {
-      "file": "src/orchestrator.ts",
-      "description": "Wrap the Phase 3b auto-fix loop (lines 699-739) with `if (verifyEnabled) { ... }`. The existing bare block `{ let fixAttempt = 0; ... }` becomes `if (verifyEnabled) { let fixAttempt = 0; ... }`.",
-      "before_pattern": "// ── Phase 3b: Auto-Fix Loop\n\t{\n\t\tlet fixAttempt = 0;",
-      "after_pattern": "// ── Phase 3b: Auto-Fix Loop\n\tif (verifyEnabled) {\n\t\tlet fixAttempt = 0;"
+    "title": "RunContext — Lifecycle-Aware Lock Management",
+    "summary": "Extract lock management into a RunContext class that owns cwd + lock state + signal handler cleanup. Eliminates process.cwd() usage in signal handlers (bug) and scattered lock acquire/release code (20+ sites).",
+    "new_file": "src/context.ts",
+    "modify_files": ["src/cli.ts", "src/queue.ts", "src/index.ts", "README.md", "README.zh-CN.md", "BEST_PRACTICES.md"],
+    "keep_files": ["src/lock.ts", "src/orchestrator.ts", "src/planning.ts", "src/verify.ts"],
+    "class_design": {
+      "RunContext": {
+        "static_methods": ["acquire(cwd, options) → RunContext", "create(cwd) → RunContext"],
+        "instance_methods": ["release()", "run<T>(fn) → Promise<T>"],
+        "properties": ["readonly cwd: string", "get locked(): boolean"],
+        "private": ["_locked: boolean", "_signalHandlers: Map", "_acquire()", "_registerSignalHandlers()", "_unregisterSignalHandlers()"]
+      },
+      "LockConflictError": {
+        "extends": "Error",
+        "properties": ["readonly lockInfo: LockInfo"]
+      }
     },
-    "what_verify_false_disables": [
-      "Phase 3: Reviewer agent verification (already gated at line 654)",
-      "Phase 3b: runFullVerification() provider checks (tsc, npm test, eslint) — NEW",
-      "Phase 3b: Auto-fix coder agent loop — NEW"
+    "key_decisions": [
+      "Static factory (not constructor) — lock acquisition can fail",
+      "Per-context signal handlers (not global) — correct cwd in closure",
+      "ctx.run(fn) for guaranteed cleanup — replaces try/finally",
+      "Idempotent release — safe to call multiple times",
+      "Lock-free create() variant — for commands that don't need locks",
+      "LockConflictError typed error — replaces console.error + process.exit"
     ],
-    "what_stays_enabled": [
-      "Task auto-retry (independent concern — retries failed tasks regardless of verify)",
-      "awsl verify CLI command (standalone, not part of executeTeam)"
+    "bug_fixes": [
+      "cli.ts:773 — main().catch() used process.cwd() instead of --cwd value",
+      "cli.ts:779 — SIGINT handler used process.cwd() instead of --cwd value",
+      "cli.ts:784 — SIGTERM handler used process.cwd() instead of --cwd value"
     ],
-    "rationale": "Single guard on existing verifyEnabled flag. No new options needed. YAGNI — granular sub-options can be added later if needed.",
-    "docs_to_update": ["README.md", "README.zh-CN.md", "BEST_PRACTICES.md"]
+    "scope_boundary": "orchestrator.ts and downstream modules keep cwd:string params. RunContext wraps lock.ts, does not replace it."
   }
 }

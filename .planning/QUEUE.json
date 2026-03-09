@@ -6,10 +6,15 @@
       "options": {
         "quick": false
       },
-      "status": "running",
+      "status": "done",
       "scheduledAt": "2026-03-09T14:05:38.122Z",
       "runAt": "2026-03-09T17:11:00.000Z",
-      "startedAt": "2026-03-09T17:11:00.005Z"
+      "startedAt": "2026-03-09T17:11:00.005Z",
+      "completedAt": "2026-03-09T17:25:23.098Z",
+      "result": {
+        "success": true,
+        "summary": "All 4 tasks completed.\n- task_1: All three changes applied and type-check passes cleanly:\n- task_2: Type-check passes cleanly.\n- task_3: Type-check passes.\n- task_4: All checks pass. Here's the verification summary:"
+      }
     },
     {
       "id": "q_3",
@@ -33,9 +38,10 @@
       "options": {
         "quick": false
       },
-      "status": "pending",
+      "status": "running",
       "scheduledAt": "2026-03-09T14:05:57.809Z",
-      "runAt": "2026-03-09T17:45:00.000Z"
+      "runAt": "2026-03-09T17:45:00.000Z",
+      "startedAt": "2026-03-09T17:45:00.000Z"
     },
     {
       "id": "q_5",
@@ -69,5 +75,5 @@
     }
   ],
   "createdAt": "2026-03-09T10:11:39.245Z",
-  "updatedAt": "2026-03-09T17:11:00.005Z"
+  "updatedAt": "2026-03-09T17:45:00.000Z"
 }

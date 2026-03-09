@@ -18,7 +18,26 @@
       "inputTokens": 33345,
       "outputTokens": 21638,
       "costUsd": 2.7065619999999995
+    },
+    {
+      "id": "h_2",
+      "date": "2026-03-09T17:25:23.099Z",
+      "project": "awsl-agent-teams",
+      "projectPath": "C:\\Users\\11421\\awsl-agent-teams",
+      "queueTaskId": "q_2",
+      "goal": "先把验证链路拆清楚：REVIEW.md 只给 reviewer，VERIFICATION.md 只给 deterministic providers，auto-fix 同时读两者，避免状态覆盖",
+      "status": "done",
+      "startedAt": "2026-03-09T17:11:00.005Z",
+      "completedAt": "2026-03-09T17:25:23.098Z",
+      "duration": 863093,
+      "tasksCompleted": 0,
+      "tasksTotal": 0,
+      "summary": "All 4 tasks completed.\n- task_1: All three changes applied and type-check passes cleanly:\n- task_2: Type-check passes cleanly.\n- task_3: Type-check passes.\n- task_4: All checks pass. Here's the verification summary:",
+      "engine": "claude-code",
+      "inputTokens": 79246,
+      "outputTokens": 31893,
+      "costUsd": 4.79115695
     }
   ],
-  "updatedAt": "2026-03-09T14:48:46.051Z"
+  "updatedAt": "2026-03-09T17:25:23.099Z"
 }

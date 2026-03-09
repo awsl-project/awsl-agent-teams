@@ -1,17 +1,12 @@
 # Verification Report
 
-**Verification: 3 passed, 0 failed out of 3 checks.**
+**Verification: 4 passed, 0 failed out of 4 checks.**
 
 ## Task Checks
 
-### [PASS] task_1: `npx tsc --noEmit && npm run build`
-```
+### [PASS] task_1: `npx tsc --noEmit`
 
-> awsl-agent-core@0.1.0 build
-> tsc
-
-
-```
+### [PASS] task_2: `npx tsc --noEmit`
 
 ## General Checks
 
@@ -19,10 +14,10 @@
 
 ### [PASS] git-diff: `git diff --stat`
 ```
-.planning/.verify-cache.json |  4 +-
- .planning/CHECKPOINT.json    | 20 ++++++++--
- .planning/DESIGN.md          | 40 ++++++++-----------
- .planning/VERIFICATION.md    | 94 +++++++++++++++++++++++++++++++++-----------
- .planning/task_3-SUMMARY.md  | 61 +++++++++++-----------------
- 5 files changed, 128 insertions(+), 91 deletions(-)
+.planning/.lock              |  6 ++--
+ .planning/.verify-cache.json |  4 +--
+ .planning/CHECKPOINT.json    | 20 +++++++++---
+ .planning/VERIFICATION.md    | 75 +++++++++++++++++++++++++++++++++-----------
+ .planning/task_4-SUMMARY.md  | 40 ++++++++++++++---------
+ 5 files changed, 102 insertions(+), 43 deletions(-)
 ```

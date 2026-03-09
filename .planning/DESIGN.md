@@ -1,30 +1,26 @@
 ## AWSL_RESULT
 
-### Design: Verification Pipeline Separation
+### Design: RunContext — Lifecycle-Aware Lock Management
 
-**Problem:** `VERIFICATION.md` is overloaded — Phase 3 (LLM reviewer agent) and Phase 3b (`runFullVerification()`) both write to it. The LLM reviewer's findings get destroyed when deterministic checks overwrite the file. Auto-fix only sees deterministic results, missing code-quality issues.
+**Problem**: Lock management is scattered across 20+ call sites in `cli.ts`/`queue.ts`. Process-level signal handlers at `cli.ts:773,779,784` use `process.cwd()` to release locks — **wrong** when `--cwd /other/path` was passed. The lock leaks on crash/signal.
 
-**Solution: Simple File Split**
+**Solution**: New `RunContext` class in `src/context.ts`:
 
-| File | Owner | Content |
-|------|-------|---------|
-| `REVIEW.md` | Phase 3 LLM reviewer | `[CRITICAL]/[PASS]/[WARN]` task-specific findings |
-| `VERIFICATION.md` | Phase 3b deterministic providers | `[PASS]/[FAIL]` tsc/eslint/test output |
-| Auto-fix prompt | Reads BOTH | Fixes all CRITICAL + FAIL items |
+| API | Purpose |
+|-----|---------|
+| `RunContext.acquire(cwd, {description, force})` | Create context + acquire lock + register signal handlers |
+| `RunContext.create(cwd)` | Lock-free context for commands that don't need locks |
+| `ctx.run(fn)` | Execute with guaranteed cleanup (replaces try/finally) |
+| `ctx.release()` | Idempotent lock release + unregister signal handlers |
+| `LockConflictError` | Typed error with lock info (replaces console.error + exit) |
 
-**4 changes in `src/orchestrator.ts`:**
-1. **Line 677**: `planning.write("VERIFICATION.md", ...)` → `planning.write("REVIEW.md", ...)`
-2. **Line 678**: `memory.set("verification", ...)` → `memory.set("review", ...)`
-3. **Line 718**: Fix prompt updated to read both `REVIEW.md` and `VERIFICATION.md`
+**Key decisions**:
+1. Static factory (not constructor) — lock acquisition can fail
+2. Per-context signal handlers — correct `cwd` captured in `this`, not `process.cwd()`
+3. `ctx.run(fn)` for guaranteed cleanup — replaces 20+ scattered try/finally blocks
+4. Scope boundary: orchestrator keeps `cwd: string` params, receives `ctx.cwd`
+5. `lock.ts` unchanged — RunContext wraps it
 
-**No changes needed in:** `verify.ts` (already writes correct files), quality gate logic (reads in-memory, not file), CLI commands.
+**Files**: CREATE `src/context.ts` | MODIFY `cli.ts`, `queue.ts`, `index.ts`, docs | KEEP `lock.ts`, `orchestrator.ts`
 
-**Key decisions:**
-1. **Reuse existing files** — REVIEW.md and VERIFICATION.md already exist with correct semantics
-2. **No new abstractions** — agents can read two files; no need for a merged ISSUES.md
-3. **Memory keys split** — `"review"` for LLM findings, `"verification"` for deterministic (future)
-4. **Quality gate unaffected** — reads `verifyResult.result` variable, not the file
-
-**Files produced:** `.planning/DESIGN.md`
-
-**Design stored in shared memory as `design`.**
+**Design stored in**: `.planning/DESIGN.md` + `.planning/MEMORY.json` (key: "design")

@@ -7,6 +7,6 @@
 (none)
 
 ## Position
-- Goal: 把 verify 变成真正的总开关。verify=false 时 reviewer、provider verify、auto-fix 都应一起关闭
-- Tasks: 3/3 completed
+- Goal: 先把验证链路拆清楚：REVIEW.md 只给 reviewer，VERIFICATION.md 只给 deterministic providers，auto-fix 同时读两者，避免状态覆盖
+- Tasks: 4/4 completed
 - Status: SUCCESS
