@@ -1,19 +1,22 @@
-# task_1: 1. Add `clearHistory` to the import from `./history.js` on l
+# task_1: In src/orchestrator.ts, wrap the Phase 3b auto-fix loop bloc
 
 Assignee: coder
 Status: done
 
 ## Result
-All three changes are in place and type-check passes.
-
 ## AWSL_RESULT
 
-**Task completed: `POST /api/history/clear` endpoint added.**
+**Task completed: Guard Phase 3b with `verifyEnabled`**
 
-### Changes made to `src/dashboard.ts`:
-1. **Line 12** — Added `clearHistory` to the import from `./history.js`
-2. **Lines 174-179** — New `POST /api/history/clear` route handler that calls `clearHistory(cwd)` and returns `{ cleared: true }`
-3. **Line 188** — Updated log message to list the new endpoint
+**Change:** `src/orchestrator.ts` line 700 — replaced bare block `{` with `if (verifyEnabled) {`. The closing `}` on line 739 remains unchanged (it now closes the `if` instead of the bare block).
 
-### Verification
-- `npx tsc --noEmit` — passes with no errors
+**Effect:** When `verify=false` (`--no-verify`), all verification is now skipped:
+- Phase 3: Reviewer agent (already guarded at line 654)
+- Phase 3b: `runFullVerification()` + auto-fix coder loop (now guarded at line 700)
+
+Task auto-retry (line 741+) is unaffected.
+
+**Verification:** `npx tsc --noEmit` and `npm run build` both pass cleanly.
+
+**Files modified:**
+- `src/orchestrator.ts` (1 line changed)

@@ -165,7 +165,7 @@ awsl run "目标" --engine claude-code [选项]
 | `--engine claude-code` | auto | 使用 Claude Code CLI 作为执行引擎 |
 | `--quick` | false | 跳过头脑风暴和调研阶段 |
 | `--concurrency <n>` | 2 | 每波次最大并行智能体数 |
-| `--no-verify` | false | 跳过验证阶段 |
+| `--no-verify` | false | 跳过所有验证步骤：reviewer agent、代码验证 (tsc、npm test、eslint) 和自动修复循环。任务自动重试仍然运行（处理执行失败而非验证） |
 | `--no-commit` | false | 跳过 git 提交 |
 | `--plan-only` | false | 仅生成计划，不执行 |
 | `--execute-plan` | false | 执行已有的 `.planning/PLAN.md` |
@@ -179,8 +179,8 @@ awsl run "目标" --engine claude-code [选项]
 阶段 0b: 调研        并行智能体分析现有代码库
 阶段 1:  规划        规划师智能体创建结构化任务 DAG
 阶段 2:  执行        编码/测试/审查智能体按拓扑序波次运行
-阶段 3:  验证        基于代码的验证（tsc, npm test, eslint）
-阶段 3b: 自动修复    验证失败 → 编码修复 → 重新验证（最多 3 轮）
+阶段 3:  验证        基于代码的验证（tsc, npm test, eslint）  [--no-verify 时跳过]
+阶段 3b: 自动修复    验证失败 → 编码修复 → 重新验证（最多 3 轮）  [--no-verify 时跳过]
 阶段 4:  重规划      任务失败 → 重试 2 次 → 换方案重新规划
 ```
 

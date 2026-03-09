@@ -554,9 +554,33 @@ awsl run --execute-plan --engine claude-code
 # 指定工作目录
 awsl run "goal" --engine claude-code --cwd /path/to/project
 
-# 跳过验证（不推荐）
+# 跳过所有验证（快速迭代/外部 CI 时使用）
 awsl run "goal" --engine claude-code --no-verify
 ```
+
+### `--no-verify` 验证总开关
+
+`--no-verify` 是验证的总开关（master switch），禁用后会跳过 **所有** 验证相关步骤：
+
+| 跳过的阶段 | 说明 |
+|-----------|------|
+| Phase 3: Reviewer agent | 不启动 reviewer 智能体做代码审查 |
+| Phase 3: Provider verify | 不执行 tsc、npm test、eslint |
+| Phase 3b: Auto-fix loop | 不进入自动修复循环 |
+
+**不受影响的阶段：**
+- Phase 4: Task auto-retry（任务自动重试）— 仍然运行，因为它处理的是 **执行失败**（agent 崩溃、超时等），不是验证失败
+
+**何时使用 `--no-verify`：**
+- 快速迭代原型，不需要质量门禁
+- 外部 CI/CD 已有完整的测试和 lint 流程
+- 信任代码质量，只需要 agent 写代码
+- 调试 AWSL 本身，排除验证阶段的干扰
+
+**何时不要用：**
+- 通宵无人值守构建（验证是质量保障的核心）
+- 多模块大项目（需要 reviewer 捕获跨模块问题）
+- 任何需要高代码质量的场景
 
 ### 终端使用 builtin 引擎（需要 ANTHROPIC_API_KEY）
 

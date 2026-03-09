@@ -165,7 +165,7 @@ awsl run "goal" --engine claude-code [options]
 | `--engine claude-code` | auto | Use Claude Code CLI as execution engine |
 | `--quick` | false | Skip brainstorm & research phases |
 | `--concurrency <n>` | 2 | Max parallel agents per wave |
-| `--no-verify` | false | Skip verification phase |
+| `--no-verify` | false | Skip ALL verification: reviewer agent, provider verification (tsc, npm test, eslint), and auto-fix loop. Task auto-retry still runs (handles execution failures, not verification) |
 | `--no-commit` | false | Skip git commits |
 | `--plan-only` | false | Generate plan only, don't execute |
 | `--execute-plan` | false | Execute existing `.planning/PLAN.md` |
@@ -179,8 +179,8 @@ Phase 0a: Brainstorm    architect agent explores requirements (Socratic method)
 Phase 0b: Research      parallel agents analyze existing codebase
 Phase 1:  Plan          planner agent creates structured task DAG
 Phase 2:  Execute       coder/tester/reviewer agents run in topological waves
-Phase 3:  Verify        code-based verification (tsc, npm test, eslint)
-Phase 3b: Auto-Fix      on verify failure → coder fixes → re-verify (max 3 rounds)
+Phase 3:  Verify        code-based verification (tsc, npm test, eslint)  [skipped by --no-verify]
+Phase 3b: Auto-Fix      on verify failure → coder fixes → re-verify (max 3 rounds)  [skipped by --no-verify]
 Phase 4:  Re-plan       on task failure → retry 2x → replan with different approach
 ```
 
