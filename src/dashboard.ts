@@ -17,6 +17,23 @@ import { log } from "./log.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+const MAX_BODY = 1024 * 1024 // 1MB
+function collectBody(req: http.IncomingMessage, res: http.ServerResponse, cb: (body: string) => void) {
+	let body = ''
+	let size = 0
+	req.on('data', (chunk: Buffer) => {
+		size += chunk.length
+		if (size > MAX_BODY) {
+			res.writeHead(413, { 'Content-Type': 'application/json' })
+			res.end(JSON.stringify({ error: 'Request body too large' }))
+			req.destroy()
+			return
+		}
+		body += chunk.toString()
+	})
+	req.on('end', () => { if (!req.destroyed) cb(body) })
+}
+
 export function startDashboard(cwd: string, port: number = 3120): http.Server {
 	// Resolve dashboard HTML path — try multiple locations
 	const htmlPaths = [
@@ -42,7 +59,7 @@ export function startDashboard(cwd: string, port: number = 3120): http.Server {
 
 	const server = http.createServer((req, res) => {
 		// CORS headers for all responses
-		res.setHeader("Access-Control-Allow-Origin", "*");
+		res.setHeader("Access-Control-Allow-Origin", "http://localhost:" + port);
 		res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
 		res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
@@ -127,9 +144,7 @@ export function startDashboard(cwd: string, port: number = 3120): http.Server {
 
 		// ── Queue mutations ───────────────────────────────
 		if (req.method === "POST" && url.pathname === "/api/queue/add") {
-			let body = "";
-			req.on("data", (chunk: Buffer) => { body += chunk.toString(); });
-			req.on("end", () => {
+			collectBody(req, res, (body) => {
 				try {
 					const { goal, engine, quick, dependsOn, runAt } = JSON.parse(body);
 					if (!goal || typeof goal !== "string") {
@@ -150,9 +165,7 @@ export function startDashboard(cwd: string, port: number = 3120): http.Server {
 		}
 
 		if (req.method === "POST" && url.pathname === "/api/queue/set-time") {
-			let body = "";
-			req.on("data", (chunk: Buffer) => { body += chunk.toString(); });
-			req.on("end", () => {
+			collectBody(req, res, (body) => {
 				try {
 					const { id, runAt } = JSON.parse(body);
 					if (!id) {
@@ -214,7 +227,7 @@ export function startDashboard(cwd: string, port: number = 3120): http.Server {
 		throw err;
 	});
 
-	server.listen(port, () => {
+	server.listen(port, '127.0.0.1', () => {
 		log.info("dashboard", `Dashboard running at http://localhost:${port}`);
 		log.info("dashboard", `API: /api/history, /api/stats, /api/queue, /api/logs (SSE), /api/queue/add|remove|clear, /api/history/clear`);
 	});
