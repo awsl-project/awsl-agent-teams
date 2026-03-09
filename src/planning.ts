@@ -313,7 +313,7 @@ function parseMarkdownTasks(raw: string): StructuredTask[] {
 
 // ─── Git Commit Helper ──────────────────────────────────────
 
-import { execSync } from "node:child_process";
+import { execSync, execFileSync } from "node:child_process";
 
 /**
  * Collect files that actually changed in the working tree (staged + unstaged + untracked).
@@ -370,7 +370,7 @@ export function atomicCommit(cwd: string, taskId: string, message: string, taskF
 
 		// Stage files individually
 		for (const f of toStage) {
-			execSync(`git add -- ${JSON.stringify(f)}`, { cwd, stdio: "pipe" });
+			execFileSync("git", ["add", "--", f], { cwd, stdio: "pipe" });
 		}
 
 		// Check if anything actually staged
@@ -378,7 +378,7 @@ export function atomicCommit(cwd: string, taskId: string, message: string, taskF
 		if (!staged) return false;
 
 		const commitMsg = `${taskId}: ${message}`;
-		execSync(`git commit -m ${JSON.stringify(commitMsg)}`, {
+		execFileSync("git", ["commit", "-m", commitMsg], {
 			cwd,
 			stdio: "pipe",
 		});
