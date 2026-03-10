@@ -11,7 +11,6 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadHistory, getHistoryStats, clearHistory } from "./history.js";
-import { getLogStream, type LogLine } from "./logstream.js";
 import { TaskQueue } from "./queue.js";
 import { log } from "./log.js";
 import { RelayServer } from "./relay.js";
@@ -81,34 +80,6 @@ export function startDashboard(cwd: string, port: number = 3120): http.Server {
 			res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
 			res.end(dashboardHtml);
 			return;
-		}
-
-		// ── SSE: live log stream ──────────────────────────
-		if (url.pathname === "/api/logs") {
-			res.writeHead(200, {
-				"Content-Type": "text/event-stream",
-				"Cache-Control": "no-cache",
-				"Connection": "keep-alive",
-			});
-
-			const logStream = getLogStream();
-
-			// Send buffered lines for catch-up
-			for (const line of logStream.getBuffer()) {
-				res.write(`data: ${JSON.stringify(line)}\n\n`);
-			}
-
-			// Subscribe to new lines
-			const onLine = (line: LogLine) => {
-				res.write(`data: ${JSON.stringify(line)}\n\n`);
-			};
-			logStream.on("line", onLine);
-
-			// Cleanup on disconnect
-			req.on("close", () => {
-				logStream.removeListener("line", onLine);
-			});
-			return; // keep connection open
 		}
 
 		// ── JSON APIs: read-only ──────────────────────────
@@ -282,7 +253,7 @@ export function startDashboard(cwd: string, port: number = 3120): http.Server {
 
 	server.listen(port, '0.0.0.0', () => {
 		log.info("dashboard", `Dashboard running at http://0.0.0.0:${port}`);
-		log.info("dashboard", `API: /api/history, /api/stats, /api/queue, /api/logs (SSE), /api/queue/add|remove|clear|start, /api/history/clear`);
+		log.info("dashboard", `API: /api/history, /api/stats, /api/queue, /api/queue/add|remove|clear|start, /api/history/clear`);
 		log.info("dashboard", `Relay: /ws/relay (WebSocket), /api/clients, /api/clients/command`);
 	});
 
