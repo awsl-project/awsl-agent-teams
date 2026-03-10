@@ -875,15 +875,17 @@ ${failedTasksForReplan.length > 0 ? failedTasksForReplan.map(t => `- ${t.id}: ${
 		log.info("conductor", `  [${icon}] ${t.id} (${t.assignee}): ${t.status}`);
 	}
 
-	// Build detailed summary with per-task descriptions
+	// Build detailed summary with per-task descriptions + AI output
 	const taskSummaries = tasks
 		.map(t => {
 			const icon = t.status === "done" || t.status === "verified" ? "✅" : "❌";
 			const desc = t.description.length > 80 ? t.description.slice(0, 77) + "..." : t.description;
 			const files = t.files && t.files.length > 0 ? ` [${t.files.join(", ")}]` : "";
-			return `${icon} ${t.id} (${t.assignee}): ${desc}${files}`;
+			const output = t.result ? t.result.slice(0, 300).trim() : (t.error ? `Error: ${t.error.slice(0, 200)}` : "");
+			const outputLine = output ? `\n   → ${output}` : "";
+			return `${icon} ${t.id} (${t.assignee}): ${desc}${files}${outputLine}`;
 		})
-		.join("\n");
+		.join("\n\n");
 	const headline = success
 		? `✅ ${tasks.length}/${tasks.length} tasks completed successfully.`
 		: `⚠️ ${doneCount}/${tasks.length} tasks completed, ${tasks.length - doneCount} failed.`;
