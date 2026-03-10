@@ -17,6 +17,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { TaskQueue } from "./queue.js";
 import { type Engine, detectEngine } from "./runner.js";
+import { loadHistory } from "./history.js";
 import { log } from "./log.js";
 
 export interface RemoteClientOptions {
@@ -259,10 +260,12 @@ export class RemoteClient {
 	}
 
 	private sendStatus(): void {
+		const historyData = loadHistory(this.options.cwd);
 		this.send({
 			type: "status",
 			data: {
 				queue: this.queue.list(),
+				history: historyData.entries,
 				system: {
 					hostname: os.hostname(),
 					platform: process.platform,

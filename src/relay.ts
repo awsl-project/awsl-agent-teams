@@ -46,6 +46,7 @@ export interface ClientInfo {
 	lastSeen: string;
 	status?: {
 		queue: unknown[];
+		history?: unknown[];
 		system: {
 			hostname: string;
 			platform: string;
