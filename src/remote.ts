@@ -201,7 +201,7 @@ export class RemoteClient {
 					const p = payload as any;
 					const engine = p?.engine ? detectEngine(p.engine) : undefined;
 					// Run in background so we don't block the message handler
-					this.queue.start(engine as Engine | undefined, { once: p?.once ?? true })
+					this.queue.start(engine as Engine | undefined, { once: p?.once ?? false, ignoreRunAt: p?.ignoreRunAt ?? true })
 						.then(() => log.info("remote", "Queue execution finished"))
 						.catch((e: any) => log.warn("remote", `Queue execution failed: ${e.message}`));
 					result = { started: true };

@@ -185,10 +185,10 @@ export function startDashboard(cwd: string, port: number = 3120): http.Server {
 		if (req.method === "POST" && url.pathname === "/api/queue/start") {
 			collectBody(req, res, (raw) => {
 				try {
-					const { engine, once } = JSON.parse(raw || "{}");
+					const { engine, once, ignoreRunAt } = JSON.parse(raw || "{}");
 					const queue = new TaskQueue(cwd);
 					// Fire-and-forget: start the queue daemon in background
-					queue.start(engine, { once: once ?? false }).catch(err => {
+					queue.start(engine, { once: once ?? false, ignoreRunAt: ignoreRunAt ?? true }).catch(err => {
 						log.warn("dashboard", `Queue execution error: ${err.message}`);
 					});
 					res.writeHead(200, { "Content-Type": "application/json" });

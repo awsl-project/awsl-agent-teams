@@ -1447,12 +1447,12 @@ async function removeTask(id) {
 async function startQueue() {
   try {
     if (selectedClient) {
-      await clientCmd('queue:start', { once: false });
+      await clientCmd('queue:start', { once: false, ignoreRunAt: true });
     } else {
       await fetch('/api/queue/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ once: false })
+        body: JSON.stringify({ once: false, ignoreRunAt: true })
       });
     }
     alert('Queue started!');

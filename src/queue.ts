@@ -174,7 +174,7 @@ export class TaskQueue {
 	/**
 	 * Main daemon loop — execute pending tasks sequentially.
 	 */
-	async start(defaultEngine?: Engine, options?: { once?: boolean }): Promise<void> {
+	async start(defaultEngine?: Engine, options?: { once?: boolean; ignoreRunAt?: boolean }): Promise<void> {
 		log.section("Queue: Starting task execution");
 
 		// Recover from crash: any task left "running" from a prior session is stale
@@ -211,8 +211,8 @@ export class TaskQueue {
 			const nextTask = data.tasks.find((task, idx) => {
 				if (task.status !== "pending") return false;
 
-				// Check scheduled time
-				if (task.runAt) {
+				// Check scheduled time (skip if ignoreRunAt)
+				if (task.runAt && !options?.ignoreRunAt) {
 					const runTime = Date.parse(task.runAt);
 					if (!isNaN(runTime) && runTime > now) {
 						// Not yet time — track earliest for sleep
