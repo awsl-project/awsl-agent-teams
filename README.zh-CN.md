@@ -789,13 +789,19 @@ awsl queue show q_1                            # 查看单个任务详情
 awsl queue remove q_1                          # 移除任务
 awsl queue start --engine claude-code          # 开始执行
 awsl queue clear                               # 清空队列
+# 快速启动 — 一条命令启动所有服务
+awsl start                                     # 启动仪表盘 + 远程连接（如已配置）
+awsl start --server http://server:3120         # 启动 + 配置远程，一步到位
+awsl stop                                      # 停止所有服务
+awsl status                                    # 查看运行状态
+
+# 仪表盘（手动控制）
 awsl dashboard [--port N]                      # 打开睡前模式像素风仪表盘（默认端口 3120）
 awsl dashboard --bg                            # 后台启动仪表盘进程
 awsl dashboard stop                            # 停止后台仪表盘进程
 
 # 远程控制（将本地机器连接到远程面板）
-awsl remote init http://server:3120            # 保存配置（一次性）
-awsl remote connect --bg                       # 后台连接（读取配置）
+awsl remote init http://server:3120            # 保存配置 + 启动连接
 awsl remote status                             # 查看连接状态
 awsl remote stop                               # 停止后台客户端
 ```

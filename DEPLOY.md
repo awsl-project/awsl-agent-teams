@@ -59,26 +59,19 @@ docker run -d -p 8080:3120 --restart unless-stopped --name awsl-dashboard awsl-d
 ## 客户端连接
 
 ```bash
-# 第一步：配置（只需一次）
 cd /your/project
-awsl remote init http://服务器IP:3120 --id my-laptop
-# → 保存到 .planning/remote.json
 
-# 第二步：后台连接
-awsl remote connect --bg
+# 一条命令：启动本地仪表盘 + 连接远程面板
+awsl start --server http://服务器IP:3120 --id my-laptop
 
 # 查看状态
-awsl remote status
+awsl status
 
-# 停止
-awsl remote stop
+# 停止所有服务
+awsl stop
 ```
 
-也可以跳过 init，直接连接：
-
-```bash
-awsl remote connect http://192.168.1.100:3120 --bg
-```
+首次 `awsl start --server <url>` 会保存配置到 `.planning/remote.json`，之后直接 `awsl start` 就行。
 
 连上后在面板 Machines 面板会看到这台机器。
 

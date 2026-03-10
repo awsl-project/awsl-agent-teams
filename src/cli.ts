@@ -33,6 +33,9 @@ function usage() {
   Conductor (planning & parallelism) + Guardian (TDD & quality)
 
 Commands:
+  start [--port N]         Start all services (dashboard + remote if configured)
+  stop                     Stop all services
+  status                   Show status of all services
   init [--global]          Install skills into .claude/skills/
   validate                 Validate .planning/PLAN.md → compute waves → WAVES.md
   verify                   Run tests, lint, typecheck from PLAN.md verify fields
@@ -155,6 +158,153 @@ async function main() {
 	// ── Init command ────────────────────────────────────────
 	if (command === "init") {
 		runInstaller();
+		process.exit(0);
+	}
+
+	// ── Start command — boot all services ──────────────────
+	if (command === "start") {
+		const { cwd } = parseCwdAndForce(args);
+		const planDir = path.join(cwd, ".planning");
+		if (!fs.existsSync(planDir)) fs.mkdirSync(planDir, { recursive: true });
+
+		let port = 3120;
+		let serverUrl: string | undefined;
+		let clientId: string | undefined;
+
+		for (let i = 1; i < args.length; i++) {
+			if (args[i] === "--port" && i + 1 < args.length) { port = parseInt(args[++i], 10); }
+			else if (args[i] === "--server" && i + 1 < args.length) { serverUrl = args[++i]; }
+			else if (args[i] === "--id" && i + 1 < args.length) { clientId = args[++i]; }
+			else if (args[i] === "--cwd" && i + 1 < args.length) { i++; }
+		}
+
+		// Load remote config if exists
+		const configPath = path.join(planDir, "remote.json");
+		try {
+			if (fs.existsSync(configPath)) {
+				const cfg = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+				if (!serverUrl && cfg.serverUrl) serverUrl = cfg.serverUrl;
+				if (!clientId && cfg.clientId) clientId = cfg.clientId;
+			}
+		} catch { /* ignore */ }
+
+		// If --server provided, save/update config
+		if (serverUrl) {
+			const config: Record<string, string> = { serverUrl };
+			if (clientId) config.clientId = clientId;
+			fs.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
+		}
+
+		const { spawn } = await import("node:child_process");
+
+		// 1. Start dashboard (background)
+		const dashPidFile = path.join(planDir, ".dashboard.pid");
+		let dashAlive = false;
+		if (fs.existsSync(dashPidFile)) {
+			const old = parseInt(fs.readFileSync(dashPidFile, "utf-8").trim(), 10);
+			try { process.kill(old, 0); dashAlive = true; } catch { fs.unlinkSync(dashPidFile); }
+		}
+
+		if (dashAlive) {
+			console.log(`  Dashboard: already running`);
+		} else {
+			if (await isPortInUse(port)) {
+				console.log(`  Dashboard: port ${port} in use, skipping (use --port to change)`);
+			} else {
+				const dashArgs = [process.argv[1], "dashboard", "--port", String(port), "--cwd", cwd];
+				const dashChild = spawn(process.execPath, dashArgs, { detached: true, stdio: "ignore", cwd });
+				dashChild.unref();
+				fs.writeFileSync(dashPidFile, String(dashChild.pid));
+				console.log(`  Dashboard: started (pid ${dashChild.pid}) → http://localhost:${port}`);
+			}
+		}
+
+		// 2. Start remote connection (if configured)
+		const remotePidFile = path.join(planDir, ".remote.pid");
+		if (serverUrl) {
+			let remoteAlive = false;
+			if (fs.existsSync(remotePidFile)) {
+				const old = parseInt(fs.readFileSync(remotePidFile, "utf-8").trim(), 10);
+				try { process.kill(old, 0); remoteAlive = true; } catch { fs.unlinkSync(remotePidFile); }
+			}
+
+			if (remoteAlive) {
+				console.log(`  Remote:    already connected`);
+			} else {
+				const remoteArgs = [process.argv[1], "remote", "connect", serverUrl, "--cwd", cwd];
+				if (clientId) remoteArgs.push("--id", clientId);
+				const remoteChild = spawn(process.execPath, remoteArgs, { detached: true, stdio: "ignore" });
+				remoteChild.unref();
+				fs.writeFileSync(remotePidFile, String(remoteChild.pid));
+				console.log(`  Remote:    connected to ${serverUrl} (pid ${remoteChild.pid})`);
+			}
+		} else {
+			console.log(`  Remote:    not configured (use --server <url> or awsl remote init <url>)`);
+		}
+
+		console.log(`\n  awsl status  — check services`);
+		console.log(`  awsl stop    — stop all`);
+		process.exit(0);
+	}
+
+	// ── Stop command — stop all services ───────────────────
+	if (command === "stop") {
+		const { cwd } = parseCwdAndForce(args);
+		const planDir = path.join(cwd, ".planning");
+
+		const killPid = (pidFile: string, label: string) => {
+			try {
+				const pid = parseInt(fs.readFileSync(pidFile, "utf-8").trim(), 10);
+				process.kill(pid);
+				fs.unlinkSync(pidFile);
+				console.log(`  ${label}: stopped (pid ${pid})`);
+			} catch {
+				try { fs.unlinkSync(pidFile); } catch { /* ignore */ }
+				console.log(`  ${label}: not running`);
+			}
+		};
+
+		killPid(path.join(planDir, ".dashboard.pid"), "Dashboard");
+		killPid(path.join(planDir, ".remote.pid"), "Remote   ");
+		process.exit(0);
+	}
+
+	// ── Status command — show service status ───────────────
+	if (command === "status") {
+		const { cwd } = parseCwdAndForce(args);
+		const planDir = path.join(cwd, ".planning");
+
+		const checkPid = (pidFile: string): { running: boolean; pid: number | null } => {
+			try {
+				const pid = parseInt(fs.readFileSync(pidFile, "utf-8").trim(), 10);
+				process.kill(pid, 0);
+				return { running: true, pid };
+			} catch {
+				return { running: false, pid: null };
+			}
+		};
+
+		console.log();
+		const dash = checkPid(path.join(planDir, ".dashboard.pid"));
+		console.log(`  Dashboard: ${dash.running ? `running (pid ${dash.pid})` : "stopped"}`);
+
+		const remote = checkPid(path.join(planDir, ".remote.pid"));
+		const configPath = path.join(planDir, "remote.json");
+		let serverUrl: string | undefined;
+		try {
+			if (fs.existsSync(configPath)) {
+				serverUrl = JSON.parse(fs.readFileSync(configPath, "utf-8")).serverUrl;
+			}
+		} catch { /* ignore */ }
+
+		if (remote.running) {
+			console.log(`  Remote:    connected (pid ${remote.pid})${serverUrl ? ` → ${serverUrl}` : ""}`);
+		} else if (serverUrl) {
+			console.log(`  Remote:    stopped (configured: ${serverUrl})`);
+		} else {
+			console.log(`  Remote:    not configured`);
+		}
+		console.log();
 		process.exit(0);
 	}
 

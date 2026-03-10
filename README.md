@@ -794,13 +794,19 @@ awsl queue show q_1                           # Show detailed info for a single 
 awsl queue remove q_1                         # Remove a task
 awsl queue start --engine claude-code         # Start queue execution
 awsl queue clear                              # Clear all tasks
+# Quick start — one command boots everything
+awsl start                                   # Start dashboard + remote (if configured)
+awsl start --server http://server:3120       # Start + configure remote in one shot
+awsl stop                                    # Stop all services
+awsl status                                  # Check what's running
+
+# Dashboard (manual control)
 awsl dashboard [--port N]                     # Open the sleep mode pixel dashboard (default: 3120)
 awsl dashboard --bg                          # Start dashboard as background process
 awsl dashboard stop                          # Stop background dashboard process
 
 # Remote control (connect local machine to remote dashboard)
-awsl remote init http://server:3120          # Save config (one-time)
-awsl remote connect --bg                     # Background connect (reads config)
+awsl remote init http://server:3120          # Save config + start connection
 awsl remote status                           # Show connection status
 awsl remote stop                             # Stop background client
 ```

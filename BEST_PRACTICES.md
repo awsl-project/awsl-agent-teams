@@ -53,6 +53,10 @@ awsl run "goal" --engine claude-code
 排队多任务，通宵执行     →  awsl queue add "goal" + awsl queue start
 定时调度任务             →  awsl queue add "goal" --at "03:00"
 一句话排队多任务         →  awsl queue plan "先做A，然后B，最后C"
+一键启动所有服务          →  awsl start
+启动并配置远程面板        →  awsl start --server http://server:3120
+停止所有服务              →  awsl stop
+查看服务状态              →  awsl status
 查看睡前模式仪表盘        →  awsl dashboard
 后台启动仪表盘            →  awsl dashboard --bg
 停止后台仪表盘            →  awsl dashboard stop
@@ -1245,35 +1249,44 @@ awsl dashboard stop
 - 搭配 `awsl queue start` 使用，先启动仪表盘再启动队列
 - 远程服务器上长期运行仪表盘
 
-**典型远程监控工作流：**
+**典型工作流 — 一键启动：**
 ```bash
-# 在服务器上启动面板
-awsl dashboard --bg --port 3120
+# 进入项目目录，一条命令启动所有服务
+cd /your/project
+awsl start --server http://server-ip:3120 --id my-laptop
 
-# 在本地机器上连接到服务器面板
-awsl remote connect http://server-ip:3120
+# 输出：
+#   Dashboard: started (pid 12345) → http://localhost:3120
+#   Remote:    connected to http://server-ip:3120 (pid 12346)
 
-# 在手机/其他设备浏览器打开
-# http://server-ip:3120
-# → 看进度、收通知、加任务、远程控制本地机器
+# 查看状态
+awsl status
+
+# 全部停止
+awsl stop
 ```
+
+首次 `awsl start --server <url>` 会保存远程配置到 `.planning/remote.json`，之后直接 `awsl start` 就行。
 
 ### 远程控制
 
 将面板部署到服务器上，通过 WebSocket 中继远程控制本地开发机。
 
 **架构：**
-- **面板（服务器）** — 运行 `awsl dashboard`，提供 Web UI + WebSocket 中继
-- **本地机器** — 运行 `awsl remote connect`，通过 WebSocket 连接到面板
+- **面板（服务器）** — Docker 部署 `docker compose up -d`，提供 Web UI + WebSocket 中继
+- **本地机器** — `awsl start` 启动仪表盘 + 远程连接
 - **浏览器/手机** — 打开面板 URL，通过 REST API 向本地机器发送命令
 
 **连接本地机器：**
 ```bash
-# 基本连接（自动以 hostname-projectDir 为 ID）
-awsl remote connect http://server:3120
+# 最简方式：一条命令搞定
+awsl start --server http://server:3120
 
-# 自定义 ID + 指定项目目录
-awsl remote connect http://server:3120 --id my-laptop --cwd /path/to/project
+# 带自定义 ID
+awsl start --server http://server:3120 --id my-laptop
+
+# 也可以分步操作
+awsl remote init http://server:3120 --id my-laptop  # 保存配置 + 连接
 
 # 支持自动重连（断线后指数退避重试：5s→10s→20s→30s 上限）
 ```
