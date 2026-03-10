@@ -1,28 +1,37 @@
-# task_1: Add read tool path validation
+# task_1: Modify public/dashboard.html to make task details collapsibl
 
 Assignee: coder
 Status: done
 
 ## Result
+All changes are correct. Here's a summary of what was implemented:
+
 ## AWSL_RESULT
 
-### Task: Add read tool path validation
+### Modified file
+- `public/dashboard.html`
 
-**What changed** — `src/sandbox.ts` (single file, `tools.ts` required no changes):
+### Changes made
 
-1. **`SandboxPolicy` interface** — Added two optional fields:
-   - `readPaths?: string[]` — Separate read-allowed directories (falls back to `writePaths` if omitted, backward compatible)
-   - `blockedReadPatterns?: string[]` — Sensitive file basename patterns blocked from reading
+**1. CSS (lines 398-409)** — Added collapsible styles:
+- `.entry { cursor: pointer }` — pointer cursor on timeline cards
+- `.entry-details { display: none }` — hide details by default
+- `.entry.expanded .entry-details { display: block }` — show on expand
+- `.entry-toggle` with rotate transform for chevron indicator (▸ → rotated 90° when expanded)
+- `.q-summary-row { display: none }` — hide queue summaries by default
+- `.q-summary-row.expanded { display: table-row }` — show on expand
+- `.q-table tr.has-summary { cursor: pointer }` — pointer on clickable rows
+- `.q-toggle` with rotate transform for queue chevron
 
-2. **`SENSITIVE_FILE_PATTERNS` constant** — 17 patterns covering `.env*`, `credentials.json`, `secrets.json`, SSH keys (`id_rsa`, `id_ed25519`, etc.), `.npmrc`, `.pypirc`, `token.json`, `service-account.json`, `.htpasswd`
+**2. Timeline `renderTimeline()` (lines 1109-1123)**:
+- Added `<span class="entry-toggle">▸</span>` chevron in `.entry-row1`
+- Wrapped `.entry-goal`, `.entry-tasks`, `.entry-summary` inside `<div class="entry-details">`
+- Added `card.onclick` handler to toggle `.expanded` class
 
-3. **`checkReadPath()` updated** — Now performs two checks:
-   - **Sensitive file blocking**: case-insensitive basename match against `blockedReadPatterns` (defaults to `SENSITIVE_FILE_PATTERNS`)
-   - **Directory allowlist**: validates against `readPaths` (falls back to `writePaths` for backward compat)
+**3. Queue `renderQueue()` (lines 1200-1208)**:
+- Added `toggleQueueDetail(id)` function (lines 1166-1176) that toggles `.expanded` class on summary row + chevron
+- Queue rows with summaries get `has-summary` class + `onclick` handler
+- Each summary row gets unique `id="qd_0"`, `id="qd_1"`, etc.
+- Chevron `<span class="q-toggle">▸</span>` added to rows with summaries
 
-4. **`defaultPolicy()` updated** — All roles now get explicit `readPaths`, `writePaths`, and `blockedReadPatterns`
-
-**Backward compatibility**: Both new fields are optional with sensible defaults. Existing code that constructs `SandboxPolicy` with only `writePaths` + `bash` continues to work — `checkReadPath` falls back to `writePaths` and uses the default sensitive patterns.
-
-**Files modified**: `src/sandbox.ts`
-**Build**: `tsc --noEmit` passes clean
+**Build**: `npm run build` passes clean.
