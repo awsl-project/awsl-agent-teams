@@ -1,20 +1,25 @@
-# task_1: In public/dashboard.html, implement section-level collapse f
+# task_1: In public/dashboard.html, implement these changes exactly as
 
 Assignee: coder
 Status: done
 
 ## Result
-Build passes cleanly. All three changes are implemented:
-
 ## AWSL_RESULT
 
-### Implemented: Section-level collapse for Timeline
+### Task: Timeline collapse state persistence
 
-**File modified**: `public/dashboard.html`
+All 6 changes implemented in `public/dashboard.html`:
 
-**Changes**:
-1. **CSS** (lines 424–436) — Added section-level collapse styles (`.timeline-wrap.collapsed` hides `#tl` and `#filterBar`) and day-level collapse styles (`.date-group`, `.date-head`, `.date-toggle`, `.date-count`)
-2. **HTML** (line 795) — Added `<button class="tl-collapse-btn" onclick="toggleTimeline()">Collapse</button>` to the Timeline h2 header
-3. **JavaScript** (lines 1111–1116) — Added `toggleTimeline()` function that toggles `.collapsed` class on `.timeline-wrap` and updates button text between "Collapse" / "Expand"
+1. **`collapsedDates` global** (line 842) — `var collapsedDates = {};` added after other globals
+2. **State saving in `renderTimeline()`** (before `el.innerHTML = ''`) — saves collapsed/expanded date groups to `collapsedDates[viewKey + '|' + dateKey]` before DOM clear
+3. **`data-date` attribute + state restore** — `group.setAttribute('data-date', ds)` and `if (collapsedDates[viewKey + '|' + ds]) group.classList.add('collapsed')`
+4. **`hd.onclick` state tracking** — closure captures `(group, ds)`, toggles `collapsedDates[vk]` on click
+5. **`toggleAllDays()` state tracking** — uses `viewKey` and updates `collapsedDates` for each date group
+6. **`clearHistory()` remote guard** — checks `selectedClient`, shows `alert('Cannot clear history for remote clients')` and returns early
 
-**Behavior**: Clicking "Collapse" hides the entire timeline list and filter bar while keeping the h2 title with buttons visible. Clicking "Expand" restores them.
+### Files modified
+- `public/dashboard.html` — ~25 lines of JS changes
+
+### Tests
+- `test/timeline-collapse.test.ts` — 7/7 tests pass
+- `npm run build` — passes
