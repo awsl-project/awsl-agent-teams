@@ -10,8 +10,12 @@ import path from "node:path"
 // ─── Types ───────────────────────────────────────────────────────────
 
 export interface SandboxPolicy {
+	/** Directories where read is allowed (absolute paths). Defaults to writePaths if omitted. */
+	readPaths?: string[]
 	/** Directories where write/edit are allowed (absolute paths). */
 	writePaths: string[]
+	/** File name patterns blocked from reading (e.g. ".env", "id_rsa"). Case-insensitive match against basename. */
+	blockedReadPatterns?: string[]
 	/** Bash command restrictions. */
 	bash: BashPolicy
 }
@@ -26,6 +30,27 @@ export interface BashPolicy {
 	/** String patterns to match against the command. */
 	patterns: string[]
 }
+
+// ─── Sensitive file patterns (blocked from reading) ─────────────────
+
+const SENSITIVE_FILE_PATTERNS = [
+	".env",
+	".env.local",
+	".env.production",
+	".env.staging",
+	".env.development",
+	"credentials.json",
+	"secrets.json",
+	"id_rsa",
+	"id_ed25519",
+	"id_ecdsa",
+	"id_dsa",
+	".npmrc",
+	".pypirc",
+	"token.json",
+	"service-account.json",
+	".htpasswd",
+]
 
 // ─── Dangerous patterns (coder denylist) ─────────────────────────────
 
@@ -75,20 +100,23 @@ const PLANNER_ALLOW = [
 
 /** Returns the default sandbox policy for a given agent role. */
 export function defaultPolicy(role: string, cwd: string): SandboxPolicy {
-	const writePaths = [path.resolve(cwd)]
+	const resolved = path.resolve(cwd)
+	const readPaths = [resolved]
+	const writePaths = [resolved]
+	const blockedReadPatterns = SENSITIVE_FILE_PATTERNS
 
 	switch (role) {
 		case "tester":
-			return { writePaths, bash: { mode: "allowlist", patterns: TESTER_ALLOW } }
+			return { readPaths, writePaths, blockedReadPatterns, bash: { mode: "allowlist", patterns: TESTER_ALLOW } }
 		case "reviewer":
-			return { writePaths, bash: { mode: "allowlist", patterns: REVIEWER_ALLOW } }
+			return { readPaths, writePaths, blockedReadPatterns, bash: { mode: "allowlist", patterns: REVIEWER_ALLOW } }
 		case "architect":
-			return { writePaths, bash: { mode: "allowlist", patterns: ARCHITECT_ALLOW } }
+			return { readPaths, writePaths, blockedReadPatterns, bash: { mode: "allowlist", patterns: ARCHITECT_ALLOW } }
 		case "planner":
-			return { writePaths, bash: { mode: "allowlist", patterns: PLANNER_ALLOW } }
+			return { readPaths, writePaths, blockedReadPatterns, bash: { mode: "allowlist", patterns: PLANNER_ALLOW } }
 		case "coder":
 		default:
-			return { writePaths, bash: { mode: "denylist", patterns: CODER_DENY_PATTERNS } }
+			return { readPaths, writePaths, blockedReadPatterns, bash: { mode: "denylist", patterns: CODER_DENY_PATTERNS } }
 	}
 }
 
@@ -96,11 +124,25 @@ export function defaultPolicy(role: string, cwd: string): SandboxPolicy {
 
 /**
  * Validate a file path against the sandbox read policy.
+ * Checks: (1) path is within allowed readPaths (or writePaths as fallback),
+ *          (2) file basename does not match blocked patterns.
  * Returns null if allowed, or an error message if blocked.
  */
 export function checkReadPath(resolvedPath: string, policy: SandboxPolicy): string | null {
 	const normalized = path.resolve(resolvedPath)
-	for (const dir of policy.writePaths) {
+
+	// Check blocked file patterns (case-insensitive basename match)
+	const basename = path.basename(normalized).toLowerCase()
+	const blocked = policy.blockedReadPatterns ?? SENSITIVE_FILE_PATTERNS
+	for (const pattern of blocked) {
+		if (basename === pattern.toLowerCase()) {
+			return `Sandbox: read blocked — "${path.basename(resolvedPath)}" matches sensitive file pattern`
+		}
+	}
+
+	// Check path is within allowed directories
+	const allowedDirs = policy.readPaths ?? policy.writePaths
+	for (const dir of allowedDirs) {
 		const normalizedDir = path.resolve(dir)
 		const a = process.platform === "win32" ? normalized.toLowerCase() : normalized
 		const b = process.platform === "win32" ? normalizedDir.toLowerCase() : normalizedDir

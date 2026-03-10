@@ -1,25 +1,32 @@
-# task_2: Three changes in src/dashboard.ts:
-
-1. **Bind to 127.0.0.1**
+# task_2: Dashboard: localhost bind + CORS + body limit
 
 Assignee: coder
 Status: done
 
 ## Result
-All changes applied correctly. tsc passes clean.
+All changes implemented and type-checked. Here's the summary:
 
 ## AWSL_RESULT
 
-### Completed: Dashboard security hardening (task_2)
+### Changes Made
 
-**File modified**: `src/dashboard.ts`
+**File: `src/dashboard.ts`**
+- **Localhost bind**: Changed default bind address from `0.0.0.0` to `127.0.0.1`. Added `host` parameter to `startDashboard()` so users can override with `--host 0.0.0.0` when remote access is needed.
+- **CORS restriction**: Replaced permissive origin reflection (`origin ?? "*"`) with a strict localhost-only allowlist. Only origins matching `http(s)://localhost:<port>` or `http(s)://127.0.0.1:<port>` get CORS headers. Non-localhost origins receive no CORS headers, blocking cross-origin requests from external sites.
+- **Body limit**: Already implemented (`MAX_BODY = 1MB` in `collectBody()`), no changes needed.
 
-**3 security fixes applied:**
+**File: `src/cli.ts`**
+- Added `--host` flag parsing (default `127.0.0.1`)
+- Passes `host` to `startDashboard()` call
+- Passes `--host` in background spawn args
+- Updated console output to show actual host
 
-| # | Fix | Line(s) | Detail |
-|---|-----|---------|--------|
-| 1 | **Bind to 127.0.0.1** | 230 | `server.listen(port, '127.0.0.1', ...)` — no longer network-accessible |
-| 2 | **Restrict CORS** | 62 | `Access-Control-Allow-Origin: http://localhost:<port>` — no more wildcard `*` |
-| 3 | **Body size limit** | 20-35 | `collectBody()` helper with 1MB limit, returns 413 on oversize; replaced both manual `req.on('data')`/`req.on('end')` patterns in `/api/queue/add` (L147) and `/api/queue/set-time` (L168) |
+### Security Impact
+| Before | After |
+|---|---|
+| Bound to `0.0.0.0` (all interfaces) | Bound to `127.0.0.1` (localhost only) |
+| CORS reflected any `Origin` header | CORS restricted to `localhost`/`127.0.0.1` only |
+| Body limit: 1MB | Body limit: 1MB (unchanged) |
 
-**Verification**: `npx tsc --noEmit` — passes clean, zero errors.
+### Build Verification
+`npx tsc --noEmit` — passed with no errors.
