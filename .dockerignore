@@ -1,9 +1,7 @@
 node_modules
-src
+dist
 .planning
 .git
 .gitignore
 *.md
-!README.md
-tsconfig.json
 .claude
