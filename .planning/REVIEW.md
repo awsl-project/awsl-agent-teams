@@ -1,58 +1,76 @@
-All verification complete. Here is my final report:
-
-## AWSL_RESULT
-
-### Guardian Two-Stage Review: Dashboard Mobile CSS Adaptation
+No `report` tool is available as a deferred tool, so I'll deliver the Guardian verification results directly.
 
 ---
+
+## Guardian Verification: Two-Stage Review
 
 ### Stage 1: Spec Compliance
 
-| # | Check | Verdict | Details |
-|---|-------|---------|---------|
-| 1 | 900px breakpoint unchanged | **[PASS]** | Line 306-308: only `.stats { repeat(3, 1fr) }` — untouched |
-| 2 | 700px block enhanced with 7 new rules | **[PASS]** | Lines 313-320: body padding, queue-form wrap, table column hiding, touch targets, q-del sizing, proj-item padding |
-| 3 | New 480px block with all 16 rules | **[PASS]** | Lines 322-339: all 12 design spec sections implemented |
-| 4 | No HTML structure changes | **[PASS]** | Diff shows only `<style>` block modifications |
-| 5 | No JavaScript changes | **[PASS]** | Diff confirms CSS-only (lines 313-339 added) |
-| 6 | Viewport meta tag present | **[PASS]** | `<meta name="viewport">` on line 5 |
-| 7 | All 25 unit tests pass | **[PASS]** | `25 pass, 0 fail, 0 cancelled` |
+**[PASS] task_1 — Section-level collapse**
+- CSS (line 425): `.timeline-wrap.collapsed #tl, .timeline-wrap.collapsed #filterBar { display: none; }` — correctly hides timeline and filter bar
+- HTML (line 795): Collapse button present in h2 header
+- JS (lines 1111–1116): `toggleTimeline()` toggles `.collapsed` class, updates button text between "Collapse"/"Expand"
+- The h2 with buttons lives inside `.card` but outside `#tl`/`#filterBar`, so it stays visible when collapsed
+- **Done criteria met**: Collapse/Expand button toggles `#tl` and `#filterBar` visibility; title remains visible
 
-**Spec cross-reference** (design-mobile-dashboard.md vs actual CSS):
-- Body & Global (≤700px) ✅ | Header (≤480px) ✅ | Stats Grid (≤480px) ✅
-- Heatmap cells (≤480px) ✅ | Queue Form (≤700px + ≤480px) ✅
-- Queue Table column hiding (≤700px) + reduced padding (≤480px) ✅
-- Timeline entries (≤480px) ✅ | Client cards (≤480px) ✅
-- Touch targets (≤700px) ✅ | Queue actions (≤480px) ✅
-- Token card values (≤480px) ✅ | editRunAt modal — no change needed ✅
+**[PASS] task_2 — Day-level collapse**
+- CSS (lines 430–436): `.date-group`, `.date-head`, `.date-toggle` (▸ arrow with rotation), `.date-count`, collapse styles all present
+- HTML (line 795): "Collapse Days" / "Expand Days" bulk action buttons added
+- JS (lines 1118–1123): `toggleAllDays(collapse)` bulk toggles all `.date-group` elements
+- JS (lines 1147–1186): `renderTimeline()` creates `date-group` wrappers with clickable `date-head` headers, `stopPropagation()` prevents bubbling, individual entry `.expanded` toggle still works via `card.onclick`
+- **Done criteria met**: Each day has clickable header with ▸ arrow and (N) count; independent collapse/expand
 
-**Stage 1 Verdict: PASS** — All spec requirements fully implemented.
-
----
+**[PASS] task_3 — Code review**
+- Review was completed with findings documented
+- No critical/blocking issues found
+- **Done criteria met**: Review complete with no blocking issues
 
 ### Stage 2: Code Quality
 
-| # | Category | Verdict | Details |
-|---|----------|---------|---------|
-| 1 | Security (OWASP) | **[PASS]** | CSS-only changes — zero attack surface. No user input, no injection vectors, no auth/secrets |
-| 2 | CSS Specificity | **[PASS]** | Breakpoints ordered correctly: 900px → 700px → 480px (cascade works naturally) |
-| 3 | CSS Syntax | **[PASS]** | All braces balanced, selectors valid, no orphaned rules |
-| 4 | `!important` usage | **[PASS]** minor | Line 332: `width: 100% !important` — justified to override potential inline styles on form inputs |
-| 5 | Performance | **[PASS]** | Pure CSS media queries — no JS layout thrashing, no reflows |
-| 6 | Maintainability | **[PASS]** | Rules grouped by breakpoint, logically ordered, consistent with existing codebase style |
-| 7 | Test quality | **[PASS]** | 25 tests with proper CSS parsing (brace-matching), covers all three breakpoints + HTML integrity |
-| 8 | Regressions | **[PASS]** | Existing 900px breakpoint verified unchanged; existing 700px rules preserved alongside new additions |
+**1. [WARN] Undefined CSS variable `--bg2` — Minor**
+- Location: `dashboard.html:427`
+- `.tl-collapse-btn:hover { background: var(--bg2); }` — `--bg2` is not defined in `:root` (lines 8–28). Hover background silently falls back to `transparent`, making the hover effect invisible.
+- Fix: Replace `var(--bg2)` with `var(--border)` or define `--bg2`.
 
-**Stage 2 Verdict: PASS** — No critical or major findings.
+**2. [PASS] XSS Protection**
+- `esc()` (line 862) uses safe `textContent`→`innerHTML` pattern. All user-controlled strings (`ds`, project names, summaries) are escaped via `esc()`.
+
+**3. [PASS] Event Handling**
+- `stopPropagation()` on date-head click (line 1156) correctly prevents conflict with entry-level toggle (line 1185). Closure-based handler `function(g) { return function(e) {...} }(group)` correctly captures the group reference.
+
+**4. [PASS] Injection Safety**
+- `onclick` handlers call known functions with safe literal arguments (`toggleTimeline()`, `toggleAllDays(true)`, `toggleAllDays(false)`). No user-controlled data in handler strings.
+
+**5. [WARN] No null guard in `toggleTimeline()` — Minor**
+- Location: `dashboard.html:1112-1113`
+- `document.querySelector('.timeline-wrap')` used without null check. In practice the element always exists when the button is clicked (button is inside the element), so this is non-exploitable but technically fragile.
+
+**6. [PASS] Build Verification**
+- `npx tsc --noEmit` passes cleanly. No type errors.
+
+**7. [PASS] No secrets, no auth issues, no sensitive data in code.**
+
+**8. [PASS] No OWASP Top 10 vulnerabilities introduced.**
+
+### Quality Gate
+
+| Category | Result |
+|---|---|
+| Critical findings | 0 |
+| Major findings | 0 |
+| Minor findings | 2 (WARN) |
+| **Verdict** | **PASS** |
 
 ---
 
-### Task-Level Summary
+## AWSL_RESULT
 
-| Task | Stage 1 | Stage 2 | Overall |
-|------|---------|---------|---------|
-| task_1 (Implement CSS) | PASS | PASS | **PASS** |
-| task_2 (Code Review) | PASS | PASS | **PASS** |
-| task_3 (Verification) | PASS | PASS | **PASS** |
+### Guardian Verification: PASS
 
-### Quality Gate: **PASS** — 0 critical, 0 major, 0 minor findings. All tasks complete and verified.
+All 3 tasks pass spec compliance. No critical or major issues found.
+
+**2 minor warnings** (non-blocking):
+1. `--bg2` CSS variable undefined at `dashboard.html:427` — hover effect invisible (cosmetic)
+2. No null guard in `toggleTimeline()` at `dashboard.html:1112` — safe in practice but technically fragile
+
+**Recommendation**: Fix the `--bg2` reference to `var(--border)` for a visible hover effect. Both warnings are cosmetic/defensive and do not block shipping.

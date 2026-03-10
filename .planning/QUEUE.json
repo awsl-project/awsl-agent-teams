@@ -148,11 +148,26 @@
       "options": {
         "quick": false
       },
-      "status": "running",
+      "status": "done",
       "scheduledAt": "2026-03-10T05:16:55.114Z",
-      "startedAt": "2026-03-10T05:16:58.302Z"
+      "startedAt": "2026-03-10T05:16:58.302Z",
+      "completedAt": "2026-03-10T05:31:20.970Z",
+      "result": {
+        "success": true,
+        "summary": "✅ 3/3 tasks completed successfully.\n\n✅ task_1 (coder): In public/dashboard.html, implement section-level collapse for the entire Tim... [public/dashboard.html]\n✅ task_2 (coder): In public/dashboard.html, modify the `renderTimeline()` function (around line... [public/dashboard.html]\n✅ task_3 (reviewer): Review the collapsible timeline implementation in public/dashboard.html for:\n... [public/dashboard.html]"
+      }
+    },
+    {
+      "id": "q_12",
+      "goal": "远程的timeline板块折叠你没更新啊",
+      "options": {
+        "quick": false
+      },
+      "status": "running",
+      "scheduledAt": "2026-03-10T05:34:24.213Z",
+      "startedAt": "2026-03-10T05:34:28.815Z"
     }
   ],
   "createdAt": "2026-03-09T10:11:39.245Z",
-  "updatedAt": "2026-03-10T05:16:58.303Z"
+  "updatedAt": "2026-03-10T05:34:28.815Z"
 }

@@ -7,6 +7,6 @@
 (none)
 
 ## Position
-- Goal: 远程面板ui要注意移动端适配
+- Goal: timeline整个板块希望可以折叠 也可以按天折叠
 - Tasks: 3/3 completed
 - Status: SUCCESS

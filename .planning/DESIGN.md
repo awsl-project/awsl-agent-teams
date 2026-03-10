@@ -1,20 +1,24 @@
 ## AWSL_RESULT
 
-### Design: Collapsible Timeline
+### 设计：远程 Timeline 折叠修复
 
-**Goal**: 两级折叠 — 整个 Timeline 板块可折叠 + 按天折叠
+**问题分析**：Timeline 折叠功能已实现（板块级 + 按天），但存在以下问题：
 
-**Approach**: CSS class toggle（与现有 entry 展开/收起模式一致）
+1. **按天折叠状态每次重渲染丢失** — `renderTimeline()` 每次调用都 `el.innerHTML = ''` 重建 DOM，30秒轮询触发 `render()` 后所有日分组恢复展开状态
+2. **`clearHistory()` 未适配远程** — 始终调用本地 API `/api/history/clear`，选中远程客户端时应禁用
+3. **无视觉上下文** — 无法区分当前 Timeline 显示的是本地还是远程数据
 
-**Key decisions**:
+**方案**：在 `renderTimeline()` 中加入折叠状态追踪（JS 变量 `collapsedDates`），以 `viewKey|date` 为 key，每个视图（本地 / 各远程客户端）独立维护折叠状态。重渲染前保存、重建后恢复。
 
-1. **Section-level collapse** — Timeline 标题栏增加 `Collapse/Expand` 按钮，点击后隐藏整个 `#tl` 容器和筛选栏，标题保持可见
-2. **Day-level collapse** — 每天的条目用 `<div class="date-group">` 包裹，日期标题增加 `▸` 箭头和条目计数 `(N)`，点击日期标题折叠/展开该天
-3. **No persistence** — 折叠状态不持久化，刷新/重渲染时重置（最简方案）
-4. **Default: all expanded** — 默认全部展开，不改变现有行为
+**改动范围**：仅 `public/dashboard.html`，约 20 行 JS 变更
 
-**Scope**: 仅修改 `public/dashboard.html`（~50 行 CSS + ~30 行 JS）
+**关键决策**：
+| 决策 | 选择 | 理由 |
+|------|------|------|
+| 状态存储 | JS 变量 Map | 跨重渲染存活，无需持久化 |
+| View key | `selectedClient \|\| '_local'` | 每个视图独立状态 |
+| Clear History | 远程时禁用 | 远程不支持清除历史 |
 
-**Files produced**:
-- `.planning/designs/timeline-collapsible.md` — 完整设计文档
-- `.planning/MEMORY.json` — 共享内存（供 coder/reviewer/tester 读取）
+**产出文件**：
+- `.planning/designs/timeline-remote-collapse.md` — 完整设计文档（含代码示例）
+- `.planning/DESIGN.md` — 共享摘要（供 coder 读取）
