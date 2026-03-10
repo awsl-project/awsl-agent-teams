@@ -30,5 +30,8 @@ export {
 } from "./tools.js";
 export { appendHistory, loadHistory, clearHistory, getHistoryStats, type HistoryEntry, type HistoryData, type HistoryStats } from "./history.js";
 export { startDashboard, isPortInUse } from "./dashboard.js";
+export { scheduleQueueRun, cancelScheduledRun, listScheduledRuns } from "./scheduler.js";
+export { RelayServer, type RelayMessage, type CommandMessage, type CommandResultMessage, type ClientInfo } from "./relay.js";
+export { RemoteClient, type RemoteClientOptions } from "./remote.js";
 export { LogStream, getLogStream, type LogLine } from "./logstream.js";
-export { type SandboxPolicy, type BashPolicy, defaultPolicy, checkWritePath, checkBashCommand } from "./sandbox.js";
+export { type SandboxPolicy, type BashPolicy, defaultPolicy, checkReadPath, checkWritePath, checkBashCommand } from "./sandbox.js";

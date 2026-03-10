@@ -25,6 +25,7 @@ import { log } from "./log.js";
 import { runInstaller } from "./install.js";
 import { TaskQueue } from "./queue.js";
 import { startDashboard, isPortInUse } from "./dashboard.js";
+import { RemoteClient } from "./remote.js";
 
 function usage() {
 	console.error(`
@@ -43,6 +44,9 @@ Commands:
   dashboard [--port N]     Open the sleep mode pixel dashboard (default: 3120)
   dashboard --bg           Start dashboard in background (detached)
   dashboard stop           Stop background dashboard
+  remote init <url>        Connect to remote dashboard (one command setup)
+  remote stop              Disconnect
+  remote status            Check connection
 
 CC Hybrid Mode (no API key needed):
   1. CC writes plan        → .planning/PLAN.md  (CC does the thinking)
@@ -58,6 +62,7 @@ Queue Commands (sleep mode):
   queue show <id>          Show detailed info for a queue task
   queue remove <id>        Remove a task from queue
   queue start [opts]       Start executing the queue (foreground)
+  queue start --once       One-shot: process runnable tasks and exit (used by scheduler)
   queue clear              Clear all queue tasks
 
 Options:
@@ -384,6 +389,147 @@ async function main() {
 		return;
 	}
 
+	// ── Remote command (relay client) ─────────────────────
+	if (command === "remote") {
+		const subCmd = args[1];
+		const { cwd } = parseCwdAndForce(args);
+		const planDir = path.join(cwd, ".planning");
+		const configPath = path.join(planDir, "remote.json");
+		const pidFile = path.join(planDir, ".remote.pid");
+
+		const loadConfig = (): { serverUrl?: string; clientId?: string } => {
+			try {
+				if (fs.existsSync(configPath)) return JSON.parse(fs.readFileSync(configPath, "utf-8"));
+			} catch { /* ignore */ }
+			return {};
+		};
+
+		const spawnBg = async (serverUrl: string, clientId?: string) => {
+			// Kill existing if running
+			if (fs.existsSync(pidFile)) {
+				const old = parseInt(fs.readFileSync(pidFile, "utf-8").trim(), 10);
+				try { process.kill(old); } catch { /* dead already */ }
+				try { fs.unlinkSync(pidFile); } catch { /* ignore */ }
+			}
+
+			const { spawn } = await import("node:child_process");
+			const selfArgs = [process.argv[1], "remote", "connect", serverUrl, "--cwd", cwd];
+			if (clientId) selfArgs.push("--id", clientId);
+
+			const child = spawn(process.execPath, selfArgs, { detached: true, stdio: "ignore" });
+			child.unref();
+
+			if (!fs.existsSync(planDir)) fs.mkdirSync(planDir, { recursive: true });
+			fs.writeFileSync(pidFile, String(child.pid));
+			return child.pid;
+		};
+
+		// ── remote init <url> — save config + start background ──
+		if (subCmd === "init") {
+			let serverUrl: string | undefined;
+			let clientId: string | undefined;
+
+			for (let i = 2; i < args.length; i++) {
+				const a = args[i];
+				if (a === "--id" && i + 1 < args.length) { clientId = args[++i]; }
+				else if (a === "--cwd" && i + 1 < args.length) { i++; }
+				else if (!a.startsWith("--")) { serverUrl = a; }
+			}
+
+			if (!serverUrl) {
+				console.error("Usage: awsl remote init <server-url> [--id <name>]");
+				console.error("  awsl remote init http://192.168.1.100:3120");
+				console.error("  awsl remote init http://192.168.1.100:3120 --id my-laptop");
+				process.exit(1);
+			}
+
+			if (!fs.existsSync(planDir)) fs.mkdirSync(planDir, { recursive: true });
+			const config: Record<string, string> = { serverUrl };
+			if (clientId) config.clientId = clientId;
+			fs.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
+
+			const pid = await spawnBg(serverUrl, clientId);
+
+			console.log(`Done! Remote client running (pid ${pid}).`);
+			console.log(`  Server: ${serverUrl}`);
+			if (clientId) console.log(`  ID:     ${clientId}`);
+			console.log(`  Config: ${configPath}`);
+			console.log(`\n  awsl remote status   — check status`);
+			console.log(`  awsl remote stop     — disconnect`);
+			process.exit(0);
+		}
+
+		// ── remote connect [url] — foreground (used by --bg spawn) or manual ──
+		if (subCmd === "connect") {
+			const config = loadConfig();
+			let serverUrl: string | undefined;
+			let clientId: string | undefined;
+
+			for (let i = 2; i < args.length; i++) {
+				const a = args[i];
+				if (a === "--id" && i + 1 < args.length) { clientId = args[++i]; }
+				else if (a === "--cwd" && i + 1 < args.length) { i++; }
+				else if (!a.startsWith("--")) { serverUrl = a; }
+			}
+
+			serverUrl = serverUrl ?? config.serverUrl;
+			clientId = clientId ?? config.clientId;
+
+			if (!serverUrl) {
+				console.error("Not configured. Run:");
+				console.error("  awsl remote init http://server:3120");
+				process.exit(1);
+			}
+
+			const client = new RemoteClient({ serverUrl, clientId, cwd });
+
+			const shutdown = () => { client.stop(); process.exit(0); };
+			process.on("SIGINT", shutdown);
+			process.on("SIGTERM", shutdown);
+
+			client.connect();
+			return;
+		}
+
+		// ── remote stop ──
+		if (subCmd === "stop") {
+			try {
+				const pid = parseInt(fs.readFileSync(pidFile, "utf-8").trim(), 10);
+				process.kill(pid);
+				fs.unlinkSync(pidFile);
+				console.log(`Stopped (pid ${pid}).`);
+			} catch {
+				console.error("Not running.");
+				process.exit(1);
+			}
+			process.exit(0);
+		}
+
+		// ── remote status ──
+		if (subCmd === "status") {
+			const config = loadConfig();
+			let running = false;
+			let pid: number | null = null;
+			try {
+				pid = parseInt(fs.readFileSync(pidFile, "utf-8").trim(), 10);
+				process.kill(pid, 0);
+				running = true;
+			} catch { /* not running */ }
+
+			if (!config.serverUrl) {
+				console.log("Not configured. Run: awsl remote init http://server:3120");
+			} else {
+				console.log(`Server: ${config.serverUrl}`);
+				if (config.clientId) console.log(`ID:     ${config.clientId}`);
+				console.log(`Status: ${running ? `\u2713 running (pid ${pid})` : "\u2717 stopped"}`);
+			}
+			process.exit(0);
+		}
+
+		console.error("Commands: init <url>, stop, status");
+		process.exit(1);
+	}
+
 	// ── Queue command (sleep mode) ─────────────────────────
 	if (command === "queue") {
 		const subCmd = args[1];
@@ -583,17 +729,20 @@ async function main() {
 			}
 		}
 		else if (subCmd === "start") {
-			// Parse --engine
+			// Parse --engine and --once
 			let engine: Engine | undefined;
+			let once = false;
 			for (let i = 2; i < args.length; i++) {
 				if (args[i] === "--engine" && i + 1 < args.length) {
 					engine = args[++i] as Engine;
+				} else if (args[i] === "--once") {
+					once = true;
 				}
 			}
 
-			console.log("Starting queue execution...\n");
+			console.log(`Starting queue execution${once ? " (one-shot)" : ""}...\n`);
 
-			await queue.start(engine);
+			await queue.start(engine, { once });
 		}
 		else if (subCmd === "clear") {
 			queue.clear();

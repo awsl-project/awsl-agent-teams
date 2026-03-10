@@ -578,6 +578,97 @@ a { color: var(--blue); text-decoration: none; }
 .log-ts { color: #555; }
 .log-task { color: #60a5fa; }
 
+/* ─── Clients Panel ──────────── */
+
+.clients-bar {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 4px 0;
+}
+
+.client-card {
+  flex-shrink: 0;
+  padding: 10px 14px;
+  background: var(--bg);
+  border-radius: 10px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  min-width: 160px;
+  transition: all 0.15s;
+}
+
+.client-card:hover { border-color: var(--ink4); }
+.client-card.selected { border-color: var(--blue); background: var(--blue-bg); }
+
+.client-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.client-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--green);
+  flex-shrink: 0;
+}
+
+.client-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.client-meta {
+  font-size: 11px;
+  color: var(--ink3);
+  line-height: 1.6;
+}
+
+.client-meta .tag {
+  display: inline-block;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--border);
+  color: var(--ink2);
+  margin-right: 4px;
+}
+
+.clients-actions {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.clients-actions .sel-label {
+  font-size: 12px;
+  color: var(--ink2);
+  font-weight: 500;
+}
+
+.clients-actions button {
+  font-family: var(--font);
+  font-size: 11px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card);
+  color: var(--ink2);
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.15s;
+}
+
+.clients-actions button:hover { border-color: var(--blue); color: var(--blue); }
+.clients-actions button.danger:hover { border-color: var(--red); color: var(--red); }
+
 /* ─── Footer ──────────────────── */
 
 .foot {
@@ -697,8 +788,19 @@ a { color: var(--blue); text-decoration: none; }
     </div>
   </div>
 
+  <div class="card" id="clientsWrap" style="display:none">
+    <h2>&#128421; Machines <span id="clientCount" style="font-weight:400;color:var(--ink3);font-size:11px"></span></h2>
+    <div class="clients-bar" id="clientsList"></div>
+    <div class="clients-actions" id="clientActions" style="display:none">
+      <span class="sel-label">Selected: <strong id="clientSelName">-</strong></span>
+      <button onclick="clientCmd('system:info')">System Info</button>
+      <button onclick="clientCmd('queue:start',{once:false})">Start Queue</button>
+      <button onclick="selectClient(null)">&#8592; Back to Local</button>
+    </div>
+  </div>
+
   <div class="card" id="queueWrap">
-    <h2>&#128221; Queue</h2>
+    <h2>&#128221; Queue <span id="queueTarget" style="font-weight:400;color:var(--ink3);font-size:11px"></span></h2>
     <div class="queue-form">
       <input type="text" id="qGoal" placeholder="Task goal..." onkeydown="if(event.key==='Enter')addTask()">
       <input type="datetime-local" id="qRunAt" title="Scheduled time (optional)" style="font-family:var(--font);font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--ink);outline:none;width:170px;">
@@ -729,7 +831,7 @@ a { color: var(--blue); text-decoration: none; }
 </div>
 
 <script>
-var hist = null, queue = null, filterProj = null;
+var hist = null, queue = null, filterProj = null, clients = [], selectedClient = null;
 
 function hc(s) {
   var h = 0;
@@ -787,6 +889,109 @@ async function load() {
   } catch(e) {
     document.getElementById('offline').style.display = 'block';
     return false;
+  }
+}
+
+async function loadClients() {
+  try {
+    var res = await fetch('/api/clients');
+    if (res.ok) clients = await res.json();
+    else clients = [];
+  } catch(e) { clients = []; }
+}
+
+function fmtMem(bytes) {
+  var gb = bytes / (1024*1024*1024);
+  return gb >= 1 ? gb.toFixed(1) + ' GB' : Math.round(gb * 1024) + ' MB';
+}
+
+function renderClients() {
+  var wrap = document.getElementById('clientsWrap');
+  var el = document.getElementById('clientsList');
+  var actions = document.getElementById('clientActions');
+
+  if (clients.length === 0) {
+    wrap.style.display = 'none';
+    return;
+  }
+
+  wrap.style.display = 'block';
+  document.getElementById('clientCount').textContent = clients.length + ' online';
+
+  var h = '';
+  for (var i = 0; i < clients.length; i++) {
+    var c = clients[i];
+    var sys = c.status && c.status.system ? c.status.system : {};
+    var qLen = c.status && c.status.queue ? c.status.queue.length : 0;
+    var running = c.status && c.status.queue ? c.status.queue.filter(function(t){return t.status==='running';}).length : 0;
+    var sel = selectedClient === c.id ? ' selected' : '';
+
+    var memStr = sys.memory ? fmtMem(sys.memory.free) + ' / ' + fmtMem(sys.memory.total) : '-';
+    var plat = sys.platform || c.platform || '?';
+    var uptimeH = sys.uptime ? Math.floor(sys.uptime / 3600) + 'h' : '-';
+
+    h += '<div class="client-card' + sel + '" onclick="selectClient(\'' + esc(c.id) + '\')">';
+    h += '<div class="client-header"><span class="client-dot"></span><span class="client-name">' + esc(c.id) + '</span></div>';
+    h += '<div class="client-meta">';
+    h += '<span class="tag">' + esc(plat) + '</span>';
+    if (sys.arch) h += '<span class="tag">' + esc(sys.arch) + '</span>';
+    h += '<br>';
+    h += 'Mem: ' + memStr + '<br>';
+    h += 'Tasks: ' + qLen + (running > 0 ? ' (' + running + ' running)' : '') + '<br>';
+    h += 'Up: ' + uptimeH;
+    h += '</div></div>';
+  }
+  el.innerHTML = h;
+
+  if (selectedClient) {
+    var sc = clients.find(function(c){return c.id === selectedClient;});
+    if (sc) {
+      document.getElementById('clientSelName').textContent = sc.id;
+      actions.style.display = 'flex';
+    } else {
+      selectedClient = null;
+      actions.style.display = 'none';
+    }
+  } else {
+    actions.style.display = 'none';
+  }
+}
+
+function selectClient(id) {
+  selectedClient = id;
+  renderClients();
+  document.getElementById('queueTarget').textContent = id ? '@ ' + id : '';
+  // Re-render queue with selected client's data
+  render();
+}
+
+async function clientCmd(action, payload) {
+  if (!selectedClient) return null;
+  try {
+    var res = await fetch('/api/clients/command', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clientId: selectedClient, action: action, payload: payload })
+    });
+    var result = await res.json();
+    if (action === 'system:info' && result.success && result.data) {
+      var d = result.data;
+      alert('System Info — ' + selectedClient + '\n\n'
+        + 'Hostname: ' + d.hostname + '\n'
+        + 'Platform: ' + d.platform + ' ' + d.arch + '\n'
+        + 'CPUs: ' + d.cpus + '\n'
+        + 'Memory: ' + fmtMem(d.memory.free) + ' free / ' + fmtMem(d.memory.total) + '\n'
+        + 'Node: ' + d.nodeVersion + '\n'
+        + 'Uptime: ' + Math.floor(d.uptime / 3600) + 'h ' + Math.floor((d.uptime % 3600) / 60) + 'm\n'
+        + 'CWD: ' + d.cwd);
+    }
+    // Refresh clients data after command
+    await loadClients();
+    render();
+    return result;
+  } catch(e) {
+    alert('Command failed: ' + e.message);
+    return null;
   }
 }
 
@@ -1020,7 +1225,14 @@ function render() {
   if (!hist) return;
   var entries = hist.entries || [];
   var qt = queue ? queue.tasks || [] : [];
-  if (entries.length === 0 && qt.length === 0) {
+
+  // If a remote client is selected, use its queue data
+  if (selectedClient) {
+    var sc = clients.find(function(c){return c.id === selectedClient;});
+    qt = sc && sc.status && sc.status.queue ? sc.status.queue : [];
+  }
+
+  if (entries.length === 0 && qt.length === 0 && clients.length === 0) {
     document.getElementById('app').style.display = 'none';
     document.getElementById('empty').style.display = 'block';
     return;
@@ -1029,6 +1241,7 @@ function render() {
   document.getElementById('app').style.display = 'block';
   var s = stats(entries);
   renderStats(s); renderHeatmap(s.byD); renderTrend(s.byD); renderProjects(s.byP); renderTimeline(entries); renderQueue(qt);
+  renderClients();
   checkNotifications(qt);
 }
 
@@ -1050,10 +1263,11 @@ async function init() {
       document.getElementById('projLabel').title = info.cwd || '';
     }
   } catch(e) {}
+  await loadClients();
   var ok = await load();
   document.getElementById('loading').style.display = 'none';
   if (ok) render();
-  setInterval(async function() { if (await load()) render(); }, 30000);
+  setInterval(async function() { await loadClients(); if (await load()) render(); }, 30000);
 }
 
 // ─── Trend chart (SVG with area fill) ─────────────────
@@ -1177,14 +1391,19 @@ async function addTask() {
   var runAtInput = document.getElementById('qRunAt').value;
   var runAt = runAtInput ? new Date(runAtInput).toISOString() : undefined;
   try {
-    await fetch('/api/queue/add', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ goal: goal, quick: quick, runAt: runAt })
-    });
+    if (selectedClient) {
+      await clientCmd('queue:add', { goal: goal, quick: quick, runAt: runAt });
+    } else {
+      await fetch('/api/queue/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ goal: goal, quick: quick, runAt: runAt })
+      });
+    }
   } catch(e) {}
   document.getElementById('qGoal').value = '';
   document.getElementById('qRunAt').value = '';
+  await loadClients();
   if (await load()) render();
 }
 
@@ -1227,15 +1446,25 @@ async function editRunAt(id, currentRunAt) {
   saveBtn.onclick = async function() {
     var val = input.value;
     if (val) {
-      await fetch('/api/queue/set-time', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: id, runAt: new Date(val).toISOString() }) });
+      if (selectedClient) {
+        await clientCmd('queue:set-time', { id: id, runAt: new Date(val).toISOString() });
+      } else {
+        await fetch('/api/queue/set-time', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: id, runAt: new Date(val).toISOString() }) });
+      }
     }
     close();
+    await loadClients();
     if (await load()) render();
   };
 
   clearBtn.onclick = async function() {
-    await fetch('/api/queue/set-time', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: id, runAt: null }) });
+    if (selectedClient) {
+      await clientCmd('queue:set-time', { id: id, runAt: null });
+    } else {
+      await fetch('/api/queue/set-time', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: id, runAt: null }) });
+    }
     close();
+    await loadClients();
     if (await load()) render();
   };
 
@@ -1244,15 +1473,25 @@ async function editRunAt(id, currentRunAt) {
 
 async function removeTask(id) {
   try {
-    await fetch('/api/queue/remove?id=' + encodeURIComponent(id), { method: 'DELETE' });
+    if (selectedClient) {
+      await clientCmd('queue:remove', { id: id });
+    } else {
+      await fetch('/api/queue/remove?id=' + encodeURIComponent(id), { method: 'DELETE' });
+    }
   } catch(e) {}
+  await loadClients();
   if (await load()) render();
 }
 
 async function clearQueue() {
   try {
-    await fetch('/api/queue/clear', { method: 'POST' });
+    if (selectedClient) {
+      await clientCmd('queue:clear');
+    } else {
+      await fetch('/api/queue/clear', { method: 'POST' });
+    }
   } catch(e) {}
+  await loadClients();
   if (await load()) render();
 }
 

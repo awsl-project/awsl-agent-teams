@@ -299,7 +299,14 @@ Ordering keywords are automatically detected:
 
 ### Scheduled Execution
 
-When `queue start` runs, tasks with a `runAt` timestamp in the future are skipped until their scheduled time arrives (polling every 30 seconds). `queue list` and `queue show` display the scheduled time.
+When you add a task with `--at`, AWSL automatically registers a **system-level scheduled job** (Windows Task Scheduler / Unix `at`) that triggers `queue start --once` at the specified time. No need to keep `queue start` running — the OS handles the timing.
+
+```bash
+awsl queue add "Nightly build" --at "03:00"   # → system job created for 03:00
+awsl queue start --once                       # one-shot: process runnable tasks and exit
+```
+
+If you prefer manual daemon mode, plain `queue start` (without `--once`) still polls every 30 seconds for future tasks. Removing a task (`queue remove`) or changing its time (`set-time`) automatically cleans up the system scheduled job.
 
 ### Auto-Commit
 
@@ -354,6 +361,69 @@ API endpoints:
 - `POST /api/queue/clear` — clear all tasks
 - `POST /api/queue/set-time` — set/change/clear scheduled time `{id, runAt}`
 - `POST /api/history/clear` — clear execution history
+- `GET /api/clients` — list connected remote clients
+- `POST /api/clients/command` — send command to a client `{clientId, action, payload?}`
+- `WebSocket /ws/relay` — relay endpoint for remote client connections
+
+### Remote Control
+
+Deploy the dashboard on a server, then connect local machines via WebSocket relay:
+
+```
+┌─────────────────────────┐
+│  Server (Dashboard)     │
+│  awsl dashboard         │
+│  http://server:3120     │
+│                         │
+│  ┌───────────────────┐  │
+│  │  WebSocket Relay  │  │
+│  │  /ws/relay        │  │
+│  └─────┬───────┬─────┘  │
+└────────┼───────┼────────┘
+         │       │
+    ┌────┘       └────┐
+    ▼                 ▼
+┌──────────┐   ┌──────────┐
+│ Machine A│   │ Machine B│
+│ remote   │   │ remote   │
+│ connect  │   │ connect  │
+└──────────┘   └──────────┘
+```
+
+```bash
+# On the server (Docker)
+docker compose up -d
+
+# On local machines (one-time setup)
+awsl remote init http://server:3120 --id my-laptop
+awsl remote connect --bg
+```
+
+Commands you can send via the dashboard API:
+
+```bash
+# List connected clients
+curl http://server:3120/api/clients
+
+# Add a task to a remote machine's queue
+curl -X POST http://server:3120/api/clients/command \
+  -H "Content-Type: application/json" \
+  -d '{"clientId":"my-laptop","action":"queue:add","payload":{"goal":"Build REST API"}}'
+
+# Start queue execution on a remote machine
+curl -X POST http://server:3120/api/clients/command \
+  -H "Content-Type: application/json" \
+  -d '{"clientId":"my-laptop","action":"queue:start","payload":{"once":true}}'
+
+# Get system info from a remote machine
+curl -X POST http://server:3120/api/clients/command \
+  -H "Content-Type: application/json" \
+  -d '{"clientId":"my-laptop","action":"system:info"}'
+```
+
+Supported relay actions: `queue:add`, `queue:remove`, `queue:clear`, `queue:list`, `queue:get`, `queue:set-time`, `queue:start`, `system:info`.
+
+> For full deployment guide (systemd, PM2, Docker, Nginx reverse proxy, NAT traversal), see [DEPLOY.md](DEPLOY.md).
 
 ## Enable AWSL in Any Project
 
@@ -727,6 +797,12 @@ awsl queue clear                              # Clear all tasks
 awsl dashboard [--port N]                     # Open the sleep mode pixel dashboard (default: 3120)
 awsl dashboard --bg                          # Start dashboard as background process
 awsl dashboard stop                          # Stop background dashboard process
+
+# Remote control (connect local machine to remote dashboard)
+awsl remote init http://server:3120          # Save config (one-time)
+awsl remote connect --bg                     # Background connect (reads config)
+awsl remote status                           # Show connection status
+awsl remote stop                             # Stop background client
 ```
 
 ## Environment Variables

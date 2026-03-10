@@ -1,0 +1,9 @@
+node_modules
+src
+.planning
+.git
+.gitignore
+*.md
+!README.md
+tsconfig.json
+.claude

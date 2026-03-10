@@ -1,0 +1,6 @@
+services:
+  dashboard:
+    build: .
+    ports:
+      - "3120:3120"
+    restart: unless-stopped

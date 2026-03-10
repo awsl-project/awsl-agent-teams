@@ -16,6 +16,7 @@ import { RunContext } from "./context.js";
 import { log } from "./log.js";
 import { appendHistory } from "./history.js";
 import { atomicCommit } from "./planning.js";
+import { scheduleQueueRun, cancelScheduledRun } from "./scheduler.js";
 
 // ─── Interfaces for queue plan ──────────────────────────────
 
@@ -85,6 +86,16 @@ export class TaskQueue {
 		if (extra?.runAt) task.runAt = extra.runAt;
 		data.tasks.push(task);
 		this.save(data);
+
+		// Register system scheduled task if runAt is set
+		if (extra?.runAt) {
+			try {
+				scheduleQueueRun(id, new Date(extra.runAt), this.cwd);
+			} catch (e: any) {
+				log.warn("queue", `Failed to register system scheduler: ${e.message}`);
+			}
+		}
+
 		return task;
 	}
 
@@ -95,8 +106,15 @@ export class TaskQueue {
 		const data = this.load();
 		const idx = data.tasks.findIndex(t => t.id === id);
 		if (idx === -1) return false;
+		const task = data.tasks[idx];
 		data.tasks.splice(idx, 1);
 		this.save(data);
+
+		// Cancel system scheduled task if it had one
+		if (task.runAt) {
+			try { cancelScheduledRun(id); } catch { /* best effort */ }
+		}
+
 		return true;
 	}
 
@@ -134,8 +152,18 @@ export class TaskQueue {
 		const data = this.load();
 		const task = data.tasks.find(t => t.id === id);
 		if (!task || task.status !== "pending") return false;
+
+		// Cancel existing scheduled job
+		try { cancelScheduledRun(id); } catch { /* best effort */ }
+
 		if (runAt) {
 			task.runAt = runAt;
+			// Register new scheduled job
+			try {
+				scheduleQueueRun(id, new Date(runAt), this.cwd);
+			} catch (e: any) {
+				log.warn("queue", `Failed to update scheduler: ${e.message}`);
+			}
 		} else {
 			delete task.runAt;
 		}
@@ -146,7 +174,7 @@ export class TaskQueue {
 	/**
 	 * Main daemon loop — execute pending tasks sequentially.
 	 */
-	async start(defaultEngine?: Engine): Promise<void> {
+	async start(defaultEngine?: Engine, options?: { once?: boolean }): Promise<void> {
 		log.section("Queue: Starting task execution");
 
 		// Recover from crash: any task left "running" from a prior session is stale
@@ -226,6 +254,12 @@ export class TaskQueue {
 			});
 
 			if (!nextTask) {
+				// In one-shot mode (triggered by scheduler), don't poll — just exit
+				if (options?.once) {
+					log.info("queue", "One-shot mode: no runnable tasks right now, exiting");
+					break;
+				}
+
 				// If tasks are waiting on runAt, sleep until the earliest one
 				if (earliestRunAt !== null) {
 					const waitMs = earliestRunAt - Date.now();

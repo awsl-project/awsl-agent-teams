@@ -13,6 +13,7 @@ import { loadHistory, getHistoryStats, clearHistory } from "./history.js";
 import { getLogStream, type LogLine } from "./logstream.js";
 import { TaskQueue } from "./queue.js";
 import { log } from "./log.js";
+import { RelayServer } from "./relay.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -59,7 +60,9 @@ export function startDashboard(cwd: string, port: number = 3120): http.Server {
 
 	const server = http.createServer((req, res) => {
 		// CORS headers for all responses
-		res.setHeader("Access-Control-Allow-Origin", "http://localhost:" + port);
+		// Allow remote access when dashboard is on a server
+		const origin = req.headers.origin;
+		res.setHeader("Access-Control-Allow-Origin", origin ?? "*");
 		res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
 		res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
@@ -214,10 +217,40 @@ export function startDashboard(cwd: string, port: number = 3120): http.Server {
 			return;
 		}
 
+		// ── Relay / Remote client APIs ────────────────────
+		if (url.pathname === "/api/clients" && req.method === "GET") {
+			res.writeHead(200, { "Content-Type": "application/json" });
+			res.end(JSON.stringify(relay.getClients()));
+			return;
+		}
+
+		if (url.pathname === "/api/clients/command" && req.method === "POST") {
+			collectBody(req, res, async (body) => {
+				try {
+					const { clientId, action, payload, timeout } = JSON.parse(body);
+					if (!clientId || !action) {
+						res.writeHead(400, { "Content-Type": "application/json" });
+						res.end(JSON.stringify({ error: "clientId and action are required" }));
+						return;
+					}
+					const result = await relay.sendCommand(clientId, action, payload, timeout);
+					res.writeHead(200, { "Content-Type": "application/json" });
+					res.end(JSON.stringify(result));
+				} catch (e: any) {
+					res.writeHead(502, { "Content-Type": "application/json" });
+					res.end(JSON.stringify({ error: e.message }));
+				}
+			});
+			return;
+		}
+
 		// ── 404 ───────────────────────────────────────────
 		res.writeHead(404, { "Content-Type": "application/json" });
 		res.end(JSON.stringify({ error: "Not found" }));
 	});
+
+	// Attach WebSocket relay server for remote client connections
+	const relay = new RelayServer(server);
 
 	server.on("error", (err: NodeJS.ErrnoException) => {
 		if (err.code === "EADDRINUSE") {
@@ -227,9 +260,10 @@ export function startDashboard(cwd: string, port: number = 3120): http.Server {
 		throw err;
 	});
 
-	server.listen(port, '127.0.0.1', () => {
-		log.info("dashboard", `Dashboard running at http://localhost:${port}`);
+	server.listen(port, '0.0.0.0', () => {
+		log.info("dashboard", `Dashboard running at http://0.0.0.0:${port}`);
 		log.info("dashboard", `API: /api/history, /api/stats, /api/queue, /api/logs (SSE), /api/queue/add|remove|clear, /api/history/clear`);
+		log.info("dashboard", `Relay: /ws/relay (WebSocket), /api/clients, /api/clients/command`);
 	});
 
 	return server;

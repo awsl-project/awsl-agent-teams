@@ -1084,15 +1084,24 @@ awsl queue add "goal" --at "+2h"                # 2 小时后
 ```
 
 **工作原理：**
-- `queue start` 执行时，`runAt` 在未来的任务会被跳过
-- 调度器每 30 秒轮询一次，到时间自动开始执行
+- `--at` 添加任务时，自动注册系统级定时任务（Windows: `schtasks` / Unix: `at`）
+- 到达调度时间后，操作系统自动触发 `queue start --once`
+- **无需保持 `queue start` 常驻运行** — 操作系统负责定时触发
 - `queue list` 和 `queue show` 会显示调度时间
 - 可以与 `--depends-on` 组合使用 — 同时满足依赖完成 + 到达调度时间才会执行
+- 删除任务或修改时间会自动清理/更新系统定时任务
+
+**一次性模式 `--once`：**
+```bash
+awsl queue start --once    # 处理当前可执行的任务后立即退出，不轮询等待
+```
+系统定时任务触发时自动使用 `--once` 模式。你也可以手动使用它来做一次性处理。
 
 **适用场景：**
 - 凌晨 3 点跑大任务（避开白天的 rate limit 高峰）
 - 排队多个任务，间隔执行（避免连续触发限额）
 - 延后执行不紧急的任务
+- 不想占用终端保持 `queue start` 运行
 
 ### 队列选项
 
@@ -1172,7 +1181,8 @@ awsl dashboard
 
 | 项目 | 说明 |
 |------|------|
-| **前台进程** | `queue start` 在前台运行，关终端会停止执行。用 `tmux` 或 `screen` 保持会话 |
+| **定时调度** | `--at` 自动注册系统定时任务，无需保持进程运行。Windows 用任务计划程序，Unix 用 `at` |
+| **前台进程** | 不使用 `--at` 时，`queue start` 在前台运行，关终端会停止执行。用 `tmux` 或 `screen` 保持会话 |
 | **限额恢复** | 每个任务自动带限额恢复（指数退避 + 检查点） |
 | **锁管理** | 任务间自动交接锁，无需手动管理 |
 | **自动提交** | 每个任务完成后（成功或失败），自动 commit QUEUE.json + HISTORY.json，可通过 `git log` 追踪进度 |
@@ -1237,14 +1247,76 @@ awsl dashboard stop
 
 **典型远程监控工作流：**
 ```bash
-# 在服务器上启动
+# 在服务器上启动面板
 awsl dashboard --bg --port 3120
-awsl queue start --engine claude-code
+
+# 在本地机器上连接到服务器面板
+awsl remote connect http://server-ip:3120
 
 # 在手机/其他设备浏览器打开
 # http://server-ip:3120
-# → 看进度、收通知、加任务
-
-# 队列跑完后停止仪表盘
-awsl dashboard stop
+# → 看进度、收通知、加任务、远程控制本地机器
 ```
+
+### 远程控制
+
+将面板部署到服务器上，通过 WebSocket 中继远程控制本地开发机。
+
+**架构：**
+- **面板（服务器）** — 运行 `awsl dashboard`，提供 Web UI + WebSocket 中继
+- **本地机器** — 运行 `awsl remote connect`，通过 WebSocket 连接到面板
+- **浏览器/手机** — 打开面板 URL，通过 REST API 向本地机器发送命令
+
+**连接本地机器：**
+```bash
+# 基本连接（自动以 hostname-projectDir 为 ID）
+awsl remote connect http://server:3120
+
+# 自定义 ID + 指定项目目录
+awsl remote connect http://server:3120 --id my-laptop --cwd /path/to/project
+
+# 支持自动重连（断线后指数退避重试：5s→10s→20s→30s 上限）
+```
+
+**通过 API 远程控制：**
+```bash
+# 查看已连接客户端
+curl http://server:3120/api/clients
+# 返回: [{"id":"my-laptop","hostname":"...","cwd":"...","status":{...}}]
+
+# 向远程机器添加队列任务
+curl -X POST http://server:3120/api/clients/command \
+  -H "Content-Type: application/json" \
+  -d '{"clientId":"my-laptop","action":"queue:add","payload":{"goal":"构建 REST API","engine":"claude-code"}}'
+
+# 在远程机器上启动队列
+curl -X POST http://server:3120/api/clients/command \
+  -H "Content-Type: application/json" \
+  -d '{"clientId":"my-laptop","action":"queue:start"}'
+
+# 查看远程机器系统信息
+curl -X POST http://server:3120/api/clients/command \
+  -H "Content-Type: application/json" \
+  -d '{"clientId":"my-laptop","action":"system:info"}'
+```
+
+**支持的远程命令：**
+
+| 命令 | 说明 |
+|------|------|
+| `queue:add` | 添加任务 `{goal, engine?, quick?, dependsOn?, runAt?}` |
+| `queue:remove` | 删除任务 `{id}` |
+| `queue:clear` | 清空队列 |
+| `queue:list` | 列出队列任务 |
+| `queue:get` | 查看单个任务 `{id}` |
+| `queue:set-time` | 设置调度时间 `{id, runAt}` |
+| `queue:start` | 启动队列执行 `{engine?, once?}` |
+| `system:info` | 获取系统信息（CPU、内存、Node 版本等） |
+
+**注意事项：**
+- 面板绑定 `0.0.0.0`（所有网卡），确保防火墙允许端口访问
+- 当前版本没有认证机制，建议在内网或 VPN 环境使用
+- 客户端每 30 秒推送一次状态更新，服务端每 30 秒心跳检测
+- 90 秒无响应的客户端会被自动断开
+
+> 完整部署指南（systemd、PM2、Docker、Nginx 反向代理、内网穿透等）见 [DEPLOY.md](DEPLOY.md)。

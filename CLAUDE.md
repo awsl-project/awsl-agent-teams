@@ -26,6 +26,9 @@ npx tsc --noEmit     # Type-check without emitting
   - `tools.ts` — Built-in agent tools
   - `log.ts` — Logging utility
   - `install.ts` — Skill installer
+  - `scheduler.ts` — System-level task scheduling (schtasks / at)
+  - `relay.ts` — WebSocket relay server for remote client management
+  - `remote.ts` — Remote client (connects local machine to dashboard)
 
 ## Key Rules
 

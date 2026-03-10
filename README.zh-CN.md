@@ -299,7 +299,14 @@ Planned 3 task(s):
 
 ### 定时执行
 
-`queue start` 运行时，带有未来 `runAt` 时间戳的任务会被跳过，直到到达调度时间（每 30 秒轮询一次）。`queue list` 和 `queue show` 会显示调度时间。
+使用 `--at` 添加任务时，AWSL 会自动注册一个**系统级定时任务**（Windows 任务计划程序 / Unix `at` 命令），到时间自动触发 `queue start --once`。**无需保持 `queue start` 常驻运行**——操作系统负责定时触发。
+
+```bash
+awsl queue add "通宵构建" --at "03:00"   # → 自动创建系统定时任务，凌晨 3 点触发
+awsl queue start --once                  # 一次性模式：处理当前可执行任务后退出
+```
+
+如果你偏好手动守护模式，不带 `--once` 的 `queue start` 仍会每 30 秒轮询一次。删除任务（`queue remove`）或修改时间（`set-time`）会自动清理系统定时任务。
 
 ### 自动提交
 
@@ -354,6 +361,64 @@ API 端点：
 - `POST /api/queue/clear` — 清空所有任务
 - `POST /api/queue/set-time` — 设置/修改/清除调度时间 `{id, runAt}`
 - `POST /api/history/clear` — 清除执行历史
+- `GET /api/clients` — 已连接的远程客户端列表
+- `POST /api/clients/command` — 向客户端发送命令 `{clientId, action, payload?}`
+- `WebSocket /ws/relay` — 远程客户端 WebSocket 中继端点
+
+### 远程控制
+
+将面板部署到服务器上，本地机器通过 WebSocket 中继连接：
+
+```
+┌─────────────────────────┐
+│  服务器（面板）          │
+│  awsl dashboard         │
+│  http://server:3120     │
+│                         │
+│  ┌───────────────────┐  │
+│  │  WebSocket 中继    │  │
+│  │  /ws/relay        │  │
+│  └─────┬───────┬─────┘  │
+└────────┼───────┼────────┘
+         │       │
+    ┌────┘       └────┐
+    ▼                 ▼
+┌──────────┐   ┌──────────┐
+│ 机器 A   │   │ 机器 B   │
+│ remote   │   │ remote   │
+│ connect  │   │ connect  │
+└──────────┘   └──────────┘
+```
+
+```bash
+# 在服务器上
+awsl dashboard --port 3120
+
+# 在本地机器上（一次性配置）
+awsl remote init http://server:3120 --id my-laptop
+awsl remote connect --bg
+```
+
+通过面板 API 发送命令：
+
+```bash
+# 查看已连接客户端
+curl http://server:3120/api/clients
+
+# 向远程机器添加队列任务
+curl -X POST http://server:3120/api/clients/command \
+  -H "Content-Type: application/json" \
+  -d '{"clientId":"my-laptop","action":"queue:add","payload":{"goal":"构建 REST API"}}'
+
+# 在远程机器上启动队列执行
+curl -X POST http://server:3120/api/clients/command \
+  -H "Content-Type: application/json" \
+  -d '{"clientId":"my-laptop","action":"queue:start","payload":{"once":true}}'
+```
+
+支持的中继命令：`queue:add`、`queue:remove`、`queue:clear`、`queue:list`、`queue:get`、`queue:set-time`、`queue:start`、`system:info`。
+
+> 完整部署指南（systemd、PM2、Docker、Nginx 反向代理、内网穿透等）见 [DEPLOY.md](DEPLOY.md)。
 
 ## 在任意项目中启用 AWSL
 
@@ -727,6 +792,12 @@ awsl queue clear                               # 清空队列
 awsl dashboard [--port N]                      # 打开睡前模式像素风仪表盘（默认端口 3120）
 awsl dashboard --bg                            # 后台启动仪表盘进程
 awsl dashboard stop                            # 停止后台仪表盘进程
+
+# 远程控制（将本地机器连接到远程面板）
+awsl remote init http://server:3120            # 保存配置（一次性）
+awsl remote connect --bg                       # 后台连接（读取配置）
+awsl remote status                             # 查看连接状态
+awsl remote stop                               # 停止后台客户端
 ```
 
 ## 环境变量
