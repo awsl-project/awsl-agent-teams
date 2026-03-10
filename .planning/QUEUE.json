@@ -178,10 +178,15 @@
       "options": {
         "quick": false
       },
-      "status": "pending",
-      "scheduledAt": "2026-03-10T06:04:03.851Z"
+      "status": "done",
+      "scheduledAt": "2026-03-10T06:04:03.851Z",
+      "completedAt": "2026-03-10T06:11:35.118Z",
+      "result": {
+        "success": true,
+        "summary": "✅ 2/2 tasks completed successfully.\n\n✅ task_1 (coder): Add collapse state tracking to renderTimeline [public/dashboard.html]\n✅ task_2 (reviewer): Review collapse state changes [public/dashboard.html]"
+      }
     }
   ],
   "createdAt": "2026-03-09T10:11:39.245Z",
-  "updatedAt": "2026-03-10T06:10:04.281Z"
+  "updatedAt": "2026-03-10T06:11:35.118Z"
 }

@@ -208,7 +208,25 @@
       "inputTokens": 1385,
       "outputTokens": 36561,
       "costUsd": 3.4432394
+    },
+    {
+      "id": "h_12",
+      "date": "2026-03-10T06:11:35.118Z",
+      "project": "awsl-agent-teams",
+      "projectPath": "C:\\Users\\11421\\awsl-agent-teams",
+      "queueTaskId": "q_13",
+      "goal": "提交所有最新的git",
+      "status": "done",
+      "completedAt": "2026-03-10T06:11:35.118Z",
+      "duration": null,
+      "tasksCompleted": 2,
+      "tasksTotal": 2,
+      "summary": "✅ 2/2 tasks completed successfully.\n\n✅ task_1 (coder): Add collapse state tracking to renderTimeline [public/dashboard.html]\n✅ task_2 (reviewer): Review collapse state changes [public/dashboard.html]",
+      "engine": "claude-code",
+      "inputTokens": 1097,
+      "outputTokens": 16651,
+      "costUsd": 1.9446212499999997
     }
   ],
-  "updatedAt": "2026-03-10T05:51:54.245Z"
+  "updatedAt": "2026-03-10T06:11:35.118Z"
 }
