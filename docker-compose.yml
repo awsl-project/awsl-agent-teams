@@ -3,4 +3,9 @@ services:
     build: .
     ports:
       - "3120:3120"
+    volumes:
+      - dashboard-data:/app/.planning
     restart: unless-stopped
+
+volumes:
+  dashboard-data:
