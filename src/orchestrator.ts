@@ -206,7 +206,8 @@ function parseReviewFindings(raw: string): ReviewFinding[] {
 
 // ─── Rate Limit Backoff ──────────────────────────────────────
 
-const DEFAULT_RATE_LIMIT_BACKOFF = [60_000, 120_000, 300_000, 600_000, 900_000];
+// 1min → 2min → 5min → 15min → 30min → 60min (cap)
+const DEFAULT_RATE_LIMIT_BACKOFF = [60_000, 120_000, 300_000, 900_000, 1_800_000, 3_600_000];
 
 function getRateLimitDelay(attempt: number, schedule: number[]): number {
 	return schedule[Math.min(attempt, schedule.length - 1)];
