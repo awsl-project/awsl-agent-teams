@@ -1,20 +1,17 @@
-The file already exists with comprehensive conventions. Let me check if it needs updating based on the fresh analysis.
-
-The existing `conventions.md` is already thorough and well-organized — it covers all the categories requested (naming, style, error handling, testing patterns) and more. The fresh analysis confirms the same patterns, so no updates needed.
+The conventions file already exists and is comprehensive. It covers everything requested. Here's the summary:
 
 ## AWSL_RESULT
 
-The conventions document already exists at `memory/conventions.md` and is up to date. Key patterns:
+The conventions document already exists at `memory/conventions.md` (132 lines) and is thorough. Key highlights:
 
-| Area | Convention |
-|------|-----------|
-| **Naming** | camelCase vars/fns, PascalCase types/classes, UPPER_SNAKE constants, no enums (string unions) |
-| **Style** | TS strict, ES modules + `.js` ext, `node:` prefix, tabs, section dividers `// ───` |
-| **Error handling** | Bare `catch {}` when unused, fail-soft (return defaults), never throw in agent tools, `try/finally` for cleanup |
-| **Testing** | `node:test` + `node:assert/strict`, no mocks, source inspection via regex, `test/*.test.ts` |
-| **Logging** | `log.info/warn/debug(source, msg)` — never console.log |
-| **State** | File-as-state in `.planning/`, JSON for data, Markdown for plans |
-| **Async** | async/await only, sync fs, `runParallel()` worker pool, `Promise.allSettled` for non-critical parallel |
-| **Architecture** | Conductor/Guardian, dual engine, typed events, factory functions, provider pattern |
+**Naming**: camelCase vars/functions, PascalCase classes/types, UPPER_SNAKE constants, no enums (string literal unions), `_` prefix for private/unused, `create` prefix for factories.
 
-No files produced — existing `memory/conventions.md` (132 lines) is already comprehensive and accurate.
+**Style**: TypeScript strict, ES modules with `.js` extensions, `node:` prefix for builtins, tabs, `import type` for type-only, named exports only, barrel from `index.ts`.
+
+**Error Handling**: Fail-soft (return defaults, not throw), bare `catch {}` when unused, `catch (e: any)` when message needed, never throw in agent tools, atomic file ops with `flag: "wx"`.
+
+**Async**: async/await (no `.then`), sync fs ops (`readFileSync`), `Promise.all` for parallel, `Promise.allSettled` for non-fail-fast, manual worker pool with concurrency limit.
+
+**Testing**: `node:test` + `node:assert/strict`, files in `test/*.test.ts`, run via `npx tsx --test`, source inspection patterns, no mocking framework.
+
+No updates needed — the existing document is already accurate and complete.

@@ -1,45 +1,46 @@
 {
   "design": {
-    "title": "Fix Dashboard Stats: Aggregate All Machines on Initial Load",
-    "problem": "When user first opens dashboard (no machine selected), stats only show local history. Remote clients' history is ignored. Stats cards (Done, Failed, Total Time, Success Rate, Tokens, Cost) plus heatmap, trend, projects, and timeline all show local-only data.",
-    "root_cause": "render() in public/dashboard.html line 1333 uses `hist.entries` (local only) when selectedClient is null. Remote clients' status.history data is never merged into the aggregate view.",
-    "solution": {
-      "approach": "Client-side aggregation in render() function",
-      "file": "public/dashboard.html",
-      "function": "render() — lines 1333-1356",
-      "changes": [
-        "When selectedClient is null: copy local entries, then merge all clients[i].status.history entries",
-        "Deduplicate by composite key: (entry.id || '') + '|' + (entry.startedAt || '')",
-        "Queue stays local-only in aggregate view (queue is machine-specific)"
-      ],
-      "no_backend_changes": true
+    "title": "Multi-Project Management — Projects Page + Central Registry",
+    "designDoc": ".planning/designs/multi-project.md",
+    "summary": "Add a global project registry (~/.awsl/projects.json) and a Projects page in the dashboard to manage multiple projects from one place. Each project keeps its own .planning/ directory. Dashboard reads all registered projects' status. Cross-project queue operations work by spawning detached awsl processes.",
+    "newFiles": ["src/projects.ts"],
+    "modifiedFiles": ["src/dashboard.ts", "src/cli.ts", "src/index.ts", "public/dashboard.html", "README.md", "README.zh-CN.md", "BEST_PRACTICES.md"],
+    "dataModel": {
+      "registryPath": "~/.awsl/projects.json",
+      "ProjectEntry": "{ name, path (unique key), addedAt, lastActiveAt?, tags?, engine? }",
+      "ProjectRegistry": "{ projects: ProjectEntry[], updatedAt }",
+      "ProjectStatus": "{ name, path, exists, hasPlanning, isLocked, queue: {pending,running,done,failed,total}, lastRun?: {date,status,goal,duration} }"
     },
-    "decisions": {
-      "client_side_aggregation": "Data already in clients array from /api/clients; no new API needed",
-      "dedup_by_id_startedAt": "Prevents duplicates if dashboard machine also connects as remote client",
-      "queue_stays_local": "Queue is action-oriented; aggregating would confuse add/remove/start actions",
-      "single_file_change": "Only public/dashboard.html render() needs modification"
+    "apiEndpoints": {
+      "GET /api/projects": "List all projects with live status",
+      "POST /api/projects/add": "Register a project { path, name? }",
+      "POST /api/projects/remove": "Unregister { path }",
+      "POST /api/projects/scan": "Auto-discover { dir }",
+      "GET /api/projects/queue?path=": "Get project queue",
+      "POST /api/projects/queue/add": "Add task to project queue { path, goal }",
+      "POST /api/projects/queue/start": "Start project queue (spawn detached process)",
+      "POST /api/projects/queue/clear": "Clear project queue",
+      "GET /api/projects/history?path=": "Get project history",
+      "GET /api/projects/stats?path=": "Get project stats"
     },
-    "affected_stats": [
-      "Done count",
-      "Failed count",
-      "Total Time",
-      "Success Rate",
-      "Input Tokens",
-      "Output Tokens",
-      "Total Tokens",
-      "Cost (USD)",
-      "Activity Heatmap",
-      "Duration Trend",
-      "Projects sidebar",
-      "Timeline"
-    ],
-    "edge_cases": [
-      "Dashboard machine also connected as remote client → dedup handles this",
-      "Remote client disconnects → its data leaves clients array, stats decrease (shows live state)",
-      "Empty local history + rich remote history → now correctly shows remote data",
-      "No clients connected → behaves exactly as before (local only)"
-    ],
-    "existing_design_doc": ".planning/design-stats-machines.md"
+    "cliCommands": {
+      "awsl projects": "List all registered projects with status",
+      "awsl projects add [path]": "Register project (default: cwd)",
+      "awsl projects remove <path|name>": "Unregister project",
+      "awsl projects scan [dir]": "Auto-discover projects"
+    },
+    "waves": {
+      "wave1_parallel": ["task_1: src/projects.ts (ProjectManager)", "task_2: CLI projects subcommand + auto-register"],
+      "wave2_depends_task1": ["task_3: Dashboard API endpoints", "task_4: Dashboard UI Projects section"],
+      "wave3_depends_task1": ["task_5: index.ts exports"],
+      "wave4_depends_all": ["task_6: Tests", "task_7: Documentation"]
+    },
+    "keyDecisions": {
+      "registry_location": "~/.awsl/projects.json — global user-level, not per-project",
+      "project_identity": "Absolute path is unique key, name is display label",
+      "cross_project_queue_start": "Spawn detached child process 'awsl queue start --cwd <path>'",
+      "auto_registration": "awsl start/run/queue auto-registers current project",
+      "no_shared_queue": "Each project keeps its own queue, dashboard is unified view only"
+    }
   }
 }
