@@ -840,6 +840,7 @@ a { color: var(--blue); text-decoration: none; }
 <script>
 var hist = null, queue = null, filterProj = null, clients = [], selectedClient = null;
 var collapsedDates = {};
+var timelineWrapCollapsed = {};
 
 function hc(s) {
   var h = 0;
@@ -1113,7 +1114,11 @@ function toggleTimeline() {
   var wrap = document.querySelector('.timeline-wrap');
   var btn = wrap.querySelector('.tl-collapse-btn');
   wrap.classList.toggle('collapsed');
-  btn.textContent = wrap.classList.contains('collapsed') ? 'Expand' : 'Collapse';
+  var isCollapsed = wrap.classList.contains('collapsed');
+  btn.textContent = isCollapsed ? 'Expand' : 'Collapse';
+  var viewKey = selectedClient || '_local';
+  if (isCollapsed) timelineWrapCollapsed[viewKey] = true;
+  else delete timelineWrapCollapsed[viewKey];
 }
 
 function toggleAllDays(collapse) {
@@ -1133,6 +1138,17 @@ function toggleAllDays(collapse) {
 function renderTimeline(entries) {
   var el = document.getElementById('tl');
   var viewKey = selectedClient || '_local';
+
+  // Restore timeline-wrap collapse state for this view
+  var wrap = document.querySelector('.timeline-wrap');
+  var btn = wrap.querySelector('.tl-collapse-btn');
+  if (timelineWrapCollapsed[viewKey]) {
+    wrap.classList.add('collapsed');
+    btn.textContent = 'Expand';
+  } else {
+    wrap.classList.remove('collapsed');
+    btn.textContent = 'Collapse';
+  }
 
   // Save current collapse state before clearing
   var collapsed = el.querySelectorAll('.date-group.collapsed');

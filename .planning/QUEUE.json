@@ -178,11 +178,10 @@
       "options": {
         "quick": false
       },
-      "status": "running",
-      "scheduledAt": "2026-03-10T06:04:03.851Z",
-      "startedAt": "2026-03-10T06:04:08.035Z"
+      "status": "pending",
+      "scheduledAt": "2026-03-10T06:04:03.851Z"
     }
   ],
   "createdAt": "2026-03-09T10:11:39.245Z",
-  "updatedAt": "2026-03-10T06:04:08.035Z"
+  "updatedAt": "2026-03-10T06:10:04.281Z"
 }
