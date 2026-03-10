@@ -488,6 +488,24 @@ a { color: var(--blue); text-decoration: none; }
 
 .q-del:hover { color: var(--red); background: var(--red-bg); }
 
+.q-summary-row td {
+  padding: 4px 10px 10px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.q-summary {
+  font-size: 11px;
+  color: var(--ink3);
+  background: var(--bg);
+  border-radius: 6px;
+  padding: 6px 10px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.5;
+  max-height: 120px;
+  overflow-y: auto;
+}
+.q-summary.fail { background: var(--red-bg); color: var(--red); }
+
 /* ─── Empty State ──────────────── */
 
 .empty { text-align: center; padding: 80px 20px; display: none; }
@@ -1218,6 +1236,12 @@ function renderQueue(tasks) {
       timeCell = '<span class="q-time-edit" style="cursor:pointer;border-bottom:1px dashed var(--ink4)" onclick="editRunAt(\'' + esc(t.id) + '\',\'' + esc(t.runAt||'') + '\')" title="Click to set/change time">' + timeCell + '</span>';
     }
     h += '<tr class="' + (t.status||'pending') + '"><td>' + esc(t.id) + '</td><td title="' + esc(t.goal||'').replace(/"/g,'&quot;') + '">' + esc(trunc(t.goal,50)) + '</td><td>' + st + '</td><td>' + timeCell + '</td><td>' + deps + '</td><td>' + del + '</td></tr>';
+    // Summary row for done/failed tasks
+    var summary = t.result && t.result.summary ? t.result.summary : (t.error || '');
+    if (summary && (t.status === 'done' || t.status === 'failed')) {
+      var cls = t.status === 'failed' ? 'q-summary fail' : 'q-summary';
+      h += '<tr class="q-summary-row"><td colspan="6"><div class="' + cls + '">' + esc(summary) + '</div></td></tr>';
+    }
   }
   h += '</tbody></table>';
   el.innerHTML = h;
