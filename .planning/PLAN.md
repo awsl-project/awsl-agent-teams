@@ -1,38 +1,36 @@
 # Execution Plan
 
-## task_1: Add read tool path validation
+## task_1: Collapsible timeline and queue details
 - **Assignee:** coder
-- **Files:** src/sandbox.ts, src/tools.ts
+- **Files:** public/dashboard.html
 
 ### Action
-Add read tool path validation
+Modify public/dashboard.html to make task details collapsible (hidden by default, shown on click):
 
-## task_2: Dashboard: localhost bind + CORS + body limit
-- **Assignee:** coder
-- **Files:** src/dashboard.ts
+1. **CSS changes:**
+   - Add `.entry-details { display: none; }` to hide timeline card details (goal, tasks, summary) by default
+   - Add `.entry.expanded .entry-details { display: block; }` to show when expanded
+   - Add `.entry { cursor: pointer; }` to indicate clickability
+   - Add `.q-summary-row { display: none; }` to hide queue summary rows by default
+   - Add `.q-summary-row.expanded { display: table-row; }` to show when expanded
+   - Add a subtle expand indicator (chevron ▸/▾) to both entry cards and queue rows
 
-### Action
-Dashboard: localhost bind + CORS + body limit
+2. **Timeline renderTimeline() changes (around line 1096-1106):**
+   - Wrap the `.entry-goal`, `.entry-tasks`, and `.entry-summary` divs inside a container `<div class="entry-details">...</div>`
+   - Add a click handler on the card: `card.onclick = function() { this.classList.toggle('expanded'); }`
+   - Add a small chevron indicator in the `.entry-row1` div (e.g., `<span class="entry-toggle">▸</span>`) that changes to ▾ when expanded via CSS: `.entry.expanded .entry-toggle { transform: rotate(90deg); }` or just swap text
 
-## task_3: Fix shell injection in git commands
-- **Assignee:** coder
-- **Files:** src/planning.ts
+3. **Queue renderQueue() changes (around line 1171-1177):**
+   - On the main task row `<tr>`, add an onclick handler: `onclick="toggleQueueDetail('qd_' + i)"` to toggle the next `.q-summary-row`
+   - Give each `.q-summary-row` a unique id like `id="qd_0"`, `id="qd_1"`, etc.
+   - Add a JS function `toggleQueueDetail(id)` that toggles the `.expanded` class on the summary row
+   - Add `cursor: pointer` to `.q-table tr` rows that have summaries
+   - Add a small toggle indicator (▸/▾) in the row
 
-### Action
-Fix shell injection in git commands
+4. **Keep it simple:** No animation needed, just show/hide with display toggle. Use CSS classes for state, no extra JS state management.
 
-## task_4: Expand coder bash denylist
-- **Assignee:** coder
-- **Dependencies:** task_1
-- **Files:** src/sandbox.ts
+### Verify
+npm run build && open public/dashboard.html in browser — click timeline cards to expand/collapse details, click queue task rows to show/hide summaries
 
-### Action
-Expand coder bash denylist
-
-## task_5: Verify all fixes build correctly
-- **Assignee:** tester
-- **Dependencies:** task_1, task_2, task_3, task_4
-- **Files:** src/tools.ts, src/dashboard.ts, src/planning.ts, src/sandbox.ts
-
-### Action
-Verify all fixes build correctly
+### Done
+Timeline entry details (goal, tasks, summary) are hidden by default and shown on click. Queue summary rows are hidden by default and shown on click. Visual chevron indicator shows expand/collapse state.

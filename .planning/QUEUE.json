@@ -102,10 +102,15 @@
       "options": {
         "quick": false
       },
-      "status": "running",
+      "status": "done",
       "scheduledAt": "2026-03-10T03:02:57.070Z",
       "runAt": "2026-03-10T04:03:00.000Z",
-      "startedAt": "2026-03-10T04:01:01.607Z"
+      "startedAt": "2026-03-10T04:01:01.607Z",
+      "completedAt": "2026-03-10T04:17:19.711Z",
+      "result": {
+        "success": true,
+        "summary": "✅ 5/5 tasks completed successfully.\n\n✅ task_1 (coder): Add read tool path validation [src/sandbox.ts, src/tools.ts]\n✅ task_2 (coder): Dashboard: localhost bind + CORS + body limit [src/dashboard.ts]\n✅ task_3 (coder): Fix shell injection in git commands [src/planning.ts]\n✅ task_4 (coder): Expand coder bash denylist [src/sandbox.ts]\n✅ task_5 (tester): Verify all fixes build correctly [src/tools.ts, src/dashboard.ts, src/planning.ts, src/sandbox.ts]"
+      }
     },
     {
       "id": "q_9",
@@ -113,10 +118,11 @@
       "options": {
         "quick": false
       },
-      "status": "pending",
-      "scheduledAt": "2026-03-10T04:06:46.225Z"
+      "status": "running",
+      "scheduledAt": "2026-03-10T04:06:46.225Z",
+      "startedAt": "2026-03-10T04:17:20.084Z"
     }
   ],
   "createdAt": "2026-03-09T10:11:39.245Z",
-  "updatedAt": "2026-03-10T04:06:46.225Z"
+  "updatedAt": "2026-03-10T04:17:20.084Z"
 }

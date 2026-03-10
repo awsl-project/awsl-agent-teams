@@ -1,18 +1,19 @@
+Conventions document updated at `memory/conventions.md`. Here's the summary:
+
 ## AWSL_RESULT
 
-### Coding Conventions Summary
+The conventions file already existed and was comprehensive. I updated the **Testing** section to reflect the new `test/` directory using `node:test` + `assert/strict`.
 
-The conventions file at `memory/conventions.md` is already comprehensive and accurate. Updated with newer modules (relay, remote). Key patterns:
+### Key conventions at a glance:
 
-| Category | Convention |
-|---|---|
-| **Naming** | Files: lowercase. Types: PascalCase. Functions: camelCase verb-first. Constants: UPPER_SNAKE. No enums — string literal unions. |
-| **Style** | ES modules with `.js` extensions, `node:` prefix for builtins, `import type` for type-only, tabs, no semicolons, double quotes, factory functions. |
-| **Error handling** | Fail-soft (return null/false), bare `catch {}` when unused, `catch (e: any)` when needed, atomic `wx` flag for race safety. |
-| **Async** | async/await only (no `.then()`), sync fs throughout, `Promise.all` for parallel agents. |
-| **Logging** | `log.info/warn/debug(source, msg)` to stderr, ANSI role colors, ISO timestamps, debug gated by `DEBUG` env. |
-| **State** | File-as-state in `.planning/`, JSON for data, Markdown for plans, `SharedMemory` KV for inter-agent comms. |
-| **Testing** | No test framework — command-based verification (`tsc --noEmit`, `npm test`), provider pattern with mtime-based cache (5min TTL). |
-| **Architecture** | Conductor/Guardian model, dual engine, topo-sort waves, 7-strategy parsing, checkpoint/resume, RAII-style RunContext. |
+| Area | Convention |
+|------|-----------|
+| **Naming** | camelCase vars/funcs, PascalCase types, UPPER_SNAKE constants, no enums (string unions) |
+| **Style** | ES modules + `.js` ext, `node:` prefix, named exports, tabs, no semicolons, section dividers |
+| **Errors** | Fail-soft (return defaults), bare `catch {}` when unused, `catch (e: any)` for message access |
+| **Async** | async/await only, sync fs ops, `Promise.all` for parallel agents |
+| **Logging** | `log.info/warn/debug(source, msg)` — never console.log, all to stderr |
+| **State** | File-as-state in `.planning/`, JSON for data, Markdown for plans, `SharedMemory` for in-session |
+| **Testing** | `node:test` + `assert/strict`, run via `npx tsx --test`, plus command-based verification providers |
 
-Full details in `memory/conventions.md`.
+**File**: `memory/conventions.md` (linked from MEMORY.md)

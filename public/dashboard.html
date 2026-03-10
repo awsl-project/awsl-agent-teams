@@ -395,6 +395,19 @@ a { color: var(--blue); text-decoration: none; }
 
 .entry-summary { font-size: 11px; color: var(--ink4); margin-top: 4px; line-height: 1.4; }
 
+/* ─── Collapsible Details ───── */
+.entry { cursor: pointer; }
+.entry-details { display: none; }
+.entry.expanded .entry-details { display: block; }
+.entry-toggle { font-size: 10px; color: var(--ink4); transition: transform 0.15s; display: inline-block; }
+.entry.expanded .entry-toggle { transform: rotate(90deg); }
+
+.q-summary-row { display: none; }
+.q-summary-row.expanded { display: table-row; }
+.q-table tr.has-summary { cursor: pointer; }
+.q-toggle { font-size: 10px; color: var(--ink4); transition: transform 0.15s; display: inline-block; }
+.q-toggle.expanded { transform: rotate(90deg); }
+
 /* ─── Queue ──────────────────── */
 
 .queue-form {
@@ -1095,15 +1108,19 @@ function renderTimeline(entries) {
       }
       card.innerHTML =
         '<div class="entry-row1">' +
+          '<span class="entry-toggle">\u25B8</span>' +
           '<span class="entry-status ' + e.status + '">' + (ok ? '\u2713' : '\u2717') + '</span>' +
           '<span class="entry-proj" style="background:' + pc + '">' + esc(e.project||'?') + '</span>' +
           '<span class="entry-dur">' + fmt(e.duration) + '</span>' +
           tokStr +
           '<span class="entry-time">' + esc(localTime(e.startedAt)) + '</span>' +
         '</div>' +
-        '<div class="entry-goal" title="' + esc(e.goal).replace(/"/g,'&quot;') + '">' + esc(trunc(e.goal, 90)) + '</div>' +
-        '<div class="entry-tasks">tasks ' + (e.tasksCompleted||0) + '/' + (e.tasksTotal||0) + ' ' + bar(e.tasksCompleted||0, e.tasksTotal||0, 8) + '</div>' +
-        (e.summary ? '<div class="entry-summary">' + esc(trunc(e.summary, 120)) + '</div>' : '');
+        '<div class="entry-details">' +
+          '<div class="entry-goal" title="' + esc(e.goal).replace(/"/g,'&quot;') + '">' + esc(trunc(e.goal, 90)) + '</div>' +
+          '<div class="entry-tasks">tasks ' + (e.tasksCompleted||0) + '/' + (e.tasksTotal||0) + ' ' + bar(e.tasksCompleted||0, e.tasksTotal||0, 8) + '</div>' +
+          (e.summary ? '<div class="entry-summary">' + esc(trunc(e.summary, 120)) + '</div>' : '') +
+        '</div>';
+      card.onclick = function() { this.classList.toggle('expanded'); };
       el.appendChild(card);
     }
   }
@@ -1146,6 +1163,18 @@ function fmtRunAt(info) {
   return s;
 }
 
+function toggleQueueDetail(id) {
+  var row = document.getElementById(id);
+  if (!row) return;
+  row.classList.toggle('expanded');
+  // Toggle chevron on the parent row
+  var prev = row.previousElementSibling;
+  if (prev) {
+    var tog = prev.querySelector('.q-toggle');
+    if (tog) tog.classList.toggle('expanded');
+  }
+}
+
 function renderQueue(tasks) {
   var el = document.getElementById('queueContent');
   var actions = document.getElementById('queueActions');
@@ -1168,12 +1197,15 @@ function renderQueue(tasks) {
     if (t.status === 'pending') {
       timeCell = '<span class="q-time-edit" style="cursor:pointer;border-bottom:1px dashed var(--ink4)" onclick="editRunAt(\'' + esc(t.id) + '\',\'' + esc(t.runAt||'') + '\')" title="Click to set/change time">' + timeCell + '</span>';
     }
-    h += '<tr class="' + (t.status||'pending') + '"><td>' + esc(t.id) + '</td><td title="' + esc(t.goal||'').replace(/"/g,'&quot;') + '">' + esc(trunc(t.goal,50)) + '</td><td>' + st + '</td><td>' + timeCell + '</td><td>' + deps + '</td><td>' + del + '</td></tr>';
-    // Summary row for done/failed tasks
     var summary = t.result && t.result.summary ? t.result.summary : (t.error || '');
-    if (summary && (t.status === 'done' || t.status === 'failed')) {
+    var hasSummary = summary && (t.status === 'done' || t.status === 'failed');
+    var rowClass = (t.status||'pending') + (hasSummary ? ' has-summary' : '');
+    var toggleHtml = hasSummary ? '<span class="q-toggle">\u25B8</span> ' : '';
+    h += '<tr class="' + rowClass + '"' + (hasSummary ? ' onclick="toggleQueueDetail(\'qd_' + i + '\')"' : '') + '><td>' + toggleHtml + esc(t.id) + '</td><td title="' + esc(t.goal||'').replace(/"/g,'&quot;') + '">' + esc(trunc(t.goal,50)) + '</td><td>' + st + '</td><td>' + timeCell + '</td><td>' + deps + '</td><td>' + del + '</td></tr>';
+    // Summary row for done/failed tasks
+    if (hasSummary) {
       var cls = t.status === 'failed' ? 'q-summary fail' : 'q-summary';
-      h += '<tr class="q-summary-row"><td colspan="6"><div class="' + cls + '">' + esc(summary) + '</div></td></tr>';
+      h += '<tr class="q-summary-row" id="qd_' + i + '"><td colspan="6"><div class="' + cls + '">' + esc(summary) + '</div></td></tr>';
     }
   }
   h += '</tbody></table>';

@@ -113,7 +113,26 @@
       "inputTokens": 13969,
       "outputTokens": 28075,
       "costUsd": 3.3745201000000007
+    },
+    {
+      "id": "h_7",
+      "date": "2026-03-10T04:17:19.711Z",
+      "project": "awsl-agent-teams",
+      "projectPath": "C:\\Users\\11421\\awsl-agent-teams",
+      "queueTaskId": "q_8",
+      "goal": "远程网页的统计没有和Machines结合 帮我debug并修复",
+      "status": "done",
+      "startedAt": "2026-03-10T04:01:01.607Z",
+      "completedAt": "2026-03-10T04:17:19.711Z",
+      "duration": 978104,
+      "tasksCompleted": 5,
+      "tasksTotal": 5,
+      "summary": "✅ 5/5 tasks completed successfully.\n\n✅ task_1 (coder): Add read tool path validation [src/sandbox.ts, src/tools.ts]\n✅ task_2 (coder): Dashboard: localhost bind + CORS + body limit [src/dashboard.ts]\n✅ task_3 (coder): Fix shell injection in git commands [src/planning.ts]\n✅ task_4 (coder): Expand coder bash denylist [src/sandbox.ts]\n✅ task_5 (tester): Verify all fixes build correctly [src/tools.ts, src/dashboard.ts, src/planning.ts, src/sandbox.ts]",
+      "engine": "claude-code",
+      "inputTokens": 4693,
+      "outputTokens": 44572,
+      "costUsd": 4.53596485
     }
   ],
-  "updatedAt": "2026-03-09T21:10:41.828Z"
+  "updatedAt": "2026-03-10T04:17:19.712Z"
 }
