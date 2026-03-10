@@ -792,7 +792,7 @@ a { color: var(--blue); text-decoration: none; }
     </aside>
     <div class="timeline-wrap">
       <div class="card">
-        <h2>&#128203; Timeline <button class="tl-collapse-btn" onclick="toggleTimeline()">Collapse</button> <button onclick="clearHistory()" style="float:right;font-size:12px;padding:2px 10px;cursor:pointer;background:var(--ink2);color:var(--ink4);border:1px solid var(--ink3);font-family:inherit">Clear History</button></h2>
+        <h2>&#128203; Timeline <button class="tl-collapse-btn" onclick="toggleTimeline()">Collapse</button> <button class="tl-collapse-btn" onclick="toggleAllDays(true)">Collapse Days</button> <button class="tl-collapse-btn" onclick="toggleAllDays(false)">Expand Days</button> <button onclick="clearHistory()" style="float:right;font-size:12px;padding:2px 10px;cursor:pointer;background:var(--ink2);color:var(--ink4);border:1px solid var(--ink3);font-family:inherit">Clear History</button></h2>
         <div class="filter-bar" id="filterBar">
           Showing: <strong id="filterName"></strong> &nbsp;<span id="filterClear">[clear]</span>
         </div>
@@ -1115,6 +1115,13 @@ function toggleTimeline() {
   btn.textContent = wrap.classList.contains('collapsed') ? 'Expand' : 'Collapse';
 }
 
+function toggleAllDays(collapse) {
+  document.querySelectorAll('.date-group').forEach(function(g) {
+    if (collapse) g.classList.add('collapsed');
+    else g.classList.remove('collapsed');
+  });
+}
+
 function renderTimeline(entries) {
   var el = document.getElementById('tl'); el.innerHTML = '';
   var fb = document.getElementById('filterBar');
@@ -1139,11 +1146,19 @@ function renderTimeline(entries) {
   var dates = Object.keys(byD).sort().reverse();
   for (var d = 0; d < dates.length; d++) {
     var ds = dates[d], dt = new Date(ds + 'T00:00:00');
-    var hd = document.createElement('div'); hd.className = 'date-head';
-    hd.textContent = ds + ' ' + dn(dt);
-    el.appendChild(hd);
+    var ents = byD[ds];
 
-    var items = byD[ds].sort(function(a,b){return (b.startedAt||'').localeCompare(a.startedAt||'');});
+    var group = document.createElement('div');
+    group.className = 'date-group';
+
+    var hd = document.createElement('div'); hd.className = 'date-head';
+    hd.innerHTML = '<span class="date-toggle">\u25B8</span>' + esc(ds) + ' ' + dn(dt) + ' <span class="date-count">(' + ents.length + ')</span>';
+    hd.onclick = function(g) { return function(e) { e.stopPropagation(); g.classList.toggle('collapsed'); }; }(group);
+
+    var entriesDiv = document.createElement('div');
+    entriesDiv.className = 'date-entries';
+
+    var items = ents.sort(function(a,b){return (b.startedAt||'').localeCompare(a.startedAt||'');});
     for (var j = 0; j < items.length; j++) {
       var e = items[j], ok = e.status === 'done';
       var card = document.createElement('div');
@@ -1168,8 +1183,12 @@ function renderTimeline(entries) {
           (e.summary ? '<div class="entry-summary">' + esc(trunc(e.summary, 120)) + '</div>' : '') +
         '</div>';
       card.onclick = function() { this.classList.toggle('expanded'); };
-      el.appendChild(card);
+      entriesDiv.appendChild(card);
     }
+
+    group.appendChild(hd);
+    group.appendChild(entriesDiv);
+    el.appendChild(group);
   }
 }
 
