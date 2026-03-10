@@ -26,6 +26,7 @@ import { runInstaller } from "./install.js";
 import { TaskQueue } from "./queue.js";
 import { startDashboard, isPortInUse } from "./dashboard.js";
 import { RemoteClient } from "./remote.js";
+import { ProjectManager } from "./projects.js";
 
 function usage() {
 	console.error(`
@@ -50,6 +51,10 @@ Commands:
   remote init <url>        Connect to remote dashboard (one command setup)
   remote stop              Disconnect
   remote status            Check connection
+  projects                    List all registered projects with status
+  projects add [path] [--name N]  Register a project (default: cwd)
+  projects remove <path|name>     Unregister a project
+  projects scan [dir]             Auto-discover projects
 
 CC Hybrid Mode (no API key needed):
   1. CC writes plan        → .planning/PLAN.md  (CC does the thinking)
@@ -166,6 +171,9 @@ async function main() {
 		const { cwd } = parseCwdAndForce(args);
 		const planDir = path.join(cwd, ".planning");
 		if (!fs.existsSync(planDir)) fs.mkdirSync(planDir, { recursive: true });
+
+		// Auto-register project
+		try { ProjectManager.add(cwd); ProjectManager.touch(cwd); } catch { /* fail-soft */ }
 
 		let port = 3120;
 		let serverUrl: string | undefined;
@@ -683,6 +691,110 @@ async function main() {
 		process.exit(1);
 	}
 
+	// ── Projects command ────────────────────────────────────
+	if (command === "projects") {
+		const subCmd = args[1];
+		const { cwd } = parseCwdAndForce(args);
+
+		// projects (no sub) — list all with status
+		if (!subCmd || subCmd === "list" || subCmd.startsWith("--")) {
+			const statuses = ProjectManager.getAllStatuses();
+			if (statuses.length === 0) {
+				console.log("No projects registered. Use 'awsl projects add' or 'awsl projects scan'.");
+				process.exit(0);
+			}
+
+			console.log(`\nProjects: ${statuses.length}\n`);
+			console.log("  Name             Path                                  Queue            Last Run       Status");
+			console.log("  " + "-".repeat(100));
+			for (const s of statuses) {
+				const name = s.name.length > 16 ? s.name.slice(0, 13) + "..." : s.name.padEnd(16);
+				const pth = s.path.length > 36 ? "..." + s.path.slice(-33) : s.path.padEnd(36);
+				const q = s.queue.total > 0
+					? `${s.queue.done}/${s.queue.total} (${s.queue.running}r ${s.queue.failed}f)`.padEnd(16)
+					: "-".padEnd(16);
+				const lastRun = s.lastRun
+					? `${s.lastRun.status} ${new Date(s.lastRun.date).toLocaleDateString()}`.padEnd(14)
+					: "-".padEnd(14);
+				const status = !s.exists ? "MISSING" : s.isLocked ? "LOCKED" : "OK";
+				console.log(`  ${name} ${pth}  ${q} ${lastRun} ${status}`);
+			}
+			console.log();
+			process.exit(0);
+		}
+
+		// projects add [path] [--name N]
+		if (subCmd === "add") {
+			let projectPath = cwd;
+			let name: string | undefined;
+
+			for (let i = 2; i < args.length; i++) {
+				const a = args[i];
+				if (a === "--name" && i + 1 < args.length) { name = args[++i]; }
+				else if (a === "--cwd" && i + 1 < args.length) { i++; }
+				else if (a === "--force") { /* skip */ }
+				else if (!a.startsWith("--")) { projectPath = path.resolve(a); }
+			}
+
+			const entry = ProjectManager.add(projectPath, name);
+			console.log(`Registered: ${entry.name} (${entry.path})`);
+			process.exit(0);
+		}
+
+		// projects remove <path|name>
+		if (subCmd === "remove") {
+			const target = args[2];
+			if (!target) {
+				console.error("Usage: awsl projects remove <path|name>");
+				process.exit(1);
+			}
+
+			const found = ProjectManager.find(target);
+			if (!found) {
+				console.error(`Project not found: ${target}`);
+				process.exit(1);
+			}
+
+			ProjectManager.remove(found.path);
+			console.log(`Removed: ${found.name} (${found.path})`);
+			process.exit(0);
+		}
+
+		// projects scan [dir]
+		if (subCmd === "scan") {
+			let scanDir = path.dirname(cwd); // default: parent of cwd
+			for (let i = 2; i < args.length; i++) {
+				const a = args[i];
+				if (a === "--cwd" && i + 1 < args.length) { i++; }
+				else if (!a.startsWith("--")) { scanDir = path.resolve(a); }
+			}
+
+			console.log(`Scanning ${scanDir} for projects...\n`);
+			const found = ProjectManager.scan(scanDir);
+
+			if (found.length === 0) {
+				console.log("No projects found.");
+				process.exit(0);
+			}
+
+			let added = 0;
+			for (const p of found) {
+				const existing = ProjectManager.get(p);
+				const tag = existing ? "(already registered)" : "(new)";
+				if (!existing) {
+					ProjectManager.add(p);
+					added++;
+				}
+				console.log(`  ${path.basename(p).padEnd(24)} ${p}  ${tag}`);
+			}
+			console.log(`\nFound ${found.length} project(s), ${added} newly registered.`);
+			process.exit(0);
+		}
+
+		console.error("Unknown projects command. Use: list, add, remove, scan");
+		process.exit(1);
+	}
+
 	// ── Queue command (sleep mode) ─────────────────────────
 	if (command === "queue") {
 		const subCmd = args[1];
@@ -886,6 +998,9 @@ async function main() {
 			}
 		}
 		else if (subCmd === "start") {
+			// Auto-register project
+			try { ProjectManager.add(cwd); ProjectManager.touch(cwd); } catch { /* fail-soft */ }
+
 			// Parse --engine, --once, --auto-push
 			let engine: Engine | undefined;
 			let once = false;
@@ -980,6 +1095,9 @@ async function main() {
 
 	agentsDirs.push(path.join(cwd, "agents"));
 	const agents = loadAgents(agentsDirs);
+
+	// Auto-register project
+	try { ProjectManager.add(cwd); ProjectManager.touch(cwd); } catch { /* fail-soft */ }
 
 	try {
 		if (executePlan) {
