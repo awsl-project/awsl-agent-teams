@@ -225,7 +225,7 @@ export async function executeTeam(
 ): Promise<TeamResult> {
 	const hooks = options?.hooks ?? [];
 	const replanEnabled = options?.replan ?? false;
-	const autoCommit = options?.autoCommit ?? false;
+	const autoCommit = options?.autoCommit ?? true;
 	const verifyEnabled = options?.verify ?? true;
 	const brainstormEnabled = options?.brainstorm ?? false;
 	const qualityGate = options?.qualityGate ?? true;
