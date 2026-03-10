@@ -1,20 +1,41 @@
-# task_1: Add collapse state tracking to renderTimeline
+# task_1: In `public/dashboard.html`, modify the `render()` function (
 
 Assignee: coder
 Status: done
 
 ## Result
-All good — JavaScript parses without errors.
-
 ## AWSL_RESULT
 
-Added collapse state tracking to `renderTimeline` in `public/dashboard.html`:
+### Summary
 
-**Changes:**
-1. **Line 843** — Added `timelineWrapCollapsed = {}` state object to track per-viewKey (per-client) timeline section collapse state
-2. **Lines 1113-1122** — Updated `toggleTimeline()` to persist collapse state into `timelineWrapCollapsed` keyed by current viewKey
-3. **Lines 1142-1151** — Added restore logic at the top of `renderTimeline()` that reads `timelineWrapCollapsed[viewKey]` and applies/removes the `collapsed` class + updates button text accordingly
+Fixed dashboard stats aggregation so that when no client is selected and remote clients exist, stats cards (Done, Failed, Total Time, Success Rate, Tokens, Cost) show **aggregated data from all machines** instead of only local data.
 
-**What this fixes:** Previously, the timeline-wrap collapsed/expanded state was only stored as a DOM class, so it was lost when switching between remote clients. Now each client's timeline collapse preference is tracked independently and restored on every render.
+### Change
 
-**Files modified:** `public/dashboard.html`
+**File modified:** `public/dashboard.html` — `render()` function (lines 1343-1354)
+
+Added an `else if (clients.length > 0)` branch that:
+1. Starts with local `hist.entries` via `.slice()`
+2. Iterates over all `clients[i].status.history` and `.concat()`s them
+3. Does the same for queue tasks (`status.queue`)
+4. Assigns aggregated arrays back to `entries` and `qt`
+5. `stats(entries)` then naturally computes totals across all machines
+
+### Logic flow
+- **`selectedClient` set** → show only that client's data (unchanged)
+- **`selectedClient` null, clients exist** → aggregate local + all remotes (NEW)
+- **`selectedClient` null, no clients** → show local only (unchanged, fallthrough)
+
+### Test
+
+**File created:** `test/aggregate-stats.test.ts` — 6 tests verifying:
+- `clients.length > 0` check exists
+- History entries aggregation with `.concat()`
+- Queue tasks aggregation
+- Assignment back to `entries`/`qt`
+- Existing `selectedClient` logic preserved
+- Local `hist.entries` included in aggregation
+
+### Test results
+- New tests: **6/6 pass**
+- All existing tests: **111/111 pass** (zero regressions)
