@@ -8,9 +8,10 @@
 
 ### [PASS] git-diff: `git diff --stat`
 ```
-.planning/.verify-cache.json |  2 +-
- .planning/CHECKPOINT.json    | 20 ++++++++++++---
- .planning/PLAN.md            | 40 ++----------------------------
- .planning/task_2-SUMMARY.md  | 59 +++++++++++++++++++-------------------------
- 4 files changed, 44 insertions(+), 77 deletions(-)
+.planning/.verify-cache.json |   4 +-
+ .planning/CHECKPOINT.json    |  20 ++++++--
+ .planning/DESIGN.md          |  79 ++++++++----------------------
+ .planning/REVIEW.md          | 113 +++++++++++++++++++++++++------------------
+ .planning/task_2-SUMMARY.md  |  61 +++++++++++++----------
+ 5 files changed, 140 insertions(+), 137 deletions(-)
 ```

@@ -192,8 +192,13 @@
       "options": {
         "quick": false
       },
-      "status": "pending",
-      "scheduledAt": "2026-03-10T12:04:52.792Z"
+      "status": "done",
+      "scheduledAt": "2026-03-10T12:04:52.792Z",
+      "completedAt": "2026-03-10T12:15:38.293Z",
+      "result": {
+        "success": true,
+        "summary": "✅ 2/2 tasks completed successfully.\n\n✅ task_1 (coder): In `public/dashboard.html`, modify the `render()` function (line 1333-1356). ... [public/dashboard.html]\n✅ task_2 (reviewer): Review the render() function change. Check: (1) no duplicate entries when loc... [public/dashboard.html]"
+      }
     },
     {
       "id": "q_15",
@@ -201,10 +206,11 @@
       "options": {
         "quick": false
       },
-      "status": "pending",
-      "scheduledAt": "2026-03-10T12:13:31.009Z"
+      "status": "running",
+      "scheduledAt": "2026-03-10T12:13:31.009Z",
+      "startedAt": "2026-03-10T12:15:38.599Z"
     }
   ],
   "createdAt": "2026-03-09T10:11:39.245Z",
-  "updatedAt": "2026-03-10T12:13:38.975Z"
+  "updatedAt": "2026-03-10T12:15:38.599Z"
 }
