@@ -35,3 +35,4 @@ export { RelayServer, type RelayMessage, type CommandMessage, type CommandResult
 export { RemoteClient, type RemoteClientOptions } from "./remote.js";
 export { LogStream, getLogStream, type LogLine } from "./logstream.js";
 export { type SandboxPolicy, type BashPolicy, defaultPolicy, checkReadPath, checkWritePath, checkBashCommand } from "./sandbox.js";
+export { ProjectManager, type ProjectEntry, type ProjectRegistry, type ProjectStatus } from "./projects.js";
