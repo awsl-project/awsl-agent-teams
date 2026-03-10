@@ -35,7 +35,7 @@ function usage() {
 
 Commands:
   start [--port N]         Start all services (dashboard + remote if configured)
-  stop                     Stop all services
+  stop                     Stop all services + release lock + reset running tasks
   status                   Show status of all services
   init [--global]          Install skills into .claude/skills/
   validate                 Validate .planning/PLAN.md → compute waves → WAVES.md
@@ -274,6 +274,34 @@ async function main() {
 
 		killPid(path.join(planDir, ".dashboard.pid"), "Dashboard");
 		killPid(path.join(planDir, ".remote.pid"), "Remote   ");
+
+		// Clean up stale lock to prevent stuck queue on restart
+		const lockInfo = checkLock(cwd);
+		if (lockInfo) {
+			forceReleaseLock(cwd);
+			console.log(`  Lock     : released (was pid ${lockInfo.pid})`);
+		}
+
+		// Reset any "running" tasks back to "pending" so queue can resume
+		try {
+			const qPath = path.join(planDir, "QUEUE.json");
+			if (fs.existsSync(qPath)) {
+				const data = JSON.parse(fs.readFileSync(qPath, "utf-8"));
+				let reset = 0;
+				for (const t of data.tasks ?? []) {
+					if (t.status === "running") {
+						t.status = "pending";
+						reset++;
+					}
+				}
+				if (reset > 0) {
+					data.updatedAt = new Date().toISOString();
+					fs.writeFileSync(qPath, JSON.stringify(data, null, 2), "utf-8");
+					console.log(`  Queue    : reset ${reset} running task(s) to pending`);
+				}
+			}
+		} catch { /* no queue file — nothing to reset */ }
+
 		process.exit(0);
 	}
 

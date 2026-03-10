@@ -1279,7 +1279,7 @@ awsl start --server http://server-ip:3120 --id my-laptop
 # 查看状态
 awsl status
 
-# 全部停止
+# 全部停止（释放锁 + 重置 running 任务为 pending）
 awsl stop
 ```
 

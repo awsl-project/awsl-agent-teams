@@ -802,7 +802,7 @@ awsl queue clear                               # 清空队列
 # 快速启动 — 一条命令启动所有服务
 awsl start                                     # 启动仪表盘 + 远程连接（如已配置）
 awsl start --server http://server:3120         # 启动 + 配置远程，一步到位
-awsl stop                                      # 停止所有服务
+awsl stop                                      # 停止所有服务（同时释放锁 + 重置运行中任务）
 awsl status                                    # 查看运行状态
 
 # 仪表盘（手动控制）

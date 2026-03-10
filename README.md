@@ -807,7 +807,7 @@ awsl queue clear                              # Clear all tasks
 # Quick start — one command boots everything
 awsl start                                   # Start dashboard + remote (if configured)
 awsl start --server http://server:3120       # Start + configure remote in one shot
-awsl stop                                    # Stop all services
+awsl stop                                    # Stop all services (also releases lock + resets running tasks)
 awsl status                                  # Check what's running
 
 # Dashboard (manual control)
