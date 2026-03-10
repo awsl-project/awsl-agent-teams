@@ -448,7 +448,9 @@ a { color: var(--blue); text-decoration: none; }
   color: var(--blue);
 }
 
-.queue-actions { margin-top: 12px; text-align: right; }
+.queue-actions { margin-top: 12px; text-align: right; display: flex; gap: 8px; justify-content: flex-end; }
+.queue-actions button.start-btn { background: var(--green); color: #fff; border-color: var(--green); font-weight: 600; }
+.queue-actions button.start-btn:hover { background: #16a34a; border-color: #16a34a; color: #fff; }
 
 .q-table { width: 100%; border-collapse: collapse; font-size: 12px; }
 
@@ -809,6 +811,7 @@ a { color: var(--blue); text-decoration: none; }
     </div>
     <div id="queueContent"></div>
     <div class="queue-actions" id="queueActions" style="display:none">
+      <button class="start-btn" onclick="startQueue()">&#9654; Start Queue</button>
       <button onclick="clearQueue()">Clear All</button>
     </div>
   </div>
@@ -1479,6 +1482,25 @@ async function removeTask(id) {
       await fetch('/api/queue/remove?id=' + encodeURIComponent(id), { method: 'DELETE' });
     }
   } catch(e) {}
+  await loadClients();
+  if (await load()) render();
+}
+
+async function startQueue() {
+  try {
+    if (selectedClient) {
+      await clientCmd('queue:start', { once: false });
+    } else {
+      await fetch('/api/queue/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ once: false })
+      });
+    }
+    alert('Queue started!');
+  } catch(e) {
+    alert('Failed to start queue: ' + e.message);
+  }
   await loadClients();
   if (await load()) render();
 }

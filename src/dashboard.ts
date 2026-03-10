@@ -6,6 +6,7 @@
  */
 
 import * as http from "node:http";
+import * as net from "node:net";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -210,6 +211,25 @@ export function startDashboard(cwd: string, port: number = 3120): http.Server {
 			return;
 		}
 
+		if (req.method === "POST" && url.pathname === "/api/queue/start") {
+			collectBody(req, res, (raw) => {
+				try {
+					const { engine, once } = JSON.parse(raw || "{}");
+					const queue = new TaskQueue(cwd);
+					// Fire-and-forget: start the queue daemon in background
+					queue.start(engine, { once: once ?? false }).catch(err => {
+						log.warn("dashboard", `Queue execution error: ${err.message}`);
+					});
+					res.writeHead(200, { "Content-Type": "application/json" });
+					res.end(JSON.stringify({ started: true }));
+				} catch (e: any) {
+					res.writeHead(400, { "Content-Type": "application/json" });
+					res.end(JSON.stringify({ error: e.message }));
+				}
+			});
+			return;
+		}
+
 		if (req.method === "POST" && url.pathname === "/api/history/clear") {
 			clearHistory(cwd);
 			res.writeHead(200, { "Content-Type": "application/json" });
@@ -262,7 +282,7 @@ export function startDashboard(cwd: string, port: number = 3120): http.Server {
 
 	server.listen(port, '0.0.0.0', () => {
 		log.info("dashboard", `Dashboard running at http://0.0.0.0:${port}`);
-		log.info("dashboard", `API: /api/history, /api/stats, /api/queue, /api/logs (SSE), /api/queue/add|remove|clear, /api/history/clear`);
+		log.info("dashboard", `API: /api/history, /api/stats, /api/queue, /api/logs (SSE), /api/queue/add|remove|clear|start, /api/history/clear`);
 		log.info("dashboard", `Relay: /ws/relay (WebSocket), /api/clients, /api/clients/command`);
 	});
 
@@ -272,7 +292,6 @@ export function startDashboard(cwd: string, port: number = 3120): http.Server {
 /** Check if a port is in use. Resolves to true if occupied. */
 export function isPortInUse(port: number): Promise<boolean> {
 	return new Promise((resolve) => {
-		const net = require("node:net") as typeof import("node:net");
 		const tester = net.createServer()
 			.once("error", (err: NodeJS.ErrnoException) => {
 				resolve(err.code === "EADDRINUSE");
