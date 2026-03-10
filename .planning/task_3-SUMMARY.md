@@ -1,20 +1,24 @@
-# task_3: In src/planning.ts around lines 372-384:
-1. Change `import {
+# task_3: Fix shell injection in git commands
 
 Assignee: coder
 Status: done
 
 ## Result
-tsc passes clean.
-
 ## AWSL_RESULT
 
-### Task 3: Replace shell-interpolated git commands with execFileSync — Complete
+### Changes Made
 
-| File | Change |
-|------|--------|
-| `src/planning.ts:316` | Import updated: added `execFileSync` alongside `execSync` |
-| `src/planning.ts:373` | `git add` now uses `execFileSync("git", ["add", "--", f], ...)` — no shell interpolation |
-| `src/planning.ts:381` | `git commit` now uses `execFileSync("git", ["commit", "-m", commitMsg], ...)` — no shell interpolation |
+**File: `src/planning.ts`**
 
-**Security fix**: Both `git add` and `git commit` now bypass the shell entirely via `execFileSync` with array arguments, eliminating command injection through crafted filenames or commit messages. Verification: `npx tsc --noEmit` passes clean.
+- **Removed `execSync` import** (line 316): Changed `import { execSync, execFileSync }` → `import { execFileSync }`. `execSync` spawns a shell (`/bin/sh -c` / `cmd.exe /c`) which interprets metacharacters (`; | & $ \``). No longer needed.
+
+- **`changedFiles()` (line 324)**: Replaced `execSync("git status --porcelain", ...)` with `execFileSync("git", ["status", "--porcelain"], ...)`. Executes `git` directly without a shell, preventing any metacharacter injection via the `cwd` parameter or environment.
+
+- **`atomicCommit()` (line 377)**: Replaced `execSync("git diff --cached --name-only", ...)` with `execFileSync("git", ["diff", "--cached", "--name-only"], ...)`. Same rationale.
+
+### Why This Matters
+
+`execSync(cmd)` passes `cmd` through a shell. While the command strings here were static, the `cwd` option and environment variables flow through the shell layer. `execFileSync` bypasses the shell entirely — arguments are passed as an array directly to the process, eliminating shell injection as a class of vulnerability. This is now consistent with the existing `git add` and `git commit` calls (lines 373, 381) which already used `execFileSync`.
+
+### Verification
+- `npx tsc --noEmit` — passes with zero errors
