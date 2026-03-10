@@ -1,24 +1,34 @@
-# task_3: Fix shell injection in git commands
+# task_3: Verify the mobile CSS changes by reading public/dashboard.ht
 
-Assignee: coder
+Assignee: tester
 Status: done
 
 ## Result
+All checks pass.
+
 ## AWSL_RESULT
 
-### Changes Made
+### Verification: Dashboard Mobile CSS Adaptation
 
-**File: `src/planning.ts`**
+**Status:** ALL CHECKS PASSED
 
-- **Removed `execSync` import** (line 316): Changed `import { execSync, execFileSync }` → `import { execFileSync }`. `execSync` spawns a shell (`/bin/sh -c` / `cmd.exe /c`) which interprets metacharacters (`; | & $ \``). No longer needed.
+| Check | Result |
+|-------|--------|
+| All 25 unit tests | PASS |
+| CSS braces balanced | OK |
+| Viewport meta tag present | OK |
+| `@media (max-width: 900px)` unchanged (only `.stats` rule) | OK |
+| `@media (max-width: 700px)` enhanced with 7 new rules | OK |
+| `@media (max-width: 480px)` new block with 16 rules | OK |
+| No HTML structure changes | OK |
+| No JS changes | OK |
 
-- **`changedFiles()` (line 324)**: Replaced `execSync("git status --porcelain", ...)` with `execFileSync("git", ["status", "--porcelain"], ...)`. Executes `git` directly without a shell, preventing any metacharacter injection via the `cwd` parameter or environment.
+**Verified rules in 700px block:**
+- Body padding `16px 12px 60px`, queue-form `flex-wrap`, table columns 4+5 hidden, button `min-height: 40px`, q-del `36×36px`, proj-item touch padding
 
-- **`atomicCommit()` (line 377)**: Replaced `execSync("git diff --cached --name-only", ...)` with `execFileSync("git", ["diff", "--cached", "--name-only"], ...)`. Same rationale.
+**Verified rules in 480px block:**
+- Header wrap + `17px` title, stats `1fr`, stat-val `18px`, heatmap `8×8px` + `2px` gaps, queue-form column layout, full-width inputs `!important`, table `6px`/`11px`, queue-actions stacked, entry-row1 wrap, client-card `130px`, tk-val `15px`
 
-### Why This Matters
-
-`execSync(cmd)` passes `cmd` through a shell. While the command strings here were static, the `cwd` option and environment variables flow through the shell layer. `execFileSync` bypasses the shell entirely — arguments are passed as an array directly to the process, eliminating shell injection as a class of vulnerability. This is now consistent with the existing `git add` and `git commit` calls (lines 373, 381) which already used `execFileSync`.
-
-### Verification
-- `npx tsc --noEmit` — passes with zero errors
+**Files verified:**
+- `public/dashboard.html` — lines 306–339 (CSS media queries)
+- `test/mobile-css.test.ts` — 25 tests, all green
