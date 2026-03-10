@@ -1340,6 +1340,17 @@ function render() {
     var sc = clients.find(function(c){return c.id === selectedClient;});
     qt = sc && sc.status && sc.status.queue ? sc.status.queue : [];
     entries = sc && sc.status && sc.status.history ? sc.status.history : [];
+  } else if (clients.length > 0) {
+    // Aggregate all sources: local + all remote clients
+    var allEntries = (hist.entries || []).slice();
+    var allQt = qt.slice();
+    for (var i = 0; i < clients.length; i++) {
+      var cs = clients[i].status;
+      if (cs && cs.history) allEntries = allEntries.concat(cs.history);
+      if (cs && cs.queue) allQt = allQt.concat(cs.queue);
+    }
+    entries = allEntries;
+    qt = allQt;
   }
 
   if (entries.length === 0 && qt.length === 0 && clients.length === 0) {

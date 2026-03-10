@@ -1,104 +1,96 @@
-Now I have a complete picture. Here is the architecture analysis:
+## AWSL_RESULT
 
----
-
-## AWSL Agent Teams — Architecture Analysis
+## Architecture Analysis: awsl-agent-teams
 
 ### Overview
 
-Multi-agent orchestration engine (TypeScript, ES modules, strict mode) that coordinates specialized AI agents to execute software tasks. Two conceptual layers: **Conductor** (planning, parallelism, wave execution) and **Guardian** (quality enforcement via skill injection).
+Multi-agent orchestration engine for Claude Code. Two core abstractions: **Conductor** (orchestrator — planning, waves, parallelism) and **Guardian** (skills — quality enforcement injected into agent prompts). TypeScript strict mode, ES modules, compiles to `dist/`.
 
-### Module Boundaries & Dependencies
+### Module Dependency Graph
 
 ```
-CLI (cli.ts)
- ├── Orchestrator (orchestrator.ts)  ← core pipeline engine
- │    ├── Runner (runner.ts)         ← dual engine: claude-code | builtin
- │    │    ├── Tools (tools.ts)      ← builtin agent tools (read/write/edit/bash/memory)
- │    │    └── Sandbox (sandbox.ts)  ← path + command restrictions
- │    ├── Planning (planning.ts)     ← .planning/ state persistence
- │    ├── Skills (skills.ts)         ← Guardian methodology injection
- │    ├── Memory (memory.ts)         ← in-process KV store for inter-agent comms
- │    └── Verify (verify.ts)         ← code verification (tsc/test/lint)
- ├── Queue (queue.ts)                ← sequential task queue with deps
- │    ├── Scheduler (scheduler.ts)   ← OS-level scheduling (schtasks)
- │    └── History (history.ts)       ← execution history persistence
- ├── Dashboard (dashboard.ts)        ← HTTP server + SSE + JSON API
- │    └── Relay (relay.ts)           ← WebSocket relay for remote clients
- ├── Remote (remote.ts)              ← connects local machine to remote dashboard
- ├── Agents (agents.ts)              ← markdown+YAML frontmatter agent definitions
- ├── Validate (validate.ts)          ← PLAN.md parser + topological sort
- ├── Lock (lock.ts)                  ← file-based concurrency lock
- └── Install (install.ts)            ← Claude Code skill installer
+cli.ts ─────────┬──→ orchestrator.ts (Conductor)
+                │       ├── runner.ts (dual engine: claude-code | builtin)
+                │       ├── planning.ts (.planning/ state persistence)
+                │       ├── memory.ts (SharedMemory KV store)
+                │       ├── skills.ts (Guardian skill injection)
+                │       └── verify.ts (tsc, lint, test verification)
+                │
+                ├──→ queue.ts (task queue with QUEUE.json persistence)
+                │       └── orchestrator.ts (executeTeam per task)
+                │
+                ├──→ dashboard.ts (HTTP server + SSE)
+                │       ├── relay.ts (WebSocket server for remote clients)
+                │       └── history.ts (HISTORY.json read)
+                │
+                └──→ remote.ts (WebSocket client → relay)
 ```
 
-### Key Architectural Patterns
+### File Roles (25 source files)
 
-1. **Dual Engine** (`runner.ts`): `claude-code` spawns `claude -p` subprocess per task (full CC power); `builtin` uses `pi-agent-core` in-process with custom tools. Auto-detects which is available.
+| File | LOC | Purpose |
+|------|-----|---------|
+| **orchestrator.ts** | 1195 | Core engine: brainstorm → research → plan → execute (topo-sort waves) → verify → replan |
+| **cli.ts** | 960 | CLI entry: `awsl run/start/queue/dashboard/remote/validate/verify` |
+| **queue.ts** | 530 | Sequential task queue, QUEUE.json persistence, dependency chains |
+| **verify.ts** | 450 | Post-execution verification: tsc, eslint, npm test |
+| **runner.ts** | 350 | Agent execution via `claude -p` subprocess or pi-agent-core in-process |
+| **planning.ts** | 350 | `.planning/` dir management, PLAN.md parsing, checkpoints |
+| **validate.ts** | 300 | PLAN.md → topological sort → WAVES.md |
+| **dashboard.ts** | 260 | HTTP server serving `public/dashboard.html` + JSON API + SSE logs |
+| **tools.ts** | 250 | Agent tool implementations (read, write, edit, bash, memory_*, report) |
+| **install.ts** | 290 | Skill installer → `.claude/skills/` |
+| **relay.ts** | 220 | WebSocket relay server for multi-machine management |
+| **sandbox.ts** | 210 | Path/command sandboxing for builtin engine agents |
+| **remote.ts** | 200 | WebSocket client connecting local machine to dashboard |
+| **agents.ts** | 180 | Agent defs from markdown+YAML frontmatter, builtin defaults |
+| **skills.ts** | 220 | Guardian skills: TDD, systematic debug, brainstorm, code review, planning |
+| **context.ts** | 80 | RunContext: lifecycle lock with signal handlers |
+| **memory.ts** | 68 | SharedMemory: in-process KV for inter-agent comms |
+| **history.ts** | 130 | Append-only HISTORY.json for dashboard stats |
+| **scheduler.ts** | 110 | OS-level scheduling (schtasks on Windows) |
+| **lock.ts** | 120 | File-based concurrency lock (.planning/.lock) |
+| **logstream.ts** | 55 | SSE log streaming |
+| **log.ts** | 30 | Logging utility |
 
-2. **Wave-Based Execution** (`orchestrator.ts`): Tasks form a DAG. Topological sort produces waves of independent tasks that execute in parallel. Pipeline phases: brainstorm → research → plan → execute → verify → auto-fix → retry → replan.
+### Key Patterns
 
-3. **File-as-State** (`.planning/` directory): All orchestration state persisted to disk — `STATE.md`, `PLAN.md`, `WAVES.md`, `CHECKPOINT.json`, `QUEUE.json`, `HISTORY.json`. Enables checkpoint/recovery across sessions and rate limit interruptions.
+1. **Dual Engine** (`runner.ts`): `claude-code` spawns `claude -p` subprocess (zero API key needed); `builtin` uses pi-agent-core in-process with custom tools
+2. **File-as-State**: All persistent state lives in `.planning/` — PLAN.md, WAVES.md, QUEUE.json, CHECKPOINT.json, HISTORY.json, STATE.md. No database.
+3. **Wave Execution**: Tasks form a DAG. `validate.ts` topo-sorts into parallel waves. `orchestrator.ts` executes each wave concurrently via `runParallel()`.
+4. **Skill Injection**: Guardian skills auto-activate by agent role (e.g., TDD for coders, brainstorm for architects). Injected into system prompts at runtime.
+5. **Agent Definitions**: Markdown files with YAML frontmatter in `agents/`. 4 built-in roles: architect, coder, reviewer, tester. Custom agents via `--agents-dir`.
+6. **Inter-Agent Memory**: `SharedMemory` KV store passed between agents within a session. Serialized to checkpoint for crash recovery.
+7. **Remote Management**: Dashboard (HTTP+SSE) ← Relay (WebSocket) ← Remote clients. Multi-machine task distribution.
+8. **Sandbox**: Builtin engine tools filtered by `SandboxPolicy` — read/write path restrictions, bash command allowlist/denylist, sensitive file blocking.
 
-4. **Guardian Skills** (`skills.ts`): Role-based skill injection. Skills (TDD, debugging, review, brainstorm, etc.) auto-activate based on agent role and inject methodology instructions into system prompts.
+### Frameworks / Dependencies
 
-5. **Agent Definitions** (`agents.ts` + `agents/` dir): Markdown files with YAML frontmatter define agents. Schema: name, role, model, tools, skills, sandbox policy, system prompt. Loads from built-in defaults + custom `agents/` dirs.
-
-6. **Sandbox Policy** (`sandbox.ts`): Per-agent path restrictions and bash command filtering. Modes: allowlist, denylist, unrestricted. Blocks sensitive files (.env, credentials, keys).
-
-7. **Event/Hook System** (`orchestrator.ts`): `TeamHook` callbacks for events like `wave_start`, `task_done`, `rate_limit`, `checkpoint` — enables UI integration and monitoring.
-
-### Frameworks & Dependencies
-
-| Dependency | Purpose |
-|---|---|
-| `@mariozechner/pi-agent-core` | Builtin engine — Agent class, tool interface |
-| `@mariozechner/pi-ai` | LLM provider abstraction (`getModel()`) |
-| `@sinclair/typebox` | JSON Schema for tool parameter validation |
-| `ws` | WebSocket for relay server/remote client |
-| `yaml` | YAML frontmatter parsing in agent definitions |
-| `tsx` | Dev-time TypeScript execution |
+- **pi-agent-core** + **pi-ai**: LLM agent framework (builtin engine)
+- **@sinclair/typebox**: JSON schema for tool parameter validation
+- **ws**: WebSocket (relay/remote)
+- **yaml**: Agent frontmatter parsing
+- **tsx**: Dev-time TS execution
 
 ### Data Flow
 
 ```
-User Goal
-  → Brainstorm (Socratic exploration)
-  → Research (parallel codebase analysis)
-  → Plan (structured task DAG → PLAN.md)
-  → Validate (topo sort → WAVES.md)
-  → Execute (wave-parallel agent runs)
-  → Verify (tsc + tests + lint)
-  → Auto-fix / Replan (on failure)
-  → Atomic Commit
+User goal → CLI
+  → orchestrator.executeTeam()
+    → Phase 0a: brainstorm (architect agent)
+    → Phase 0b: research (parallel coder agents scan codebase)
+    → Phase 1: plan (architect writes PLAN.md)
+    → Phase 2: execute (topo-sorted waves, runner.runParallel)
+    → Phase 3: verify (tsc + lint + tests)
+    → Phase 4: replan on failure (retry up to 2x)
+  → Result: committed code + VERIFICATION.md
 ```
 
-### File Structure Summary
+### Architecture Boundaries
 
-- **`src/`** — 25 TypeScript source files (~250KB total)
-- **`agents/`** — Custom agent definitions (fullstack-coder, security-reviewer)
-- **`public/`** — Dashboard HTML (single-page pixel art UI)
-- **`test/`** — 3 test files (new, untracked)
-- **`bench*/`** — Multiple benchmark directories
-- **`.planning/`** — Runtime state directory (gitignored partially)
-- **`memory/`** — Shared memory persistence directory
-
-### Key Interfaces
-
-- `Task` — DAG node: id, description, assignee, dependencies, status, files, verify criteria
-- `TeamAgentDef` — Agent definition: name, role, model, tools, skills, sandbox, systemPrompt
-- `RunResult` — Agent execution result: status, result text, token counts, cost
-- `SandboxPolicy` — Security boundary: read/write paths, bash command filtering
-- `QueueTask` — Queued task: goal, engine, options, scheduling, dependencies
-
-## AWSL_RESULT
-
-Architecture analysis complete. The codebase is a ~250KB TypeScript ES module project implementing a multi-agent orchestration engine with:
-- **Conductor/Guardian** dual-layer architecture (planning vs quality enforcement)
-- **Dual engine** support (claude-code subprocess vs builtin pi-agent-core)
-- **Wave-based parallel execution** with DAG dependency resolution
-- **File-as-state** persistence in `.planning/` for crash recovery
-- **Sandbox policies** for agent security isolation
-- **Dashboard + WebSocket relay** for monitoring and remote management
-
-Key files: `orchestrator.ts` (45KB, core pipeline), `cli.ts` (37KB, CLI), `queue.ts` (21KB, task queue), `verify.ts` (17KB, verification), `runner.ts` (14KB, dual engine), `planning.ts` (14KB, state persistence).
+- **Orchestration layer** (orchestrator, queue, validate, planning) — pure logic, no LLM calls
+- **Execution layer** (runner, tools, sandbox) — handles LLM interaction
+- **Quality layer** (skills, verify) — methodology enforcement
+- **Persistence layer** (planning, history, lock, memory) — file-based state
+- **Network layer** (dashboard, relay, remote, logstream) — HTTP/WS/SSE
+- **CLI layer** (cli, install, scheduler, context) — user interface

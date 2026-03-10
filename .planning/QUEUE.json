@@ -185,8 +185,18 @@
         "success": true,
         "summary": "✅ 2/2 tasks completed successfully.\n\n✅ task_1 (coder): Add collapse state tracking to renderTimeline [public/dashboard.html]\n✅ task_2 (reviewer): Review collapse state changes [public/dashboard.html]"
       }
+    },
+    {
+      "id": "q_14",
+      "goal": "远程面板 我刚进页面的时候 应该统计的是整个所有机器的数据集合吧 那几个统计数据",
+      "options": {
+        "quick": false
+      },
+      "status": "running",
+      "scheduledAt": "2026-03-10T12:04:52.792Z",
+      "startedAt": "2026-03-10T12:05:03.619Z"
     }
   ],
   "createdAt": "2026-03-09T10:11:39.245Z",
-  "updatedAt": "2026-03-10T06:11:35.118Z"
+  "updatedAt": "2026-03-10T12:05:03.619Z"
 }

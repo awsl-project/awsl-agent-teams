@@ -1,0 +1,45 @@
+{
+  "design": {
+    "title": "Fix Dashboard Stats: Aggregate All Machines on Initial Load",
+    "problem": "When user first opens dashboard (no machine selected), stats only show local history. Remote clients' history is ignored. Stats cards (Done, Failed, Total Time, Success Rate, Tokens, Cost) plus heatmap, trend, projects, and timeline all show local-only data.",
+    "root_cause": "render() in public/dashboard.html line 1333 uses `hist.entries` (local only) when selectedClient is null. Remote clients' status.history data is never merged into the aggregate view.",
+    "solution": {
+      "approach": "Client-side aggregation in render() function",
+      "file": "public/dashboard.html",
+      "function": "render() — lines 1333-1356",
+      "changes": [
+        "When selectedClient is null: copy local entries, then merge all clients[i].status.history entries",
+        "Deduplicate by composite key: (entry.id || '') + '|' + (entry.startedAt || '')",
+        "Queue stays local-only in aggregate view (queue is machine-specific)"
+      ],
+      "no_backend_changes": true
+    },
+    "decisions": {
+      "client_side_aggregation": "Data already in clients array from /api/clients; no new API needed",
+      "dedup_by_id_startedAt": "Prevents duplicates if dashboard machine also connects as remote client",
+      "queue_stays_local": "Queue is action-oriented; aggregating would confuse add/remove/start actions",
+      "single_file_change": "Only public/dashboard.html render() needs modification"
+    },
+    "affected_stats": [
+      "Done count",
+      "Failed count",
+      "Total Time",
+      "Success Rate",
+      "Input Tokens",
+      "Output Tokens",
+      "Total Tokens",
+      "Cost (USD)",
+      "Activity Heatmap",
+      "Duration Trend",
+      "Projects sidebar",
+      "Timeline"
+    ],
+    "edge_cases": [
+      "Dashboard machine also connected as remote client → dedup handles this",
+      "Remote client disconnects → its data leaves clients array, stats decrease (shows live state)",
+      "Empty local history + rich remote history → now correctly shows remote data",
+      "No clients connected → behaves exactly as before (local only)"
+    ],
+    "existing_design_doc": ".planning/design-stats-machines.md"
+  }
+}
