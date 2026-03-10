@@ -55,15 +55,16 @@ const SENSITIVE_FILE_PATTERNS = [
 // ─── Dangerous patterns (coder denylist) ─────────────────────────────
 
 const CODER_DENY_PATTERNS = [
-	"rm -rf /",
+	// filesystem destruction
+	"rm -rf /", "rm -rf /*",
+	// privilege escalation
 	"sudo ",
-	"mkfs",
-	"dd if=",
+	// disk / device operations
+	"mkfs", "dd if=", "> /dev/sd",
+	// fork bomb
 	":(){ :|:& };:",
-	"chmod 777",
-	"> /dev/sd",
-	// glob-based destruction
-	"rm -rf /*",
+	// dangerous permissions / ownership
+	"chmod 777", "chmod +s", "chmod u+s", "chown ",
 	// download-and-execute
 	"| sh", "| bash",
 	"curl ", "wget ",
@@ -72,8 +73,24 @@ const CODER_DENY_PATTERNS = [
 	"node -e", "perl -e", "ruby -e",
 	// network exfiltration
 	"nc ", "ncat ",
+	// remote access / file transfer
+	"ssh ", "scp ", "sftp ", "rsync ", "ftp ",
 	// eval / encoded execution
 	"eval ", "base64 -d",
+	// shell escapes (Windows)
+	"powershell", "pwsh ",
+	// git push (prevent autonomous pushes)
+	"git push",
+	// package publishing
+	"npm publish",
+	// system control
+	"shutdown", "reboot",
+	// process / service control
+	"killall ", "systemctl ",
+	// scheduled task manipulation
+	"crontab",
+	// environment variable leaking
+	"printenv",
 ]
 
 // ─── Role-based allowlists ──────────────────────────────────────────
