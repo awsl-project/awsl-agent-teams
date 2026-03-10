@@ -1,25 +1,20 @@
-# task_1: In public/dashboard.html, implement these changes exactly as
+# task_1: Add collapse state tracking to renderTimeline
 
 Assignee: coder
 Status: done
 
 ## Result
+All good — JavaScript parses without errors.
+
 ## AWSL_RESULT
 
-### Task: Timeline collapse state persistence
+Added collapse state tracking to `renderTimeline` in `public/dashboard.html`:
 
-All 6 changes implemented in `public/dashboard.html`:
+**Changes:**
+1. **Line 843** — Added `timelineWrapCollapsed = {}` state object to track per-viewKey (per-client) timeline section collapse state
+2. **Lines 1113-1122** — Updated `toggleTimeline()` to persist collapse state into `timelineWrapCollapsed` keyed by current viewKey
+3. **Lines 1142-1151** — Added restore logic at the top of `renderTimeline()` that reads `timelineWrapCollapsed[viewKey]` and applies/removes the `collapsed` class + updates button text accordingly
 
-1. **`collapsedDates` global** (line 842) — `var collapsedDates = {};` added after other globals
-2. **State saving in `renderTimeline()`** (before `el.innerHTML = ''`) — saves collapsed/expanded date groups to `collapsedDates[viewKey + '|' + dateKey]` before DOM clear
-3. **`data-date` attribute + state restore** — `group.setAttribute('data-date', ds)` and `if (collapsedDates[viewKey + '|' + ds]) group.classList.add('collapsed')`
-4. **`hd.onclick` state tracking** — closure captures `(group, ds)`, toggles `collapsedDates[vk]` on click
-5. **`toggleAllDays()` state tracking** — uses `viewKey` and updates `collapsedDates` for each date group
-6. **`clearHistory()` remote guard** — checks `selectedClient`, shows `alert('Cannot clear history for remote clients')` and returns early
+**What this fixes:** Previously, the timeline-wrap collapsed/expanded state was only stored as a DOM class, so it was lost when switching between remote clients. Now each client's timeline collapse preference is tracked independently and restored on every render.
 
-### Files modified
-- `public/dashboard.html` — ~25 lines of JS changes
-
-### Tests
-- `test/timeline-collapse.test.ts` — 7/7 tests pass
-- `npm run build` — passes
+**Files modified:** `public/dashboard.html`
