@@ -875,18 +875,19 @@ ${failedTasksForReplan.length > 0 ? failedTasksForReplan.map(t => `- ${t.id}: ${
 		log.info("conductor", `  [${icon}] ${t.id} (${t.assignee}): ${t.status}`);
 	}
 
-	// Build detailed summary with per-task results
+	// Build detailed summary with per-task descriptions
 	const taskSummaries = tasks
-		.filter(t => t.status === "verified" || t.status === "done")
 		.map(t => {
-			const brief = t.result ? t.result.slice(0, 200).split("\n")[0] : t.description;
-			return `- ${t.id}: ${brief}`;
+			const icon = t.status === "done" || t.status === "verified" ? "✅" : "❌";
+			const desc = t.description.length > 80 ? t.description.slice(0, 77) + "..." : t.description;
+			const files = t.files && t.files.length > 0 ? ` [${t.files.join(", ")}]` : "";
+			return `${icon} ${t.id} (${t.assignee}): ${desc}${files}`;
 		})
 		.join("\n");
 	const headline = success
-		? `All ${tasks.length} tasks completed.`
-		: `${doneCount}/${tasks.length} tasks completed.`;
-	const summary = taskSummaries ? `${headline}\n${taskSummaries}` : headline;
+		? `✅ ${tasks.length}/${tasks.length} tasks completed successfully.`
+		: `⚠️ ${doneCount}/${tasks.length} tasks completed, ${tasks.length - doneCount} failed.`;
+	const summary = taskSummaries ? `${headline}\n\n${taskSummaries}` : headline;
 
 	return { success, tasks, summary, memory, planning, inputTokens: totalInputTokens, outputTokens: totalOutputTokens, costUsd: totalCostUsd };
 }
