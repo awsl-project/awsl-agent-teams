@@ -1,15 +1,17 @@
 {
-  "wave": 0,
+  "wave": 1,
   "completedTasks": [
-    "task_1"
+    "task_1",
+    "task_2"
   ],
   "taskResults": {
-    "task_1": "Build passes cleanly. All three changes are implemented:\n\n## AWSL_RESULT\n\n### Implemented: Section-level collapse for Timeline\n\n**File modified**: `public/dashboard.html`\n\n**Changes**:\n1. **CSS** (lines 424–436) — Added section-level collapse styles (`.timeline-wrap.collapsed` hides `#tl` and `#filterBar`) and day-level collapse styles (`.date-group`, `.date-head`, `.date-toggle`, `.date-count`)\n2. **HTML** (line 795) — Added `<button class=\"tl-collapse-btn\" onclick=\"toggleTimeline()\">Collapse</button>` to the Timeline h2 header\n3. **JavaScript** (lines 1111–1116) — Added `toggleTimeline()` function that toggles `.collapsed` class on `.timeline-wrap` and updates button text between \"Collapse\" / \"Expand\"\n\n**Behavior**: Clicking \"Collapse\" hides the entire timeline list and filter bar while keeping the h2 title with buttons visible. Clicking \"Expand\" restores them."
+    "task_1": "Build passes cleanly. All three changes are implemented:\n\n## AWSL_RESULT\n\n### Implemented: Section-level collapse for Timeline\n\n**File modified**: `public/dashboard.html`\n\n**Changes**:\n1. **CSS** (lines 424–436) — Added section-level collapse styles (`.timeline-wrap.collapsed` hides `#tl` and `#filterBar`) and day-level collapse styles (`.date-group`, `.date-head`, `.date-toggle`, `.date-count`)\n2. **HTML** (line 795) — Added `<button class=\"tl-collapse-btn\" onclick=\"toggleTimeline()\">Collapse</button>` to the Timeline h2 header\n3. **JavaScript** (lines 1111–1116) — Added `toggleTimeline()` function that toggles `.collapsed` class on `.timeline-wrap` and updates button text between \"Collapse\" / \"Expand\"\n\n**Behavior**: Clicking \"Collapse\" hides the entire timeline list and filter bar while keeping the h2 title with buttons visible. Clicking \"Expand\" restores them.",
+    "task_2": "All changes are in place and the build passes.\n\n## AWSL_RESULT\n\n### Implemented: Per-day collapsible Timeline groups\n\n**File modified**: `public/dashboard.html`\n\n**Changes**:\n\n1. **HTML** (line 795) — Added \"Collapse Days\" and \"Expand Days\" buttons to the Timeline header, styled with the existing `.tl-collapse-btn` class\n\n2. **JavaScript — `toggleAllDays()`** (lines 1118–1123) — New function that adds/removes `.collapsed` class on all `.date-group` elements\n\n3. **JavaScript — `renderTimeline()`** (lines 1146–1192) — Restructured the date loop:\n   - Each date now wrapped in `<div class=\"date-group\">`\n   - Date header includes `▸` toggle arrow and `(N)` entry count via `.date-toggle` and `.date-count` spans\n   - Click handler on date header toggles `.collapsed` on the group (with `e.stopPropagation()` to not interfere with entry clicks)\n   - Entries appended to `<div class=\"date-entries\">` inside the group\n   - Entry rendering logic (`.entry` divs, click-to-expand, project filtering) fully preserved\n\n**Behavior**:\n- Click a date header → that day's entries collapse/expand independently\n- Arrow rotates (▸ → ▾ via CSS transform) when expanded\n- Entry count `(N)` shows next to each date\n- \"Collapse Days\" / \"Expand Days\" buttons toggle all groups at once\n- Individual entry click-to-expand still works as before\n- Default state: all expanded"
   },
   "failedTasks": [],
   "taskErrors": {},
   "rateLimitRetries": 0,
-  "savedAt": "2026-03-10T05:27:04.431Z",
+  "savedAt": "2026-03-10T05:28:34.454Z",
   "memory": {
     "result:architect:session": {
       "value": "b83b9289-d90a-4c94-a5d5-e99b5ae892a8",
@@ -42,14 +44,19 @@
       "timestamp": 1773120353373
     },
     "result:coder:session": {
-      "value": "7645f2e8-644b-4d9f-bc05-6fcbe28fc8ab",
+      "value": "a4143f07-69f5-4071-b35b-51f082f67d1d",
       "author": "coder",
-      "timestamp": 1773120421287
+      "timestamp": 1773120513705
     },
     "result:task_1": {
       "value": "Build passes cleanly. All three changes are implemented:\n\n## AWSL_RESULT\n\n### Implemented: Section-level collapse for Timeline\n\n**File modified**: `public/dashboard.html`\n\n**Changes**:\n1. **CSS** (lines 424–436) — Added section-level collapse styles (`.timeline-wrap.collapsed` hides `#tl` and `#filterBar`) and day-level collapse styles (`.date-group`, `.date-head`, `.date-toggle`, `.date-count`)\n2. **HTML** (line 795) — Added `<button class=\"tl-collapse-btn\" onclick=\"toggleTimeline()\">Collapse</button>` to the Timeline h2 header\n3. **JavaScript** (lines 1111–1116) — Added `toggleTimeline()` function that toggles `.collapsed` class on `.timeline-wrap` and updates button text between \"Collapse\" / \"Expand\"\n\n**Behavior**: Clicking \"Collapse\" hides the entire timeline list and filter bar while keeping the h2 title with buttons visible. Clicking \"Expand\" restores them.",
       "author": "coder",
       "timestamp": 1773120421287
+    },
+    "result:task_2": {
+      "value": "All changes are in place and the build passes.\n\n## AWSL_RESULT\n\n### Implemented: Per-day collapsible Timeline groups\n\n**File modified**: `public/dashboard.html`\n\n**Changes**:\n\n1. **HTML** (line 795) — Added \"Collapse Days\" and \"Expand Days\" buttons to the Timeline header, styled with the existing `.tl-collapse-btn` class\n\n2. **JavaScript — `toggleAllDays()`** (lines 1118–1123) — New function that adds/removes `.collapsed` class on all `.date-group` elements\n\n3. **JavaScript — `renderTimeline()`** (lines 1146–1192) — Restructured the date loop:\n   - Each date now wrapped in `<div class=\"date-group\">`\n   - Date header includes `▸` toggle arrow and `(N)` entry count via `.date-toggle` and `.date-count` spans\n   - Click handler on date header toggles `.collapsed` on the group (with `e.stopPropagation()` to not interfere with entry clicks)\n   - Entries appended to `<div class=\"date-entries\">` inside the group\n   - Entry rendering logic (`.entry` divs, click-to-expand, project filtering) fully preserved\n\n**Behavior**:\n- Click a date header → that day's entries collapse/expand independently\n- Arrow rotates (▸ → ▾ via CSS transform) when expanded\n- Entry count `(N)` shows next to each date\n- \"Collapse Days\" / \"Expand Days\" buttons toggle all groups at once\n- Individual entry click-to-expand still works as before\n- Default state: all expanded",
+      "author": "coder",
+      "timestamp": 1773120513705
     }
   },
   "goal": "timeline整个板块希望可以折叠 也可以按天折叠"
