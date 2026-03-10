@@ -1,25 +1,20 @@
 ## AWSL_RESULT
 
-### Design: Dashboard Mobile Adaptation
+### Design: Collapsible Timeline
 
-**Chosen approach:** CSS-only media queries + responsive table pattern (no framework, no HTML changes, no JS changes)
+**Goal**: 两级折叠 — 整个 Timeline 板块可折叠 + 按天折叠
 
-**Key decisions:**
+**Approach**: CSS class toggle（与现有 entry 展开/收起模式一致）
 
-| Area | Change | Rationale |
-|------|--------|-----------|
-| Breakpoints | Add `@media (max-width: 480px)`, enhance existing `700px` | 480px targets phones; 700px is already used |
-| Body padding | 28px 24px → 16px 12px on mobile | Reclaim precious horizontal space |
-| Header | flex-wrap, stack on ≤480px | Title + clock overflow on narrow screens |
-| Stats grid | 2 cols → 1 col at ≤480px | 2-column is too tight on 320px |
-| Queue form | flex-direction: column on mobile | Input + datetime + checkbox + button must stack |
-| Queue table | **Hide Deps & Run At columns** on ≤700px via `nth-child` | Critical — 6-column table can't fit, keep 4 essential columns (ID, Goal, Status, Action) |
-| Touch targets | min-height 40px on all buttons at ≤700px | iOS/Android UX guidelines |
-| Timeline | flex-wrap on entry-row1 | Prevent overflow |
-| Heatmap | Reduce cell size 10px→8px at ≤480px | Better horizontal fit |
-| Client cards | Reduce min-width 160px→130px | Allow 2 cards visible on phone |
-| Queue actions | Stack vertically at ≤480px | Full-width tap targets |
+**Key decisions**:
 
-**Files to modify:** `public/dashboard.html` (CSS `<style>` block only)
+1. **Section-level collapse** — Timeline 标题栏增加 `Collapse/Expand` 按钮，点击后隐藏整个 `#tl` 容器和筛选栏，标题保持可见
+2. **Day-level collapse** — 每天的条目用 `<div class="date-group">` 包裹，日期标题增加 `▸` 箭头和条目计数 `(N)`，点击日期标题折叠/展开该天
+3. **No persistence** — 折叠状态不持久化，刷新/重渲染时重置（最简方案）
+4. **Default: all expanded** — 默认全部展开，不改变现有行为
 
-**Design document:** `.planning/design-mobile-dashboard.md`
+**Scope**: 仅修改 `public/dashboard.html`（~50 行 CSS + ~30 行 JS）
+
+**Files produced**:
+- `.planning/designs/timeline-collapsible.md` — 完整设计文档
+- `.planning/MEMORY.json` — 共享内存（供 coder/reviewer/tester 读取）

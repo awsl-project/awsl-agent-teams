@@ -421,6 +421,20 @@ a { color: var(--blue); text-decoration: none; }
 
 .entry-summary { font-size: 11px; color: var(--ink4); margin-top: 4px; line-height: 1.4; }
 
+/* ─── Section-level Collapse ── */
+.timeline-wrap.collapsed #tl, .timeline-wrap.collapsed #filterBar { display: none; }
+.timeline-wrap .tl-collapse-btn { background: none; border: 1px solid var(--border); border-radius: 4px; cursor: pointer; color: var(--ink2); font-size: 0.85em; padding: 2px 8px; margin-left: 8px; }
+.timeline-wrap .tl-collapse-btn:hover { background: var(--bg2); }
+
+/* ─── Day-level Collapse ────── */
+.date-group { margin-bottom: 4px; }
+.date-head { cursor: pointer; user-select: none; }
+.date-head .date-toggle { display: inline-block; transition: transform 0.15s; margin-right: 4px; font-size: 0.85em; }
+.date-head .date-count { color: var(--ink1); font-size: 0.85em; margin-left: 6px; }
+.date-group.collapsed .date-entries { display: none; }
+.date-group.collapsed .date-toggle { transform: rotate(0deg); }
+.date-group:not(.collapsed) .date-toggle { transform: rotate(90deg); }
+
 /* ─── Collapsible Details ───── */
 .entry { cursor: pointer; }
 .entry-details { display: none; }
@@ -778,7 +792,7 @@ a { color: var(--blue); text-decoration: none; }
     </aside>
     <div class="timeline-wrap">
       <div class="card">
-        <h2>&#128203; Timeline <button onclick="clearHistory()" style="float:right;font-size:12px;padding:2px 10px;cursor:pointer;background:var(--ink2);color:var(--ink4);border:1px solid var(--ink3);font-family:inherit">Clear History</button></h2>
+        <h2>&#128203; Timeline <button class="tl-collapse-btn" onclick="toggleTimeline()">Collapse</button> <button onclick="clearHistory()" style="float:right;font-size:12px;padding:2px 10px;cursor:pointer;background:var(--ink2);color:var(--ink4);border:1px solid var(--ink3);font-family:inherit">Clear History</button></h2>
         <div class="filter-bar" id="filterBar">
           Showing: <strong id="filterName"></strong> &nbsp;<span id="filterClear">[clear]</span>
         </div>
@@ -1092,6 +1106,13 @@ function renderProjects(byP) {
       el.appendChild(it);
     })(ps[i]);
   }
+}
+
+function toggleTimeline() {
+  var wrap = document.querySelector('.timeline-wrap');
+  var btn = wrap.querySelector('.tl-collapse-btn');
+  wrap.classList.toggle('collapsed');
+  btn.textContent = wrap.classList.contains('collapsed') ? 'Expand' : 'Collapse';
 }
 
 function renderTimeline(entries) {

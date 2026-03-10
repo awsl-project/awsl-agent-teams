@@ -1,60 +1,75 @@
 {
   "design": {
-    "title": "Queue Post-Task Auto-Commit",
-    "summary": "Add atomicCommit call in queue.ts after each queue task completes (both success and failure paths), so that QUEUE.json and HISTORY.json state changes are committed to git after every queue task execution.",
-    "modify_files": ["src/queue.ts", "README.md", "README.zh-CN.md", "BEST_PRACTICES.md"],
-    "approach": "Option A — Add atomicCommit in queue.ts (minimal, targeted change)",
+    "title": "Collapsible Timeline",
+    "summary": "Add two-level collapse to the timeline section in dashboard.html: (1) section-level collapse via a button in the header, (2) day-level collapse via clickable date headers with chevrons.",
+    "modify_files": ["public/dashboard.html"],
+    "approach": "CSS class toggle with JavaScript — consistent with existing entry-level expand/collapse pattern",
     "alternatives_rejected": [
-      "Option B: commit in executeTeam finalization — would duplicate per-wave commits, mixes concerns",
-      "Option C: post-task hook mechanism — over-engineered for a 10-line change"
+      "Native <details>/<summary> — less styling control, inconsistent cross-browser chevron",
+      "CSS checkbox hack — fragile, poor accessibility, complex markup"
     ],
     "implementation": {
-      "file": "src/queue.ts",
+      "file": "public/dashboard.html",
       "change_points": [
         {
-          "location": "After success path (after appendHistory, ~line 356)",
-          "action": "Add atomicCommit(this.cwd, nextTask.id, `Queue task ${freshTask.status}`) if autoCommit is enabled",
-          "rationale": "Commits QUEUE.json (updated status=done) and HISTORY.json (new entry)"
+          "location": "CSS section (~line 370-430)",
+          "action": "Add styles for .tl-collapse-btn, .tl-collapsed, .date-group, .date-toggle, .day-collapsed, .date-count",
+          "details": "Section collapse hides #tl and #filterBar. Day collapse hides .entry children. Chevron rotates 90deg when expanded."
         },
         {
-          "location": "After failure/catch path (after appendHistory, ~line 394)",
-          "action": "Add atomicCommit(this.cwd, nextTask.id, `Queue task failed`) if autoCommit is enabled",
-          "rationale": "Commits QUEUE.json (updated status=failed, error) and HISTORY.json (failure entry)"
+          "location": "HTML timeline header (~line 781)",
+          "action": "Add Collapse/Expand button next to Clear History button",
+          "details": "<button class='tl-collapse-btn' onclick='toggleTimeline()'>Collapse</button>"
+        },
+        {
+          "location": "renderTimeline() function (~lines 1119-1152)",
+          "action": "Wrap each day's entries in a <div class='date-group'> container. Add chevron and entry count to date headers. Add click handler on date headers.",
+          "details": "Currently entries are flat siblings after date-head. New structure: date-group > (date-head + entries). Click handler: group.classList.toggle('day-collapsed')"
+        },
+        {
+          "location": "JavaScript section (new functions)",
+          "action": "Add toggleTimeline() and toggleAllDays() helper functions",
+          "details": "toggleTimeline toggles .tl-collapsed on .timeline-wrap and updates button text. toggleAllDays batch-collapses/expands all day groups."
         }
-      ],
-      "commit_message_format": "{taskId}: Queue task {status}",
-      "examples": ["q_1: Queue task done", "q_2: Queue task failed"],
-      "autoCommit_respect": "Read from execOptions.autoCommit (already computed at line 298). Need to hoist or re-check the option before the commit call.",
-      "import_needed": "atomicCommit is already imported in queue.ts (from ./planning.js)"
+      ]
     },
     "key_decisions": [
       {
-        "decision": "Commit in queue.ts, not orchestrator.ts",
-        "rationale": "Queue state (QUEUE.json, HISTORY.json) is updated by queue.ts after executeTeam returns. This is a queue-specific concern."
+        "decision": "Use CSS class toggle pattern",
+        "rationale": "Matches existing .entry.expanded pattern used for individual entry collapse. Consistent UX and code style."
       },
       {
-        "decision": "Commit on both success and failure paths",
-        "rationale": "Failed task status is valuable state — it records what failed and why, enabling queue resume."
+        "decision": "Wrap day entries in <div class='date-group'>",
+        "rationale": "Currently entries are flat siblings of date-head. A wrapper div is needed to collapse a day's entries as a unit."
       },
       {
-        "decision": "Respect autoCommit option",
-        "rationale": "Consistency with existing --no-commit CLI flag. Users who disable commits should not get queue commits either."
+        "decision": "No state persistence (collapse resets on re-render)",
+        "rationale": "Simplest approach. Re-render happens on data refresh. Can add localStorage persistence later if needed."
       },
       {
-        "decision": "Use atomicCommit without taskFiles parameter",
-        "rationale": "Without taskFiles, atomicCommit stages all dirty files. Since we're post-executeTeam, the only remaining dirty files are .planning/ state files (QUEUE.json, HISTORY.json). This is exactly what we want."
+        "decision": "Show entry count badge on date headers",
+        "rationale": "When a day is collapsed, the count badge (e.g. '(5)') gives quick context about how many entries are hidden."
       },
       {
-        "decision": "Commit message format: '{taskId}: Queue task {status}'",
-        "rationale": "Consistent with existing format '{taskId}: {message}'. Makes queue commits easily identifiable in git log."
+        "decision": "Default state: all expanded",
+        "rationale": "Matches current behavior. No surprise UI changes for existing users."
       }
     ],
     "edge_cases": [
-      "executeTeam already committed everything → atomicCommit returns false (no-op), safe",
-      "No dirty files at all → atomicCommit returns false, safe",
-      "--no-commit flag → autoCommit=false, skip the commit",
-      "atomicCommit throws → wrapped in try/catch, log warning, don't break queue loop"
+      "Empty timeline → 'Nothing here' message, no collapse controls rendered",
+      "Filtered by project → collapse state works independently of filter, count reflects filtered entries",
+      "Re-render (new data arrives via polling) → collapse state resets (acceptable trade-off)",
+      "Single entry in a day → collapse still works, just one entry hidden"
     ],
-    "scope": "~10 lines of code change in queue.ts + documentation updates"
+    "css_classes": {
+      "tl-collapse-btn": "Section collapse button styling",
+      "tl-collapsed": "Applied to .timeline-wrap to hide #tl and #filterBar",
+      "date-group": "Wrapper div for each day (header + entries)",
+      "date-toggle": "Chevron icon on date headers (▸), rotates when expanded",
+      "day-collapsed": "Applied to .date-group to hide child .entry elements",
+      "date-count": "Entry count badge on date headers"
+    },
+    "visual_hierarchy": "📋 Timeline [Collapse] [Clear History]\n├── ▾ 2026-03-10 MON (3)\n│   ├── ▸ ✓ project  2m  14:30\n│   └── ▸ ✗ other    1m  12:00\n├── ▸ 2026-03-09 SUN (2)  ← collapsed day\n└── ▾ 2026-03-08 SAT (1)\n    └── ▸ ✓ project  3m  10:00",
+    "scope": "~50 lines CSS + ~30 lines JS changes, all in public/dashboard.html"
   }
 }

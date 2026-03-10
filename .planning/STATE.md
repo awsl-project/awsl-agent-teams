@@ -7,6 +7,6 @@
 (none)
 
 ## Position
-- Goal: 现在远程看板的界面 每个任务的日志都默认打开展示出来了 可以默认隐藏 我点具体任务才展示吗
-- Tasks: 1/1 completed
+- Goal: 远程面板ui要注意移动端适配
+- Tasks: 3/3 completed
 - Status: SUCCESS

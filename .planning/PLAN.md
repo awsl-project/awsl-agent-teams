@@ -1,86 +1,101 @@
 # Execution Plan
 
-## task_1: Implement mobile CSS media queries
+## task_1: Section-level collapse CSS + HTML + JS
 - **Assignee:** coder
 - **Files:** public/dashboard.html
 
 ### Action
-Edit the <style> block in public/dashboard.html to add mobile adaptation. Follow the design spec in .planning/design-mobile-dashboard.md exactly. All changes are CSS-only — NO HTML or JS changes.
+In public/dashboard.html, implement section-level collapse for the entire Timeline block:
 
-1. ENHANCE existing @media (max-width: 700px) block (around line 309-313) — add these rules inside it:
-   - body { padding: 16px 12px 60px; }
-   - .queue-form { flex-wrap: wrap; }
-   - .queue-form input[type="text"] { min-width: 100%; }
-   - Hide queue table columns 4 (Run At) and 5 (Deps): .q-table th:nth-child(4), .q-table td:nth-child(4), .q-table th:nth-child(5), .q-table td:nth-child(5) { display: none; }
-   - Touch targets: .queue-form button, .queue-actions button, .clients-actions button { min-height: 40px; padding: 8px 14px; }
-   - .q-del { min-height: 36px; min-width: 36px; font-size: 18px; }
-   - .proj-item { padding: 8px 10px; min-height: 36px; }
+1. **CSS** (add to the <style> block, near existing .entry collapse styles around line 424):
+   - `.timeline-wrap.collapsed #tl, .timeline-wrap.collapsed #filterBar { display: none; }`
+   - `.timeline-wrap .tl-collapse-btn { background: none; border: 1px solid var(--border); border-radius: 4px; cursor: pointer; color: var(--ink2); font-size: 0.85em; padding: 2px 8px; margin-left: 8px; }`
+   - `.timeline-wrap .tl-collapse-btn:hover { background: var(--bg2); }`
+   - `.date-group { margin-bottom: 4px; }`
+   - `.date-head { cursor: pointer; user-select: none; }`
+   - `.date-head .date-toggle { display: inline-block; transition: transform 0.15s; margin-right: 4px; font-size: 0.85em; }`
+   - `.date-head .date-count { color: var(--ink1); font-size: 0.85em; margin-left: 6px; }`
+   - `.date-group.collapsed .date-entries { display: none; }`
+   - `.date-group.collapsed .date-toggle { transform: rotate(0deg); }`
+   - `.date-group:not(.collapsed) .date-toggle { transform: rotate(90deg); }`
 
-2. ADD NEW @media (max-width: 480px) block after the 700px block with:
-   - .header { flex-wrap: wrap; gap: 4px; }
-   - .header h1 { font-size: 17px; width: 100%; }
-   - .stats { grid-template-columns: 1fr; }
-   - .stat-val { font-size: 18px; }
-   - .tk-val { font-size: 15px; }
-   - .heatmap-cell { width: 8px; height: 8px; }
-   - .heatmap-week { gap: 2px; }
-   - .heatmap-grid { gap: 2px; }
-   - .queue-form { flex-direction: column; align-items: stretch; }
-   - .queue-form input[type="text"], .queue-form input[type="datetime-local"] { width: 100% !important; }
-   - .q-table th, .q-table td { padding: 6px 6px; font-size: 11px; }
-   - .queue-actions { flex-direction: column; }
-   - .queue-actions button { width: 100%; }
-   - .entry-row1 { flex-wrap: wrap; }
-   - .entry-dur, .entry-time { font-size: 11px; }
-   - .client-card { min-width: 130px; }
+2. **HTML** (modify the Timeline h2 around line 781):
+   - Change: `<h2>📋 Timeline <button onclick="clearHistory()">Clear History</button></h2>`
+   - To: `<h2>📋 Timeline <button class="tl-collapse-btn" onclick="toggleTimeline()">Collapse</button> <button onclick="clearHistory()">Clear History</button></h2>`
 
-IMPORTANT: Keep existing rules intact. Only ADD new rules inside existing blocks or add new blocks.
+3. **JavaScript** (add near other timeline functions, around line 1090):
+   ```javascript
+   function toggleTimeline() {
+     const wrap = document.querySelector('.timeline-wrap');
+     const btn = wrap.querySelector('.tl-collapse-btn');
+     wrap.classList.toggle('collapsed');
+     btn.textContent = wrap.classList.contains('collapsed') ? 'Expand' : 'Collapse';
+   }
+   ```
 
 ### Verify
-Open public/dashboard.html and confirm: (1) existing 700px block has new rules, (2) new 480px block exists with all listed rules, (3) no HTML/JS changes, (4) existing 900px block unchanged
+Open dashboard in browser, click the Collapse button on the Timeline header — the entire timeline and filter bar should hide. Click Expand to show them again. The title bar with buttons remains visible.
 
 ### Done
-dashboard.html has enhanced 700px media query and new 480px media query with all mobile adaptation CSS rules from the design spec
+Timeline section has a Collapse/Expand button that toggles visibility of #tl and #filterBar while keeping the h2 title visible
 
-## task_2: Review mobile CSS changes
+## task_2: Day-level collapse in renderTimeline
+- **Assignee:** coder
+- **Dependencies:** task_1
+- **Files:** public/dashboard.html
+
+### Action
+In public/dashboard.html, modify the `renderTimeline()` function (around line 1097-1153) to support per-day collapsing:
+
+1. **Modify the date loop** in renderTimeline(). Currently it creates a `.date-head` div and then appends entries directly to `#tl`. Change it to:
+   - For each date group, create a wrapper: `const group = document.createElement('div'); group.className = 'date-group';`
+   - Modify the date header (`hd`) to include a toggle arrow and entry count:
+     ```javascript
+     hd.innerHTML = '<span class="date-toggle">▸</span>' + ds + ' ' + dn(dt) + ' <span class="date-count">(' + ents.length + ')</span>';
+     ```
+   - Add click handler on the date header: `hd.onclick = function(e) { e.stopPropagation(); group.classList.toggle('collapsed'); };`
+   - Create an entries container: `const entriesDiv = document.createElement('div'); entriesDiv.className = 'date-entries';`
+   - Append all entry elements for that date into `entriesDiv` (instead of directly into `f` / `#tl`)
+   - Append `hd` and `entriesDiv` into `group`
+   - Append `group` into the fragment `f`
+
+2. **Add Expand All / Collapse All buttons** for day groups. Add a small JS helper:
+   ```javascript
+   function toggleAllDays(collapse) {
+     document.querySelectorAll('.date-group').forEach(g => {
+       if (collapse) g.classList.add('collapsed');
+       else g.classList.remove('collapsed');
+     });
+   }
+   ```
+   And add two small links/buttons near the Timeline header or at the top of the timeline for 'Expand All Days' / 'Collapse All Days'.
+
+3. **Default state**: All date groups expanded (no `.collapsed` class by default).
+
+IMPORTANT: Preserve all existing entry rendering logic (the .entry divs, click-to-expand details, project filtering, etc.). Only wrap them in the new date-group structure.
+
+### Verify
+Open dashboard with multiple days of history. Click a date header — that day's entries should collapse/expand. The arrow should rotate. Entry count should show correctly. Clicking individual entries (when expanded) should still toggle their details.
+
+### Done
+Each day in the timeline has a clickable date header with ▸ arrow and (N) count that collapses/expands that day's entries independently
+
+## task_3: Review collapse implementation
 - **Assignee:** reviewer
-- **Dependencies:** task_1
+- **Dependencies:** task_2
 - **Files:** public/dashboard.html
 
 ### Action
-Review the CSS media query changes in public/dashboard.html. Check for:
-1. No regressions to desktop layout (900px+ unchanged)
-2. CSS specificity issues (no unintended overrides)
-3. All !important usage is justified (only for inline style overrides)
-4. Touch target sizes meet 36-40px minimum
-5. No horizontal overflow issues on 320px width
-6. Queue table column hiding targets correct nth-child indices (4=Run At, 5=Deps)
-7. No duplicate or conflicting rules between 700px and 480px blocks
-8. No HTML or JS changes were made (CSS-only requirement)
+Review the collapsible timeline implementation in public/dashboard.html for:
+1. **Event handling**: Ensure click handlers don't interfere with existing entry expand/collapse (e.stopPropagation used correctly)
+2. **CSS correctness**: No style conflicts with existing .entry, .date-head, or mobile responsive styles
+3. **Accessibility**: Buttons/clickable elements should be keyboard-accessible
+4. **Edge cases**: Empty timeline, single day, filtered view — collapse should still work
+5. **Code quality**: No duplicate IDs, clean variable names, consistent with existing code style
+6. **Mobile compatibility**: Collapse buttons should be usable on mobile viewports (check existing @media queries)
 
 ### Verify
-Read the media query sections of public/dashboard.html and verify all review points pass
+Read public/dashboard.html and verify no issues found
 
 ### Done
-All CSS changes reviewed, no issues found or issues reported with fixes
-
-## task_3: Test mobile responsiveness
-- **Assignee:** tester
-- **Dependencies:** task_1
-- **Files:** public/dashboard.html
-
-### Action
-Verify the mobile CSS changes by reading public/dashboard.html and checking:
-1. Read the full <style> block and verify all expected media queries exist
-2. Verify @media (max-width: 900px) is unchanged (only .stats rule)
-3. Verify @media (max-width: 700px) has original rules PLUS new body padding, queue-form wrap, table column hiding, touch targets
-4. Verify @media (max-width: 480px) has all rules: header wrap, stats 1-col, reduced font sizes, queue form column layout, table compact padding, queue actions stacked, entry-row1 wrap, smaller client cards, smaller heatmap cells
-5. Check that no CSS syntax errors exist (balanced braces, valid selectors)
-6. Verify viewport meta tag exists: <meta name="viewport" content="width=device-width, initial-scale=1.0">
-7. Confirm no HTML structure changes and no JS changes were made
-
-### Verify
-Read public/dashboard.html and verify all expected CSS rules are present and syntactically correct
-
-### Done
-All mobile CSS rules verified present, syntax correct, no regressions to existing breakpoints
+Review complete with no blocking issues, or issues filed for fix
