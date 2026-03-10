@@ -1,126 +1,49 @@
-# Static Code Review
+Build passes. Here is my full review:
 
-**Review: 0 critical, 116 warnings, 1 info across 161 files.**
+---
 
-## WARNING (116)
+## AWSL_RESULT
 
-- **bench-awsl\src\index.ts:6** [no-console-log] console.log in production code
-- **bench-awsl-complex\src\middleware\requestLogger.ts:8** [no-console-log] console.log in production code
-- **bench-awsl-complex\src\routes\auth.ts:15** [no-any] Explicit `any` type used
-- **bench-awsl-complex\src\server.ts:6** [no-console-log] console.log in production code
-- **bench-crm-awsl\src\app.ts:18** [no-console-log] console.log in production code
-- **bench-crm-awsl\src\app.ts:38** [no-any] Explicit `any` type used
-- **bench-crm-awsl\src\middleware\logger.ts:8** [no-console-log] console.log in production code
-- **bench-crm-awsl\src\middleware\middleware.test.ts:19** [no-any] Explicit `any` type used
-- **bench-crm-awsl\src\middleware\middleware.test.ts:208** [no-any] Explicit `any` type used
-- **bench-crm-awsl\src\middleware\middleware.test.ts:225** [no-any] Explicit `any` type used
-- **bench-crm-awsl\src\routes\activities.test.ts:142** [no-any] Explicit `any` type used
-- **bench-crm-awsl\src\routes\activities.test.ts:143** [no-any] Explicit `any` type used
-- **bench-crm-awsl\src\routes\contacts.test.ts:116** [no-any] Explicit `any` type used
-- **bench-crm-awsl\src\routes\dashboard.test.ts:66** [no-any] Explicit `any` type used
-- **bench-crm-awsl\src\routes\dashboard.test.ts:85** [no-any] Explicit `any` type used
-- **bench-crm-awsl\src\server.ts:6** [no-console-log] console.log in production code
-- **bench-crm-awsl\src\__tests__\activities.test.ts:144** [no-any] Explicit `any` type used
-- **bench-crm-awsl\src\__tests__\contacts.test.ts:92** [no-any] Explicit `any` type used
-- **bench-crm-awsl\src\__tests__\customers.test.ts:255** [no-any] Explicit `any` type used
-- **bench-crm-awsl\src\__tests__\opportunities.test.ts:143** [no-any] Explicit `any` type used
-- **bench-crm-native\src\middleware\logger.ts:8** [no-console-log] console.log in production code
-- **bench-crm-native\src\server.ts:6** [no-console-log] console.log in production code
-- **bench-crm-native\src\__tests__\opportunities.test.ts:1** [file-too-long] File has 659 lines, consider splitting
-- **bench-native\src\index.ts:6** [no-console-log] console.log in production code
-- **bench-native-complex\src\index.ts:6** [no-console-log] console.log in production code
-- **bench-native-complex\src\middleware\logger.ts:8** [no-console-log] console.log in production code
-- **bench-native-complex\src\routes\auth.ts:42** [no-any] Explicit `any` type used
-- **bench-native-complex\src\routes\auth.ts:73** [no-any] Explicit `any` type used
-- **bench-native-complex\src\routes\todos.ts:48** [no-any] Explicit `any` type used
-- **bench-native-complex\src\routes\todos.ts:76** [no-any] Explicit `any` type used
-- **bench-native-complex\src\routes\todos.ts:112** [no-any] Explicit `any` type used
-- **bench-terminal-full\src\middleware\logger.ts:7** [no-console-log] console.log in production code
-- **bench-terminal-full\src\server.ts:6** [no-console-log] console.log in production code
-- **src\cli.ts:110** [no-console-log] console.log in production code
-- **src\cli.ts:112** [no-console-log] console.log in production code
-- **src\cli.ts:113** [no-console-log] console.log in production code
-- **src\cli.ts:114** [no-console-log] console.log in production code
-- **src\cli.ts:115** [no-console-log] console.log in production code
-- **src\cli.ts:116** [no-console-log] console.log in production code
-- **src\cli.ts:117** [no-console-log] console.log in production code
-- **src\cli.ts:127** [no-console-log] console.log in production code
-- **src\cli.ts:129** [no-console-log] console.log in production code
-- **src\cli.ts:139** [no-console-log] console.log in production code
-- **src\cli.ts:143** [no-console-log] console.log in production code
-- **src\cli.ts:171** [no-console-log] console.log in production code
-- **src\cli.ts:173** [no-console-log] console.log in production code
-- **src\cli.ts:175** [no-console-log] console.log in production code
-- **src\cli.ts:178** [no-console-log] console.log in production code
-- **src\cli.ts:179** [no-console-log] console.log in production code
-- **src\cli.ts:182** [no-console-log] console.log in production code
-- **src\cli.ts:184** [no-console-log] console.log in production code
-- **src\cli.ts:186** [no-console-log] console.log in production code
-- **src\cli.ts:187** [no-console-log] console.log in production code
-- **src\cli.ts:195** [no-console-log] console.log in production code
-- **src\cli.ts:216** [no-console-log] console.log in production code
-- **src\cli.ts:217** [no-console-log] console.log in production code
-- **src\cli.ts:219** [no-console-log] console.log in production code
-- **src\cli.ts:221** [no-console-log] console.log in production code
-- **src\cli.ts:224** [no-console-log] console.log in production code
-- **src\cli.ts:226** [no-console-log] console.log in production code
-- **src\cli.ts:227** [no-console-log] console.log in production code
-- **src\cli.ts:233** [no-console-log] console.log in production code
-- **src\cli.ts:244** [no-console-log] console.log in production code
-- **src\cli.ts:245** [no-console-log] console.log in production code
-- **src\cli.ts:246** [no-console-log] console.log in production code
-- **src\cli.ts:248** [no-console-log] console.log in production code
-- **src\cli.ts:249** [no-console-log] console.log in production code
-- **src\cli.ts:254** [no-console-log] console.log in production code
-- **src\cli.ts:321** [no-console-log] console.log in production code
-- **src\cli.ts:322** [no-console-log] console.log in production code
-- **src\cli.ts:323** [no-console-log] console.log in production code
-- **src\cli.ts:324** [no-console-log] console.log in production code
-- **src\cli.ts:329** [no-console-log] console.log in production code
-- **src\cli.ts:331** [no-console-log] console.log in production code
-- **src\cli.ts:332** [no-console-log] console.log in production code
-- **src\cli.ts:333** [no-console-log] console.log in production code
-- **src\cli.ts:337** [no-console-log] console.log in production code
-- **src\cli.ts:338** [no-console-log] console.log in production code
-- **src\cli.ts:339** [no-console-log] console.log in production code
-- **src\cli.ts:341** [no-console-log] console.log in production code
-- **src\cli.ts:352** [no-console-log] console.log in production code
-- **src\cli.ts:367** [no-console-log] console.log in production code
-- **src\cli.ts:372** [no-console-log] console.log in production code
-- **src\cli.ts:381** [no-console-log] console.log in production code
-- **src\cli.ts:504** [no-console-log] console.log in production code
-- **src\cli.ts:505** [no-console-log] console.log in production code
-- **src\cli.ts:516** [no-any] Explicit `any` type used
-- **src\cli.ts:517** [no-console-log] console.log in production code
-- **src\cli.ts:518** [no-console-log] console.log in production code
-- **src\cli.ts:519** [no-console-log] console.log in production code
-- **src\cli.ts:523** [no-console-log] console.log in production code
-- **src\cli.ts:528** [no-console-log] console.log in production code
-- **src\cli.ts:531** [no-console-log] console.log in production code
-- **src\cli.ts:537** [no-console-log] console.log in production code
-- **src\cli.ts:538** [no-console-log] console.log in production code
-- **src\cli.ts:1** [file-too-long] File has 560 lines, consider splitting
-- **src\install.ts:344** [no-console-log] console.log in production code
-- **src\install.ts:359** [no-console-log] console.log in production code
-- **src\install.ts:375** [no-console-log] console.log in production code
-- **src\install.ts:378** [no-console-log] console.log in production code
-- **src\lock.ts:85** [no-any] Explicit `any` type used
-- **src\lock.ts:163** [no-any] Explicit `any` type used
-- **src\orchestrator.ts:146** [no-empty-catch] Empty catch block — errors silently swallowed
-- **src\orchestrator.ts:1** [file-too-long] File has 945 lines, consider splitting
-- **src\planning.ts:123** [no-any] Explicit `any` type used
-- **src\queue.ts:253** [no-any] Explicit `any` type used
-- **src\runner.ts:315** [no-any] Explicit `any` type used
-- **src\runner.ts:333** [no-any] Explicit `any` type used
-- **src\runner.ts:335** [no-any] Explicit `any` type used
-- **src\tools.ts:40** [no-any] Explicit `any` type used
-- **src\tools.ts:62** [no-any] Explicit `any` type used
-- **src\tools.ts:89** [no-any] Explicit `any` type used
-- **src\tools.ts:114** [no-any] Explicit `any` type used
-- **src\validate.ts:101** [no-any] Explicit `any` type used
-- **src\verify.ts:74** [no-any] Explicit `any` type used
-- **src\verify.ts:101** [no-empty-catch] Empty catch block — errors silently swallowed
+### [task_1] Collapsible timeline and queue details
 
-## INFO (1)
+#### Stage 1: Spec Compliance
 
-- **bench-native-complex\src\store.ts:24** [todo-comment] // Todo methods
+| # | Requirement | Verdict |
+|---|-------------|---------|
+| 1 | Timeline details (goal, tasks, summary) hidden by default | [PASS] `.entry-details { display: none }` at line 400 |
+| 2 | Timeline details shown on click | [PASS] `card.onclick` toggles `.expanded` class at line 1123; `.entry.expanded .entry-details { display: block }` at line 401 |
+| 3 | Queue summary rows hidden by default | [PASS] `.q-summary-row { display: none }` at line 405 |
+| 4 | Queue summary rows shown on click | [PASS] `toggleQueueDetail()` at line 1166 toggles `.expanded`; row-level `onclick` at line 1204 |
+| 5 | Visual chevron indicator (timeline) | [PASS] `▸` toggle span at line 1111, rotates 90deg when expanded (line 403) |
+| 6 | Visual chevron indicator (queue) | [PASS] `▸` toggle span at line 1203, rotates 90deg when expanded (line 409) |
+| 7 | Build passes | [PASS] `npm run build` succeeds |
+
+**Stage 1 verdict: PASS** — All spec requirements met.
+
+---
+
+#### Stage 2: Code Quality
+
+1. **[PASS] Security — XSS**: All user-supplied content (`e.goal`, `e.summary`, `t.goal`, `t.result.summary`) is passed through `esc()` before HTML insertion. Title attributes additionally escape quotes. No raw HTML injection vectors.
+
+2. **[PASS] Security — Event handler injection**: Queue row onclick uses integer loop index `i` (not user input). Timeline uses DOM event handler assignment. No injection risk.
+
+3. **[PASS] Correctness — No click handler conflicts**: `hasSummary` requires `status === 'done' || 'failed'`, while delete buttons and `editRunAt` only appear for `pending` tasks. These are mutually exclusive, so no event bubbling conflicts.
+
+4. **[PASS] Correctness — Edge cases**: When no summary exists, `hasSummary` is false, so no toggle chevron or summary row is rendered. Clean degradation.
+
+5. **[WARN] Maintainability — DOM traversal**: `toggleQueueDetail()` (line 1171) uses `row.previousElementSibling` to find the chevron. This is fragile if table structure changes.
+   - Severity: **minor**
+   - Suggestion: Could use a data attribute or store a reference, but acceptable for current complexity.
+
+6. **[WARN] Accessibility — ARIA attributes**: No `aria-expanded`, `role="button"`, or keyboard handlers for expand/collapse.
+   - Severity: **minor**
+   - Not in spec requirements; dashboard is a developer tool, not public-facing.
+
+---
+
+### Quality Gate: **PASS**
+
+- Critical findings: 0
+- Major findings: 0
+- Minor findings: 2 (DOM fragility, accessibility — neither blocks acceptance)

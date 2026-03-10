@@ -132,7 +132,26 @@
       "inputTokens": 4693,
       "outputTokens": 44572,
       "costUsd": 4.53596485
+    },
+    {
+      "id": "h_8",
+      "date": "2026-03-10T04:26:50.931Z",
+      "project": "awsl-agent-teams",
+      "projectPath": "C:\\Users\\11421\\awsl-agent-teams",
+      "queueTaskId": "q_9",
+      "goal": "现在远程看板的界面 每个任务的日志都默认打开展示出来了 可以默认隐藏 我点具体任务才展示吗",
+      "status": "done",
+      "startedAt": "2026-03-10T04:17:20.084Z",
+      "completedAt": "2026-03-10T04:26:50.931Z",
+      "duration": 570847,
+      "tasksCompleted": 1,
+      "tasksTotal": 1,
+      "summary": "✅ 1/1 tasks completed successfully.\n\n✅ task_1 (coder): Modify public/dashboard.html to make task details collapsible (hidden by defa... [public/dashboard.html]",
+      "engine": "claude-code",
+      "inputTokens": 228,
+      "outputTokens": 19016,
+      "costUsd": 2.1537820500000002
     }
   ],
-  "updatedAt": "2026-03-10T04:17:19.712Z"
+  "updatedAt": "2026-03-10T04:26:50.932Z"
 }

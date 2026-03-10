@@ -1,19 +1,17 @@
-Conventions document updated at `memory/conventions.md`. Here's the summary:
-
 ## AWSL_RESULT
 
-The conventions file already existed and was comprehensive. I updated the **Testing** section to reflect the new `test/` directory using `node:test` + `assert/strict`.
+Analyzed all 15+ source files in `src/` and `test/`. Conventions documented to `memory/conventions.md`.
 
-### Key conventions at a glance:
+**Key findings:**
 
 | Area | Convention |
 |------|-----------|
-| **Naming** | camelCase vars/funcs, PascalCase types, UPPER_SNAKE constants, no enums (string unions) |
-| **Style** | ES modules + `.js` ext, `node:` prefix, named exports, tabs, no semicolons, section dividers |
-| **Errors** | Fail-soft (return defaults), bare `catch {}` when unused, `catch (e: any)` for message access |
-| **Async** | async/await only, sync fs ops, `Promise.all` for parallel agents |
-| **Logging** | `log.info/warn/debug(source, msg)` — never console.log, all to stderr |
-| **State** | File-as-state in `.planning/`, JSON for data, Markdown for plans, `SharedMemory` for in-session |
-| **Testing** | `node:test` + `assert/strict`, run via `npx tsx --test`, plus command-based verification providers |
+| **Naming** | camelCase functions, PascalCase interfaces/classes, UPPER_SNAKE constants, `create` prefix for factories, string unions instead of enums |
+| **Style** | TS strict, ES modules with `.js` extensions, `node:` prefix, tabs, double quotes, section dividers with box-drawing chars, JSDoc file headers |
+| **Error handling** | Fail-soft by default (return null/[]/false), bare `catch {}` for expected failures, `e: any` when message needed, never throw in agent tools |
+| **Async** | async/await, sync fs ops, `Promise.allSettled` for parallel providers, manual worker pool for concurrency limits, child processes wrapped in resolve-only Promises |
+| **Testing** | `node:test` + `node:assert/strict`, no mocking framework, source-reading verification tests, cross-platform aware |
+| **State** | File-as-state in `.planning/`, JSON for data, Markdown for plans, atomic lock creation with `wx` flag |
+| **Architecture** | Factory + provider patterns, RAII-style RunContext, dual engine abstraction, multi-strategy parsing, topo-sort wave execution |
 
-**File**: `memory/conventions.md` (linked from MEMORY.md)
+**File produced:** `memory/conventions.md`

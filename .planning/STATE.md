@@ -7,6 +7,6 @@
 (none)
 
 ## Position
-- Goal: 远程网页的统计没有和Machines结合 帮我debug并修复
-- Tasks: 5/5 completed
+- Goal: 现在远程看板的界面 每个任务的日志都默认打开展示出来了 可以默认隐藏 我点具体任务才展示吗
+- Tasks: 1/1 completed
 - Status: SUCCESS

@@ -118,11 +118,26 @@
       "options": {
         "quick": false
       },
-      "status": "running",
+      "status": "done",
       "scheduledAt": "2026-03-10T04:06:46.225Z",
-      "startedAt": "2026-03-10T04:17:20.084Z"
+      "startedAt": "2026-03-10T04:17:20.084Z",
+      "completedAt": "2026-03-10T04:26:50.931Z",
+      "result": {
+        "success": true,
+        "summary": "✅ 1/1 tasks completed successfully.\n\n✅ task_1 (coder): Modify public/dashboard.html to make task details collapsible (hidden by defa... [public/dashboard.html]"
+      }
+    },
+    {
+      "id": "q_10",
+      "goal": "远程面板ui要注意移动端适配",
+      "options": {
+        "quick": false
+      },
+      "status": "running",
+      "scheduledAt": "2026-03-10T04:46:39.771Z",
+      "startedAt": "2026-03-10T04:46:43.346Z"
     }
   ],
   "createdAt": "2026-03-09T10:11:39.245Z",
-  "updatedAt": "2026-03-10T04:17:20.084Z"
+  "updatedAt": "2026-03-10T04:46:43.346Z"
 }

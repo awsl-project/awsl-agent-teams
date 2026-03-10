@@ -310,6 +310,32 @@ a { color: var(--blue); text-decoration: none; }
   .stats { grid-template-columns: repeat(2, 1fr); }
   .cols { grid-template-columns: 1fr; }
   .row2 { grid-template-columns: 1fr; }
+  body { padding: 16px 12px 60px; }
+  .queue-form { flex-wrap: wrap; }
+  .queue-form input[type="text"] { min-width: 100%; }
+  .q-table th:nth-child(4), .q-table td:nth-child(4),
+  .q-table th:nth-child(5), .q-table td:nth-child(5) { display: none; }
+  .queue-form button, .queue-actions button, .clients-actions button { min-height: 40px; padding: 8px 14px; }
+  .q-del { min-height: 36px; min-width: 36px; font-size: 18px; }
+  .proj-item { padding: 8px 10px; min-height: 36px; }
+}
+@media (max-width: 480px) {
+  .header { flex-wrap: wrap; gap: 4px; }
+  .header h1 { font-size: 17px; width: 100%; }
+  .stats { grid-template-columns: 1fr; }
+  .stat-val { font-size: 18px; }
+  .tk-val { font-size: 15px; }
+  .heatmap-cell { width: 8px; height: 8px; }
+  .heatmap-week { gap: 2px; }
+  .heatmap-grid { gap: 2px; }
+  .queue-form { flex-direction: column; align-items: stretch; }
+  .queue-form input[type="text"], .queue-form input[type="datetime-local"] { width: 100% !important; }
+  .q-table th, .q-table td { padding: 6px 6px; font-size: 11px; }
+  .queue-actions { flex-direction: column; }
+  .queue-actions button { width: 100%; }
+  .entry-row1 { flex-wrap: wrap; }
+  .entry-dur, .entry-time { font-size: 11px; }
+  .client-card { min-width: 130px; }
 }
 
 /* ─── Sidebar ──────────────────── */

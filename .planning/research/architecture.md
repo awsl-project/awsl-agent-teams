@@ -1,95 +1,79 @@
-Now I have a thorough understanding of the codebase. Here's the architecture analysis:
-
 ## AWSL_RESULT
 
-### Architecture Overview
+### Architecture Analysis: awsl-agent-teams
 
-**AWSL Agent Core** is a multi-agent orchestration engine that coordinates specialized AI agents (architect, coder, reviewer, tester) to execute software engineering tasks in parallel waves.
+**Multi-agent orchestration engine** — "Conductor" plans & parallelizes, "Guardian" enforces quality. Two execution engines: `claude-code` (spawns `claude -p` subprocesses) and `builtin` (in-process via pi-agent-core).
 
-### File Structure & Module Boundaries
+---
 
-```
-awsl-agent-teams/
-├── src/                    # TypeScript source (strict, ES2022, Node16 modules)
-│   ├── cli.ts              # CLI entry — 37+ commands (run, queue, dashboard, etc.)
-│   ├── index.ts            # Public API barrel — re-exports everything
-│   ├── orchestrator.ts     # **Core** — Conductor: 6-phase pipeline (brainstorm→research→plan→execute→verify→replan)
-│   ├── runner.ts           # Dual engine: "claude-code" (spawns `claude -p`) or "builtin" (pi-agent-core in-process)
-│   ├── planning.ts         # .planning/ directory state persistence, checkpoint save/restore
-│   ├── queue.ts            # TaskQueue — sequential job queue with dependency tracking, persists to QUEUE.json
-│   ├── validate.ts         # PLAN.md parser + topological sort → WAVES.md
-│   ├── verify.ts           # Code verification — runs tsc, npm test, eslint; provider architecture with caching
-│   ├── agents.ts           # Agent definition loader — parses markdown frontmatter from agents/*.md
-│   ├── skills.ts           # Guardian skills — composable prompt injections (TDD, debug, review, brainstorm, planning)
-│   ├── tools.ts            # 8 built-in agent tools: read, write, edit, bash, memory_read/write/list, report
-│   ├── sandbox.ts          # Security policy — path restrictions + bash command allowlist/denylist per role
-│   ├── memory.ts           # SharedMemory — in-process KV store for inter-agent communication
-│   ├── context.ts          # RunContext — execution context wrapper
-│   ├── lock.ts             # File-based concurrency lock (.planning/.lock)
-│   ├── dashboard.ts        # HTTP server — serves pixel dashboard + JSON API + SSE log streaming
-│   ├── relay.ts            # WebSocket relay server for remote client management
-│   ├── remote.ts           # Remote client — connects local machine to dashboard
-│   ├── history.ts          # Execution history persistence (HISTORY.json)
-│   ├── logstream.ts        # LogStream — real-time log aggregation
-│   ├── scheduler.ts        # OS-level scheduling (schtasks on Windows)
-│   ├── install.ts          # Skill installer — writes .claude/skills/ files
-│   └── log.ts              # Simple logging utility
-├── agents/                 # Agent definition files (markdown with YAML frontmatter)
-│   ├── fullstack-coder.md
-│   └── security-reviewer.md
-├── public/
-│   └── dashboard.html      # Pixel art dashboard UI
-├── .planning/              # Runtime state directory (file-as-state pattern)
-│   ├── PLAN.md, WAVES.md, STATE.md, DESIGN.md
-│   ├── QUEUE.json, HISTORY.json, MEMORY.json
-│   ├── CHECKPOINT.json, VERIFICATION.md, REVIEW.md
-│   └── research/           # Per-task research outputs
-└── test/                   # Tests (new, untracked)
-```
-
-### Key Architectural Patterns
-
-1. **Conductor/Guardian split**: Conductor (`orchestrator.ts`) handles *what/when* (planning, waves, parallelism). Guardian (`skills.ts`) handles *how* (TDD, review methodology) via prompt injection.
-
-2. **Wave-based execution**: Tasks form a DAG → topological sort → parallel waves. Tasks within a wave run concurrently; waves execute sequentially.
-
-3. **Dual engine**: `runner.ts` supports `claude-code` (spawns CLI subprocess) and `builtin` (in-process via `pi-agent-core` + `pi-ai`). Default is claude-code if available.
-
-4. **File-as-state**: All orchestration state persists to `.planning/` directory — enables checkpoint/recovery, cross-session continuity, and CC hybrid mode.
-
-5. **Event/Hook system**: `TeamEventType` events (research_start, wave_start, task_done, etc.) flow through `TeamHook` callbacks for dashboard/logging.
-
-6. **Sandbox per agent**: `SandboxPolicy` enforces path restrictions and bash command filtering per agent role (allowlist/denylist modes).
-
-7. **Inter-agent communication**: `SharedMemory` KV store injected into agent prompts as context summaries; persisted in checkpoints.
-
-### Frameworks & Dependencies
-
-| Dependency | Purpose |
-|---|---|
-| `@mariozechner/pi-agent-core` | Builtin engine — Agent class, tool interface |
-| `@mariozechner/pi-ai` | LLM provider abstraction (`getModel()`) |
-| `@sinclair/typebox` | JSON Schema types for tool parameters |
-| `ws` | WebSocket for relay server/remote client |
-| `yaml` | Agent definition frontmatter parsing |
-| `tsx` | Dev-time TS execution |
-
-### Module Dependency Graph (simplified)
+#### File Structure & Module Boundaries
 
 ```
-cli.ts → orchestrator.ts → runner.ts → [pi-agent-core, tools.ts, sandbox.ts]
-                         → planning.ts
-                         → verify.ts
-                         → skills.ts
-       → queue.ts → orchestrator.ts (full pipeline per task)
-       → dashboard.ts → history.ts, queue.ts, relay.ts
-       → validate.ts (standalone PLAN.md parsing)
+src/
+├── cli.ts           (37KB) — CLI entry: commands, arg parsing, service mgmt
+├── orchestrator.ts  (46KB) — Core pipeline: brainstorm→research→plan→execute→verify→replan
+├── runner.ts        (14KB) — Dual engine: claude-code subprocess | builtin pi-agent-core
+├── planning.ts      (14KB) — .planning/ directory state persistence, checkpoint/restore
+├── queue.ts         (21KB) — Task queue with QUEUE.json, sleep mode, scheduling
+├── validate.ts      (12KB) — PLAN.md parser, topo-sort into execution waves (WAVES.md)
+├── verify.ts        (18KB) — Two-stage: tsc + npm test + eslint, then static review
+├── tools.ts         (10KB) — Agent toolset: read/write/edit/bash/memory/report (pi-agent-core AgentTool)
+├── sandbox.ts       (8KB)  — Path & command restrictions per agent role
+├── agents.ts        (7KB)  — Agent defs from YAML-frontmatter markdown files
+├── skills.ts        (9KB)  — Guardian skill registry (TDD, debug, brainstorm, review, planning)
+├── memory.ts        (2KB)  — In-process key-value SharedMemory for inter-agent communication
+├── dashboard.ts     (10KB) — HTTP server: dashboard HTML + JSON API + SSE log streaming
+├── relay.ts         (9KB)  — WebSocket relay for remote client management
+├── remote.ts        (8KB)  — Remote client connecting local machine to dashboard
+├── lock.ts          (5KB)  — File-based concurrency lock (.planning/.lock)
+├── history.ts       (5KB)  — Execution history persistence (HISTORY.json)
+├── logstream.ts     (2KB)  — Log line streaming utility
+├── context.ts       (3KB)  — RunContext options wrapper
+├── scheduler.ts     (4KB)  — OS-level scheduling (schtasks on Windows)
+├── install.ts       (12KB) — Skill installer into .claude/skills/
+├── log.ts           (1KB)  — Logging utility
+├── index.ts         (2KB)  — Public API re-exports
 ```
 
-### Key Interfaces
+#### Key Architectural Patterns
 
-- **`Task`** — DAG node: id, description, assignee, dependencies, status, files, verify criteria
-- **`RunResult`** — Agent execution result: status (done/failed/blocked/rate_limited), token counts
-- **`TeamResult`** — Full pipeline result: success, all tasks, summary, memory, token totals
-- **`SandboxPolicy`** — Per-agent security: read/write paths, blocked file patterns, bash policy
-- **`QueueTask`** — Persistent job: goal, engine, options, status, scheduling, dependencies
+| Pattern | Implementation |
+|---------|---------------|
+| **File-as-state** | All orchestration state lives in `.planning/` (PLAN.md, WAVES.md, STATE.md, CHECKPOINT.json, QUEUE.json, HISTORY.json) — survives crashes, enables resume |
+| **Wave-based parallelism** | `validate.ts` topo-sorts task DAG into waves; `orchestrator.ts` runs each wave's tasks in parallel via `runParallel()` |
+| **Dual engine** | `runner.ts` abstracts over `claude-code` (subprocess) and `builtin` (pi-agent-core in-process); auto-detects which is available |
+| **Shared memory** | `SharedMemory` (in-process Map) injected into agent prompts as context; serialized to checkpoint |
+| **Sandbox per role** | `sandbox.ts` enforces read/write path restrictions and bash command filtering per agent |
+| **Agent-as-markdown** | Agent definitions are `.md` files with YAML frontmatter (name, role, model, tools, skills) + system prompt body |
+| **Guardian skills** | Skill registry injects behavioral constraints (TDD, code review, brainstorming) into agent system prompts based on role |
+| **Event hooks** | `TeamHook` callback system emits typed events (wave_start, task_done, verify_done, etc.) |
+
+#### Dependencies
+
+- **`@mariozechner/pi-agent-core`** + **`pi-ai`** — LLM agent framework (builtin engine)
+- **`@sinclair/typebox`** — JSON schema for tool parameter validation
+- **`ws`** — WebSocket for relay server
+- **`yaml`** — YAML frontmatter parsing in agent definitions
+- **`tsx`** — Dev-time TypeScript execution
+
+#### Data Flow
+
+```
+User goal
+  → Brainstorm (Guardian skill) → Research (parallel codebase analysis)
+    → Plan (structured task DAG in PLAN.md)
+      → Validate (topo-sort → WAVES.md)
+        → Execute (wave-parallel, each task = fresh agent context)
+          → Verify (tsc/test/lint + static review)
+            → Auto-fix / Replan on failure
+              → Atomic commit per task
+```
+
+#### Module Boundaries
+
+- **Orchestrator** depends on runner, planning, verify, memory, skills — it's the hub
+- **Runner** is self-contained (engine abstraction only)
+- **Tools/Sandbox** are injected into builtin-engine agents only (claude-code has its own tools)
+- **Dashboard/Relay/Remote** form an independent HTTP+WS layer for monitoring
+- **Queue** is independent persistence layer consumed by CLI and orchestrator
+- **Validate/Verify** are pure-logic modules (no LLM calls)
