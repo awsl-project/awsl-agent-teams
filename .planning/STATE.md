@@ -7,6 +7,6 @@
 (none)
 
 ## Position
-- Goal: timeline整个板块希望可以折叠 也可以按天折叠
-- Tasks: 3/3 completed
+- Goal: 远程的timeline板块折叠你没更新啊
+- Tasks: 2/2 completed
 - Status: SUCCESS

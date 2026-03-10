@@ -163,11 +163,26 @@
       "options": {
         "quick": false
       },
-      "status": "running",
+      "status": "done",
       "scheduledAt": "2026-03-10T05:34:24.213Z",
-      "startedAt": "2026-03-10T05:34:28.815Z"
+      "startedAt": "2026-03-10T05:34:28.815Z",
+      "completedAt": "2026-03-10T05:51:54.245Z",
+      "result": {
+        "success": true,
+        "summary": "✅ 2/2 tasks completed successfully.\n\n✅ task_1 (coder): In public/dashboard.html, implement these changes exactly as specified in .pl... [public/dashboard.html]\n✅ task_2 (reviewer): Review the changes made to public/dashboard.html for the collapse state track... [public/dashboard.html]"
+      }
+    },
+    {
+      "id": "q_13",
+      "goal": "提交所有最新的git",
+      "options": {
+        "quick": false
+      },
+      "status": "running",
+      "scheduledAt": "2026-03-10T06:04:03.851Z",
+      "startedAt": "2026-03-10T06:04:08.035Z"
     }
   ],
   "createdAt": "2026-03-09T10:11:39.245Z",
-  "updatedAt": "2026-03-10T05:34:28.815Z"
+  "updatedAt": "2026-03-10T06:04:08.035Z"
 }

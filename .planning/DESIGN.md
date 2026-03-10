@@ -1,24 +1,66 @@
+Now I have a complete picture. Let me conduct the Socratic analysis and produce the design.
+
+## Socratic Brainstorming
+
+### Explore
+
+**1. What is the user actually trying to achieve?**
+The user wants to commit all uncommitted changes in the working directory. There are 3 categories:
+- `.planning/` state files (modified + 1 deleted)
+- `src/cli.ts` (new `--host` flag for dashboard)
+- `test/` directory (3 new test files)
+
+**2. Constraints?**
+- Branch is already 21 commits ahead of origin — no push requested
+- Commit conventions from history use `wave_N:` or `task_N:` prefixes
+- CLAUDE.md says "one feature = one commit"
+
+**3. Alternatives:**
+
+| # | Approach | Pros | Cons |
+|---|----------|------|------|
+| A | Single commit | Simple, fast | Mixes unrelated changes |
+| B | 3 commits (feature / tests / state) | Clean history, reviewable | Overkill for state files |
+| C | 2 commits (code+tests / state) | Balances cleanliness and speed | Reasonable |
+
+**4. Trade-offs:**
+- The `--host` flag in cli.ts is a small feature. The tests are from auto-generated dashboard tasks. The `.planning/` files are ephemeral state. Separating them is cleaner but the user said "提交所有" which implies they just want it done.
+
+### Challenge
+
+**5. Assumptions:** User wants a clean commit, not necessarily split. The `.planning/` files are safe to commit (no secrets).
+
+**6. What could go wrong?** Committing `.planning/.lock` could be problematic if it blocks other sessions — but it's already tracked and the content is just timestamps.
+
+**7. Simplest solution:** Two commits — one for the actual code changes (cli.ts + tests), one for planning state. This keeps code history useful.
+
+**8. Lock-in decisions:** None — these are additive commits that can be amended or squashed later.
+
+### Decide
+
+**Chosen approach: Option C — 2 commits**
+1. **Commit 1**: `src/cli.ts` changes + `test/` directory → feature commit (dashboard `--host` flag + tests)
+2. **Commit 2**: `.planning/` state files → state update commit
+
+**Rationale:** Separating code from planning state keeps `git log` useful for understanding code evolution. The planning state is operational metadata, not a feature.
+
 ## AWSL_RESULT
 
-### 设计：远程 Timeline 折叠修复
+### Design: Git Commit Strategy
 
-**问题分析**：Timeline 折叠功能已实现（板块级 + 按天），但存在以下问题：
+**Goal:** Commit all uncommitted changes in the working directory.
 
-1. **按天折叠状态每次重渲染丢失** — `renderTimeline()` 每次调用都 `el.innerHTML = ''` 重建 DOM，30秒轮询触发 `render()` 后所有日分组恢复展开状态
-2. **`clearHistory()` 未适配远程** — 始终调用本地 API `/api/history/clear`，选中远程客户端时应禁用
-3. **无视觉上下文** — 无法区分当前 Timeline 显示的是本地还是远程数据
+**Commit Plan:**
 
-**方案**：在 `renderTimeline()` 中加入折叠状态追踪（JS 变量 `collapsedDates`），以 `viewKey|date` 为 key，每个视图（本地 / 各远程客户端）独立维护折叠状态。重渲染前保存、重建后恢复。
+| Order | Files | Message | Type |
+|-------|-------|---------|------|
+| 1 | `src/cli.ts`, `test/*` | `feat: add --host flag to dashboard command + add tests` | Feature |
+| 2 | `.planning/*` | `chore: update planning state` | Housekeeping |
 
-**改动范围**：仅 `public/dashboard.html`，约 20 行 JS 变更
+**Key Decisions:**
+- Split code changes from planning state for cleaner history
+- No push to remote (user didn't request it)
+- Include all 3 test files as they relate to recent dashboard work
+- The `--host` flag is a security improvement (allows binding to specific interface instead of defaulting)
 
-**关键决策**：
-| 决策 | 选择 | 理由 |
-|------|------|------|
-| 状态存储 | JS 变量 Map | 跨重渲染存活，无需持久化 |
-| View key | `selectedClient \|\| '_local'` | 每个视图独立状态 |
-| Clear History | 远程时禁用 | 远程不支持清除历史 |
-
-**产出文件**：
-- `.planning/designs/timeline-remote-collapse.md` — 完整设计文档（含代码示例）
-- `.planning/DESIGN.md` — 共享摘要（供 coder 读取）
+**No documentation updates needed** — the `--host` flag is a minor CLI addition. However, per CLAUDE.md rules, README files should be updated if this is considered a "new feature". Recommend asking user.

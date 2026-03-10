@@ -467,10 +467,13 @@ async function main() {
 		const { cwd } = parseCwdAndForce(args);
 		const subCmd = args[1];
 		let port = 3120;
+		let host = '127.0.0.1';
 		let bg = false;
 		for (let i = 1; i < args.length; i++) {
 			if (args[i] === "--port" && i + 1 < args.length) {
 				port = parseInt(args[++i], 10);
+			} else if (args[i] === "--host" && i + 1 < args.length) {
+				host = args[++i];
 			} else if (args[i] === "--bg") {
 				bg = true;
 			}
@@ -515,7 +518,7 @@ async function main() {
 			}
 
 			const { spawn } = await import("node:child_process");
-			const selfArgs = [process.argv[1], "dashboard", "--port", String(port), "--cwd", cwd];
+			const selfArgs = [process.argv[1], "dashboard", "--port", String(port), "--host", host, "--cwd", cwd];
 			const child = spawn(process.execPath, selfArgs, {
 				detached: true,
 				stdio: "ignore",
@@ -529,12 +532,12 @@ async function main() {
 			fs.writeFileSync(path.join(planDir, ".dashboard.pid"), String(child.pid));
 
 			console.log(`Dashboard started in background (pid ${child.pid}).`);
-			console.log(`  http://localhost:${port}`);
+			console.log(`  http://${host}:${port}`);
 			console.log(`  Stop: awsl dashboard stop`);
 			process.exit(0);
 		}
 
-		startDashboard(cwd, port);
+		startDashboard(cwd, port, host);
 		// Keep server running — don't call process.exit()
 		return;
 	}
