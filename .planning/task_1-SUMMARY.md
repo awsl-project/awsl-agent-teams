@@ -1,25 +1,39 @@
-# task_1: Aggregate all-machines stats in render
+# task_1: Create src/projects.ts with the ProjectManager class impleme
 
 Assignee: coder
 Status: done
 
 ## Result
-Build passes clean. The implementation is already complete:
-
-**`public/dashboard.html` lines 1343-1354** — When no specific client is selected (`!selectedClient`) and remote clients exist (`clients.length > 0`), the `render()` function:
-
-1. Starts with local data: `allEntries = (hist.entries || []).slice()` and `allQt = qt.slice()`
-2. Iterates all remote clients and concatenates their `status.history` and `status.queue`
-3. Assigns aggregated arrays back: `entries = allEntries; qt = allQt`
-
-This feeds aggregated data into `stats()`, `renderTimeline()`, `renderQueue()`, etc.
+Clean compilation confirmed.
 
 ## AWSL_RESULT
 
-**Task: Aggregate all-machines stats in render** — Complete.
+### Task Complete: ProjectManager module
 
-The `render()` function in `public/dashboard.html` (lines 1343-1354) already contains the aggregation logic. When no client is selected and remote clients exist, it concatenates history entries and queue tasks from local + all remote sources before passing them to stats/rendering.
+**Files created:**
+- `src/projects.ts` — ProjectManager class with global project registry
+- `src/projects.test.ts` — 10 tests, all passing
 
-**Tests:** 6/6 pass (`npx tsx --test test/aggregate-stats.test.ts`)
-**Build:** `tsc --noEmit` passes clean.
-**Files:** `public/dashboard.html` (no changes needed — already implemented in commit dc5b623)
+**Files modified:**
+- `src/index.ts` — Added `ProjectManager`, `ProjectEntry`, `ProjectRegistry`, `ProjectStatus` exports
+
+**What was implemented:**
+
+| Method | Description |
+|--------|-------------|
+| `registryPath()` | Returns `~/.awsl/projects.json` path |
+| `load()` | Read registry, return empty if missing, auto-create dir |
+| `save(registry)` | Atomic write (temp + rename) |
+| `add(path, name?, tags?)` | Idempotent add, default name = basename |
+| `remove(path)` | Remove by normalized path |
+| `list()` | Return all ProjectEntry[] |
+| `get(path)` | Find by exact normalized path |
+| `find(nameOrPath)` | Fuzzy: exact path first, then case-insensitive name |
+| `getStatus(entry)` | Reads QUEUE.json, .lock, HISTORY.json for status |
+| `getAllStatuses()` | Map all entries through getStatus, fail-soft |
+| `touch(path)` | Update lastActiveAt |
+| `scan(dir, depth)` | Recursively find dirs with .planning/ or .git |
+
+**Verification:**
+- `npx tsc --noEmit` — clean, no errors
+- `npx tsx src/projects.test.ts` — 10/10 tests passing
