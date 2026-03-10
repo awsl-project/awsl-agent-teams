@@ -1,66 +1,29 @@
-Now I have a complete picture. Let me conduct the Socratic analysis and produce the design.
-
-## Socratic Brainstorming
-
-### Explore
-
-**1. What is the user actually trying to achieve?**
-The user wants to commit all uncommitted changes in the working directory. There are 3 categories:
-- `.planning/` state files (modified + 1 deleted)
-- `src/cli.ts` (new `--host` flag for dashboard)
-- `test/` directory (3 new test files)
-
-**2. Constraints?**
-- Branch is already 21 commits ahead of origin — no push requested
-- Commit conventions from history use `wave_N:` or `task_N:` prefixes
-- CLAUDE.md says "one feature = one commit"
-
-**3. Alternatives:**
-
-| # | Approach | Pros | Cons |
-|---|----------|------|------|
-| A | Single commit | Simple, fast | Mixes unrelated changes |
-| B | 3 commits (feature / tests / state) | Clean history, reviewable | Overkill for state files |
-| C | 2 commits (code+tests / state) | Balances cleanliness and speed | Reasonable |
-
-**4. Trade-offs:**
-- The `--host` flag in cli.ts is a small feature. The tests are from auto-generated dashboard tasks. The `.planning/` files are ephemeral state. Separating them is cleaner but the user said "提交所有" which implies they just want it done.
-
-### Challenge
-
-**5. Assumptions:** User wants a clean commit, not necessarily split. The `.planning/` files are safe to commit (no secrets).
-
-**6. What could go wrong?** Committing `.planning/.lock` could be problematic if it blocks other sessions — but it's already tracked and the content is just timestamps.
-
-**7. Simplest solution:** Two commits — one for the actual code changes (cli.ts + tests), one for planning state. This keeps code history useful.
-
-**8. Lock-in decisions:** None — these are additive commits that can be amended or squashed later.
-
-### Decide
-
-**Chosen approach: Option C — 2 commits**
-1. **Commit 1**: `src/cli.ts` changes + `test/` directory → feature commit (dashboard `--host` flag + tests)
-2. **Commit 2**: `.planning/` state files → state update commit
-
-**Rationale:** Separating code from planning state keeps `git log` useful for understanding code evolution. The planning state is operational metadata, not a feature.
-
 ## AWSL_RESULT
 
-### Design: Git Commit Strategy
+### 设计结论：Dashboard 初始加载应聚合所有机器的统计数据
 
-**Goal:** Commit all uncommitted changes in the working directory.
+**问题确认**：你说的对。当用户刚进页面、没有选中任何机器时，统计卡片（Done、Failed、Total Time、Success Rate、Tokens、Cost）应该显示**所有机器的汇总数据**，而不只是本地数据。
 
-**Commit Plan:**
+**当前 Bug**：`public/dashboard.html` 的 `render()` 函数（第 1333 行）在 `selectedClient === null` 时只用了 `hist.entries`（本地历史），完全忽略了远程客户端的 `clients[i].status.history`。
 
-| Order | Files | Message | Type |
-|-------|-------|---------|------|
-| 1 | `src/cli.ts`, `test/*` | `feat: add --host flag to dashboard command + add tests` | Feature |
-| 2 | `.planning/*` | `chore: update planning state` | Housekeeping |
+**修复方案**（已有设计文档 `.planning/design-stats-machines.md`）：
 
-**Key Decisions:**
-- Split code changes from planning state for cleaner history
-- No push to remote (user didn't request it)
-- Include all 3 test files as they relate to recent dashboard work
-- The `--host` flag is a security improvement (allows binding to specific interface instead of defaulting)
+| 要素 | 内容 |
+|---|---|
+| **改动文件** | `public/dashboard.html`（仅此一个） |
+| **改动函数** | `render()`（第 1333-1356 行） |
+| **核心逻辑** | 当 `selectedClient` 为空时，将所有远程客户端的 `status.history` 合并到本地 `hist.entries` |
+| **去重策略** | 以 `id + startedAt` 为复合 key，防止本地=远程时的重复计数 |
+| **Queue 行为** | 不变，仍显示本地队列（Queue 是机器级操作） |
+| **后端改动** | 无需任何改动，数据已在客户端 `clients` 数组中 |
 
-**No documentation updates needed** — the `--host` flag is a minor CLI addition. However, per CLAUDE.md rules, README files should be updated if this is considered a "new feature". Recommend asking user.
+**受影响的统计项**：Done、Failed、Total Time、Success Rate、Input/Output/Total Tokens、Cost、Activity Heatmap、Duration Trend、Projects 侧栏、Timeline
+
+**关键决策理由**：
+- 选择客户端聚合而非新建 API → 数据已通过 `/api/clients` 全部可用，最简方案
+- 去重而非直接拼接 → 防止 Dashboard 机器同时作为 remote client 时数据重复
+- Queue 不聚合 → Queue 是操作导向的，聚合会导致操作混乱
+
+**产出文件**：
+- `.planning/design-stats-machines.md`（已有设计文档，已验证正确）
+- `.planning/shared-memory.json`（共享给其他 agent 的设计数据）
