@@ -1,25 +1,29 @@
-# task_4: In src/sandbox.ts, expand the `CODER_DENY_PATTERNS` array (l
+# task_4: Expand coder bash denylist
 
 Assignee: coder
 Status: done
 
 ## Result
-tsc passes clean.
-
 ## AWSL_RESULT
 
 ### Task 4: Expand CODER_DENY_PATTERNS — Complete
 
 **File modified:** `src/sandbox.ts`
 
-**13 new patterns added** (7 existing + 13 new = 20 total):
+**19 new patterns added** (21 existing → 40 total), organized by category:
 
 | Category | Patterns Added |
 |----------|---------------|
-| Glob-based destruction | `rm -rf /*` |
-| Download-and-execute | `\| sh`, `\| bash`, `curl `, `wget ` |
-| Interpreter escapes | `python -c`, `python3 -c`, `node -e`, `perl -e`, `ruby -e` |
-| Network exfiltration | `nc `, `ncat ` |
-| Eval / encoded execution | `eval `, `base64 -d` |
+| Dangerous permissions / ownership | `chmod +s`, `chmod u+s`, `chown ` |
+| Remote access / file transfer | `ssh `, `scp `, `sftp `, `rsync `, `ftp ` |
+| Shell escapes (Windows) | `powershell`, `pwsh ` |
+| Git push (prevent autonomous pushes) | `git push` |
+| Package publishing | `npm publish` |
+| System control | `shutdown`, `reboot` |
+| Process / service control | `killall `, `systemctl ` |
+| Scheduled task manipulation | `crontab` |
+| Environment variable leaking | `printenv` |
 
 **Verification:** `npx tsc --noEmit` passes with zero errors.
+
+**Files modified:** `src/sandbox.ts`
