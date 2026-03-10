@@ -14,4 +14,4 @@ COPY --from=build /app/dist/ dist/
 COPY public/ public/
 COPY agents/ agents/
 EXPOSE 3120
-CMD ["node", "dist/cli.js", "dashboard", "--port", "3120"]
+CMD ["node", "dist/cli.js", "dashboard", "--port", "3120", "--host", "0.0.0.0"]
