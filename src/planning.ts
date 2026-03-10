@@ -313,7 +313,7 @@ function parseMarkdownTasks(raw: string): StructuredTask[] {
 
 // ─── Git Commit Helper ──────────────────────────────────────
 
-import { execSync, execFileSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 
 /**
  * Collect files that actually changed in the working tree (staged + unstaged + untracked).
@@ -321,7 +321,7 @@ import { execSync, execFileSync } from "node:child_process";
 function changedFiles(cwd: string): string[] {
 	try {
 		// --porcelain gives "XY filename" lines; strip status prefix
-		const out = execSync("git status --porcelain", { cwd, encoding: "utf-8" }).trim();
+		const out = execFileSync("git", ["status", "--porcelain"], { cwd, encoding: "utf-8" }).trim();
 		if (!out) return [];
 		return out.split("\n").map(l => l.slice(3).trim()).filter(Boolean);
 	} catch {
@@ -374,7 +374,7 @@ export function atomicCommit(cwd: string, taskId: string, message: string, taskF
 		}
 
 		// Check if anything actually staged
-		const staged = execSync("git diff --cached --name-only", { cwd, encoding: "utf-8" }).trim();
+		const staged = execFileSync("git", ["diff", "--cached", "--name-only"], { cwd, encoding: "utf-8" }).trim();
 		if (!staged) return false;
 
 		const commitMsg = `${taskId}: ${message}`;
