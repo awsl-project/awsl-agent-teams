@@ -192,11 +192,19 @@
       "options": {
         "quick": false
       },
-      "status": "running",
-      "scheduledAt": "2026-03-10T12:04:52.792Z",
-      "startedAt": "2026-03-10T12:05:03.619Z"
+      "status": "pending",
+      "scheduledAt": "2026-03-10T12:04:52.792Z"
+    },
+    {
+      "id": "q_15",
+      "goal": "队列每次做完一个任务都push可以吗",
+      "options": {
+        "quick": false
+      },
+      "status": "pending",
+      "scheduledAt": "2026-03-10T12:13:31.009Z"
     }
   ],
   "createdAt": "2026-03-09T10:11:39.245Z",
-  "updatedAt": "2026-03-10T12:05:03.619Z"
+  "updatedAt": "2026-03-10T12:13:38.975Z"
 }
