@@ -421,6 +421,19 @@ a { color: var(--blue); text-decoration: none; }
 
 .entry-summary { font-size: 11px; color: var(--ink4); margin-top: 4px; line-height: 1.4; }
 
+/* ─── Wave / Agent Analysis ─── */
+.entry-waves { margin-top: 6px; font-size: 11px; }
+.entry-wave { display: flex; align-items: center; gap: 6px; padding: 2px 0; color: var(--ink3); }
+.entry-wave-label { font-weight: 600; color: var(--ink2); min-width: 52px; }
+.agent-badge { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 8px; color: #fff; font-weight: 500; }
+.entry-agents-row { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin-top: 3px; font-size: 11px; color: var(--ink3); }
+.entry-agents-row .label { font-weight: 600; color: var(--ink2); margin-right: 2px; }
+.entry-concurrency { font-size: 11px; color: var(--ink3); margin-top: 2px; }
+.agent-card { display: inline-flex; align-items: center; gap: 8px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; font-size: 12px; }
+.agent-card .ac-role { font-weight: 600; color: var(--ink); }
+.agent-card .ac-count { color: var(--ink3); font-size: 11px; }
+.agents-grid { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+
 /* ─── Section-level Collapse ── */
 .timeline-wrap.collapsed #tl, .timeline-wrap.collapsed #filterBar { display: none; }
 .timeline-wrap .tl-collapse-btn { background: none; border: 1px solid var(--border); border-radius: 4px; cursor: pointer; color: var(--ink2); font-size: 0.85em; padding: 2px 8px; margin-left: 8px; }
@@ -778,6 +791,16 @@ a { color: var(--blue); text-decoration: none; }
       </div>
     </div>
   </div>
+  <div class="card" id="agentSection" style="display:none">
+    <h2>&#9881; Agent Analysis</h2>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:8px">
+      <div style="font-size:12px;color:var(--ink3)">Unique Agents: <strong id="sAgentCount" style="color:var(--ink)">0</strong></div>
+      <div style="font-size:12px;color:var(--ink3)">Avg Parallel: <strong id="sAvgPar" style="color:var(--ink)">0</strong></div>
+      <div style="font-size:12px;color:var(--ink3)">Peak Parallel: <strong id="sPeakPar" style="color:var(--ink)">0</strong></div>
+      <div style="font-size:12px;color:var(--ink3)">Total Waves: <strong id="sTotalWaves" style="color:var(--ink)">0</strong></div>
+    </div>
+    <div class="agents-grid" id="agentsGrid"></div>
+  </div>
   <div class="heatmap-tip" id="hmTip"></div>
 
   <div class="card" id="trendSection" style="display:none">
@@ -1006,6 +1029,7 @@ async function clientCmd(action, payload) {
 
 function stats(entries) {
   var done = 0, fail = 0, dur = 0, byD = {}, byP = {}, inTok = 0, outTok = 0, cost = 0;
+  var agentCounts = {}, totalWaves = 0, totalPar = 0, peakPar = 0, entriesWithWaves = 0;
   for (var i = 0; i < entries.length; i++) {
     var e = entries[i];
     if (e.status === 'done') done++; else fail++;
@@ -1017,8 +1041,25 @@ function stats(entries) {
     if (dk) { if (!byD[dk]) byD[dk] = []; byD[dk].push(e); }
     var p = e.project || '?';
     if (!byP[p]) byP[p] = []; byP[p].push(e);
+    // Collect agent/wave stats
+    if (e.agents) {
+      for (var a = 0; a < e.agents.length; a++) {
+        var ag = e.agents[a];
+        agentCounts[ag] = (agentCounts[ag] || 0) + 1;
+      }
+    }
+    if (e.waves && e.waves.length > 0) {
+      totalWaves += e.waves.length;
+      entriesWithWaves++;
+      for (var w = 0; w < e.waves.length; w++) {
+        totalPar += e.waves[w].parallel;
+        if (e.waves[w].parallel > peakPar) peakPar = e.waves[w].parallel;
+      }
+    }
+    if (e.maxConcurrency && e.maxConcurrency > peakPar) peakPar = e.maxConcurrency;
   }
-  return { done: done, fail: fail, dur: dur, rate: entries.length > 0 ? Math.round(done / entries.length * 100) : 0, byD: byD, byP: byP, inTok: inTok, outTok: outTok, cost: cost };
+  var avgPar = totalWaves > 0 ? (totalPar / totalWaves).toFixed(1) : '1';
+  return { done: done, fail: fail, dur: dur, rate: entries.length > 0 ? Math.round(done / entries.length * 100) : 0, byD: byD, byP: byP, inTok: inTok, outTok: outTok, cost: cost, agentCounts: agentCounts, totalWaves: totalWaves, avgPar: avgPar, peakPar: peakPar };
 }
 
 function renderStats(s) {
@@ -1031,6 +1072,29 @@ function renderStats(s) {
   document.getElementById('sTokOut').textContent = fmtK(s.outTok);
   document.getElementById('sTokTotal').textContent = fmtK(s.inTok + s.outTok);
   document.getElementById('sTokCost').textContent = s.cost > 0 ? '$' + s.cost.toFixed(2) : '$0';
+}
+
+function renderAgents(s) {
+  var sec = document.getElementById('agentSection');
+  var keys = Object.keys(s.agentCounts);
+  if (keys.length === 0) { sec.style.display = 'none'; return; }
+  sec.style.display = 'block';
+  document.getElementById('sAgentCount').textContent = keys.length;
+  document.getElementById('sAvgPar').textContent = s.avgPar;
+  document.getElementById('sPeakPar').textContent = s.peakPar;
+  document.getElementById('sTotalWaves').textContent = s.totalWaves;
+
+  var grid = document.getElementById('agentsGrid');
+  grid.innerHTML = '';
+  keys.sort(function(a,b){ return s.agentCounts[b] - s.agentCounts[a]; });
+  for (var i = 0; i < keys.length; i++) {
+    var name = keys[i], cnt = s.agentCounts[name];
+    var card = document.createElement('div');
+    card.className = 'agent-card';
+    card.innerHTML = '<span class="agent-badge" style="background:' + hc(name) + '">' + esc(name) + '</span>'
+      + '<span class="ac-count">' + cnt + ' run' + (cnt !== 1 ? 's' : '') + '</span>';
+    grid.appendChild(card);
+  }
 }
 
 function renderHeatmap(byD) {
@@ -1135,7 +1199,37 @@ function toggleAllDays(collapse) {
   });
 }
 
-function renderTimeline(entries) {
+function renderEntryAgents(e) {
+  if (!e.agents || e.agents.length === 0) return '';
+  var h = '<div class="entry-agents-row"><span class="label">agents:</span>';
+  for (var i = 0; i < e.agents.length; i++) {
+    h += '<span class="agent-badge" style="background:' + hc(e.agents[i]) + '">' + esc(e.agents[i]) + '</span>';
+  }
+  if (e.maxConcurrency && e.maxConcurrency > 1) {
+    h += '<span style="margin-left:4px">peak //' + e.maxConcurrency + '</span>';
+  }
+  h += '</div>';
+  return h;
+}
+
+function renderEntryWaves(e) {
+  if (!e.waves || e.waves.length === 0) return '';
+  var h = '<div class="entry-waves">';
+  for (var i = 0; i < e.waves.length; i++) {
+    var w = e.waves[i];
+    h += '<div class="entry-wave">';
+    h += '<span class="entry-wave-label">wave ' + w.wave + '</span>';
+    for (var j = 0; j < w.agents.length; j++) {
+      h += '<span class="agent-badge" style="background:' + hc(w.agents[j]) + '">' + esc(w.agents[j]) + '</span>';
+    }
+    if (w.parallel > 1) h += '<span style="color:var(--blue)">//' + w.parallel + '</span>';
+    h += '</div>';
+  }
+  h += '</div>';
+  return h;
+}
+
+function renderTimeline(entries, preByD) {
   var el = document.getElementById('tl');
   var viewKey = selectedClient || '_local';
 
@@ -1176,10 +1270,16 @@ function renderTimeline(entries) {
     return;
   }
 
-  var byD = {};
-  for (var i = 0; i < list.length; i++) {
-    var dk = localDate(list[i].date || list[i].startedAt);
-    if (!byD[dk]) byD[dk] = []; byD[dk].push(list[i]);
+  // Reuse pre-computed byD when no project filter is active (avoid redundant grouping)
+  var byD;
+  if (!filterProj && preByD) {
+    byD = preByD;
+  } else {
+    byD = {};
+    for (var i = 0; i < list.length; i++) {
+      var dk = localDate(list[i].date || list[i].startedAt);
+      if (!byD[dk]) byD[dk] = []; byD[dk].push(list[i]);
+    }
   }
 
   var dates = Object.keys(byD).sort().reverse();
@@ -1231,6 +1331,8 @@ function renderTimeline(entries) {
         '<div class="entry-details">' +
           '<div class="entry-goal" title="' + esc(e.goal).replace(/"/g,'&quot;') + '">' + esc(trunc(e.goal, 90)) + '</div>' +
           '<div class="entry-tasks">tasks ' + (e.tasksCompleted||0) + '/' + (e.tasksTotal||0) + ' ' + bar(e.tasksCompleted||0, e.tasksTotal||0, 8) + '</div>' +
+          renderEntryAgents(e) +
+          renderEntryWaves(e) +
           (e.summary ? '<div class="entry-summary">' + esc(trunc(e.summary, 120)) + '</div>' : '') +
         '</div>';
       card.onclick = function() { this.classList.toggle('expanded'); };
@@ -1243,11 +1345,14 @@ function renderTimeline(entries) {
   }
 }
 
-function getEffectiveRunAt(task, tasks) {
+function getEffectiveRunAt(task, tasks, taskMap, cache) {
+  // Memoize: return cached result if available
+  if (cache && cache[task.id] !== undefined) return cache[task.id];
+  var result = null;
   // Own runAt takes priority
-  if (task.runAt) return { time: task.runAt, inherited: false };
+  if (task.runAt) { result = { time: task.runAt, inherited: false }; }
   // Check dependency chain — find the latest runAt from deps
-  if (task.dependsOn && task.dependsOn.length > 0) {
+  else if (task.dependsOn && task.dependsOn.length > 0) {
     var latest = null;
     for (var i = 0; i < task.dependsOn.length; i++) {
       var dep = task.dependsOn[i];
@@ -1255,20 +1360,21 @@ function getEffectiveRunAt(task, tasks) {
         // Check all prior tasks
         for (var j = 0; j < tasks.length; j++) {
           if (tasks[j].id === task.id) break;
-          var pr = getEffectiveRunAt(tasks[j], tasks);
+          var pr = getEffectiveRunAt(tasks[j], tasks, taskMap, cache);
           if (pr && (!latest || pr.time > latest)) latest = pr.time;
         }
       } else {
-        var dt = tasks.find(function(t) { return t.id === dep; });
+        var dt = taskMap ? taskMap[dep] : tasks.find(function(t) { return t.id === dep; });
         if (dt) {
-          var dr = getEffectiveRunAt(dt, tasks);
+          var dr = getEffectiveRunAt(dt, tasks, taskMap, cache);
           if (dr && (!latest || dr.time > latest)) latest = dr.time;
         }
       }
     }
-    if (latest) return { time: latest, inherited: true };
+    if (latest) result = { time: latest, inherited: true };
   }
-  return null;
+  if (cache) cache[task.id] = result;
+  return result;
 }
 
 function fmtRunAt(info) {
@@ -1300,6 +1406,10 @@ function renderQueue(tasks) {
     actions.style.display = 'none';
     return;
   }
+  // Build task ID → task map and runAt cache for O(1) lookups
+  var taskMap = {}, runAtCache = {};
+  for (var k = 0; k < tasks.length; k++) taskMap[tasks[k].id] = tasks[k];
+
   var h = '<table class="q-table"><thead><tr><th>ID</th><th>Goal</th><th>Status</th><th>Run At</th><th>Deps</th><th></th></tr></thead><tbody>';
   for (var i = 0; i < tasks.length; i++) {
     var t = tasks[i], st = '';
@@ -1309,7 +1419,7 @@ function renderQueue(tasks) {
     else st = '\u00B7 ' + (t.status || 'pending');
     var deps = t.dependsOn && t.dependsOn.length > 0 ? esc(t.dependsOn.join(', ')) : '-';
     var del = t.status === 'pending' ? '<button class="q-del" onclick="removeTask(\'' + esc(t.id) + '\')">\u00D7</button>' : '';
-    var effTime = getEffectiveRunAt(t, tasks);
+    var effTime = getEffectiveRunAt(t, tasks, taskMap, runAtCache);
     var timeCell = fmtRunAt(effTime);
     if (t.status === 'pending') {
       timeCell = '<span class="q-time-edit" style="cursor:pointer;border-bottom:1px dashed var(--ink4)" onclick="editRunAt(\'' + esc(t.id) + '\',\'' + esc(t.runAt||'') + '\')" title="Click to set/change time">' + timeCell + '</span>';
@@ -1330,6 +1440,7 @@ function renderQueue(tasks) {
   actions.style.display = tasks.length > 0 ? 'block' : 'none';
 }
 
+render._lastKey = '';
 function render() {
   if (!hist) return;
   var entries = hist.entries || [];
@@ -1341,13 +1452,13 @@ function render() {
     qt = sc && sc.status && sc.status.queue ? sc.status.queue : [];
     entries = sc && sc.status && sc.status.history ? sc.status.history : [];
   } else if (clients.length > 0) {
-    // Aggregate all sources: local + all remote clients
+    // Aggregate all sources: local + all remote clients (in-place push, no repeated concat)
     var allEntries = (hist.entries || []).slice();
     var allQt = qt.slice();
     for (var i = 0; i < clients.length; i++) {
       var cs = clients[i].status;
-      if (cs && cs.history) allEntries = allEntries.concat(cs.history);
-      if (cs && cs.queue) allQt = allQt.concat(cs.queue);
+      if (cs && cs.history) Array.prototype.push.apply(allEntries, cs.history);
+      if (cs && cs.queue) Array.prototype.push.apply(allQt, cs.queue);
     }
     entries = allEntries;
     qt = allQt;
@@ -1360,8 +1471,16 @@ function render() {
   }
   document.getElementById('empty').style.display = 'none';
   document.getElementById('app').style.display = 'block';
+
+  // Dirty check — skip full re-render if data unchanged since last render
+  var rk = entries.length + '|' + qt.length + '|' + clients.length + '|' + (filterProj||'') + '|' + (selectedClient||'');
+  if (entries.length > 0) rk += '|' + (entries[entries.length-1].id || entries[entries.length-1].date || '');
+  if (qt.length > 0) rk += '|' + qt[qt.length-1].id + ':' + qt[qt.length-1].status;
+  if (rk === render._lastKey) return;
+  render._lastKey = rk;
+
   var s = stats(entries);
-  renderStats(s); renderHeatmap(s.byD); renderTrend(s.byD); renderProjects(s.byP); renderTimeline(entries); renderQueue(qt);
+  renderStats(s); renderAgents(s); renderHeatmap(s.byD); renderTrend(s.byD); renderProjects(s.byP); renderTimeline(entries, s.byD); renderQueue(qt);
   renderClients();
   checkNotifications(qt);
 }

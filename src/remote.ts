@@ -161,6 +161,7 @@ export class RemoteClient {
 							model: p.model,
 							agentsDirs: p.agentsDirs,
 							autoCommit: p.autoCommit,
+							autoPush: p.autoPush,
 							verify: p.verify,
 							replan: p.replan,
 						},

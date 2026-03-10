@@ -7,6 +7,6 @@
 (none)
 
 ## Position
-- Goal: 远程面板 我刚进页面的时候 应该统计的是整个所有机器的数据集合吧 那几个统计数据
+- Goal: 队列每次做完一个任务都push可以吗
 - Tasks: 2/2 completed
 - Status: SUCCESS

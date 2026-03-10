@@ -5,7 +5,7 @@
  */
 
 export { loadAgents, type TeamAgentDef } from "./agents.js";
-export { executeTeam, planOnly, type Task, type TeamResult, type TeamEvent, type TeamEventType, type TeamHook, type ExecuteOptions, type PlanOnlyResult } from "./orchestrator.js";
+export { executeTeam, planOnly, type Task, type TeamResult, type TeamEvent, type TeamEventType, type TeamHook, type ExecuteOptions, type PlanOnlyResult, type WaveInfo } from "./orchestrator.js";
 export { validatePlan, type ValidatedTask, type ValidationResult } from "./validate.js";
 export { runFullVerification, runStaticReview, type VerifyResult, type VerifyItem, type ReviewResult, type ReviewFinding } from "./verify.js";
 export { runAgent, runParallel, detectEngine, isRateLimitError, type RunResult, type Engine } from "./runner.js";
@@ -28,7 +28,7 @@ export {
 	createSendMessageTool,
 	createReportTool,
 } from "./tools.js";
-export { appendHistory, loadHistory, clearHistory, getHistoryStats, type HistoryEntry, type HistoryData, type HistoryStats } from "./history.js";
+export { appendHistory, loadHistory, clearHistory, getHistoryStats, type HistoryEntry, type HistoryData, type HistoryStats, type WaveInfo as HistoryWaveInfo } from "./history.js";
 export { startDashboard, isPortInUse } from "./dashboard.js";
 export { scheduleQueueRun, cancelScheduledRun, listScheduledRuns } from "./scheduler.js";
 export { RelayServer, type RelayMessage, type CommandMessage, type CommandResultMessage, type ClientInfo } from "./relay.js";

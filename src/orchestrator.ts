@@ -70,6 +70,13 @@ export interface Task {
 	error?: string;
 }
 
+export interface WaveInfo {
+	wave: number;
+	taskIds: string[];
+	agents: string[];
+	parallel: number;
+}
+
 export interface TeamResult {
 	success: boolean;
 	tasks: Task[];
@@ -79,6 +86,12 @@ export interface TeamResult {
 	inputTokens: number;
 	outputTokens: number;
 	costUsd: number;
+	/** Wave breakdown — which tasks ran in parallel */
+	waves?: WaveInfo[];
+	/** Unique agent roles used */
+	agents?: string[];
+	/** Peak parallel agents across all waves */
+	maxConcurrency?: number;
 }
 
 export interface ExecuteOptions {
@@ -512,6 +525,7 @@ Do NOT output any text before or after the JSON. Do NOT use markdown prose forma
 
 	// ── Phase 2: Execute ──────────────────────────────────────
 	let waves = topologicalSort(tasks);
+	const waveInfos: WaveInfo[] = [];
 
 	log.section(`Phase 2: Execution (${waves.length} waves)`);
 
@@ -638,6 +652,15 @@ Do NOT output any text before or after the JSON. Do NOT use markdown prose forma
 		}
 
 		await emit(hooks, { type: "wave_end", wave: wi, tasks: wave, memory });
+
+		// Record wave execution info
+		const waveAgents = [...new Set(wave.map(t => t.assignee))];
+		waveInfos.push({
+			wave: wi + 1,
+			taskIds: wave.map(t => t.id),
+			agents: waveAgents,
+			parallel: wave.length,
+		});
 
 		// Save checkpoint after every wave (enables full resume)
 		doSaveCheckpoint(wi, tasks);
@@ -891,7 +914,10 @@ ${failedTasksForReplan.length > 0 ? failedTasksForReplan.map(t => `- ${t.id}: ${
 		: `⚠️ ${doneCount}/${tasks.length} tasks completed, ${tasks.length - doneCount} failed.`;
 	const summary = taskSummaries ? `${headline}\n\n${taskSummaries}` : headline;
 
-	return { success, tasks, summary, memory, planning, inputTokens: totalInputTokens, outputTokens: totalOutputTokens, costUsd: totalCostUsd };
+	const allAgents = [...new Set(tasks.map(t => t.assignee))];
+	const peakConcurrency = waveInfos.length > 0 ? Math.max(...waveInfos.map(w => w.parallel)) : 1;
+
+	return { success, tasks, summary, memory, planning, inputTokens: totalInputTokens, outputTokens: totalOutputTokens, costUsd: totalCostUsd, waves: waveInfos, agents: allAgents, maxConcurrency: peakConcurrency };
 }
 
 // ─── Plan-Only Mode (for CC hybrid) ──────────────────────────

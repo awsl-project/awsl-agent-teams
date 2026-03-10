@@ -59,7 +59,7 @@ CC Hybrid Mode (no API key needed):
   5. awsl review           → .planning/REVIEW.md (static code review)
 
 Queue Commands (sleep mode):
-  queue add <goal> [opts]  Add a task to the queue (--at <time> to schedule)
+  queue add <goal> [opts]  Add a task to the queue (--at <time> --auto-push)
   queue plan <text> [opts] Parse natural language into multiple queue tasks
   queue list               List queue tasks and status
   queue show <id>          Show detailed info for a queue task
@@ -693,6 +693,7 @@ async function main() {
 			// Parse options from args starting at index 2
 			let engine: Engine | undefined;
 			let quick = false;
+			let autoPush = false;
 			let concurrency: number | undefined;
 			let model: string | undefined;
 			let dependsOn: string[] | undefined;
@@ -704,6 +705,7 @@ async function main() {
 				const a = args[i];
 				if (a === "--engine" && i + 1 < args.length) { engine = args[++i] as Engine; }
 				else if (a === "--quick") { quick = true; }
+				else if (a === "--auto-push") { autoPush = true; }
 				else if (a === "--concurrency" && i + 1 < args.length) { concurrency = parseInt(args[++i], 10); }
 				else if (a === "--model" && i + 1 < args.length) { model = args[++i]; }
 				else if (a === "--depends-on" && i + 1 < args.length) { dependsOn = args[++i].split(",").map(s => s.trim()); }
@@ -719,7 +721,7 @@ async function main() {
 
 			const goal = goalParts.join(" ").trim();
 			if (!goal) {
-				console.error("Usage: awsl queue add <goal> [--quick] [--engine <type>] [--at <time>]");
+				console.error("Usage: awsl queue add <goal> [--quick] [--engine <type>] [--at <time>] [--auto-push]");
 				process.exit(1);
 			}
 
@@ -739,11 +741,13 @@ async function main() {
 				concurrency,
 				quick,
 				agentsDirs,
+				autoPush,
 			}, { engine, dependsOn, runAt: resolvedRunAt });
 
 			console.log(`Added: ${task.id} — "${goal}"`);
 			if (dependsOn) console.log(`  Depends on: ${dependsOn.join(", ")}`);
 			if (quick) console.log(`  Mode: quick`);
+			if (autoPush) console.log(`  Auto-push: enabled`);
 			if (engine) console.log(`  Engine: ${engine}`);
 			if (resolvedRunAt) console.log(`  Run at: ${new Date(resolvedRunAt).toLocaleString()}`);
 		}
@@ -882,20 +886,23 @@ async function main() {
 			}
 		}
 		else if (subCmd === "start") {
-			// Parse --engine and --once
+			// Parse --engine, --once, --auto-push
 			let engine: Engine | undefined;
 			let once = false;
+			let autoPush = false;
 			for (let i = 2; i < args.length; i++) {
 				if (args[i] === "--engine" && i + 1 < args.length) {
 					engine = args[++i] as Engine;
 				} else if (args[i] === "--once") {
 					once = true;
+				} else if (args[i] === "--auto-push") {
+					autoPush = true;
 				}
 			}
 
-			console.log(`Starting queue execution${once ? " (one-shot)" : ""}...\n`);
+			console.log(`Starting queue execution${once ? " (one-shot)" : ""}${autoPush ? " (auto-push)" : ""}...\n`);
 
-			await queue.start(engine, { once });
+			await queue.start(engine, { once, autoPush });
 		}
 		else if (subCmd === "clear") {
 			queue.clear();

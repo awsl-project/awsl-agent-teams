@@ -308,9 +308,18 @@ awsl queue start --once                       # one-shot: process runnable tasks
 
 If you prefer manual daemon mode, plain `queue start` (without `--once`) still polls every 30 seconds for future tasks. Removing a task (`queue remove`) or changing its time (`set-time`) automatically cleans up the system scheduled job.
 
-### Auto-Commit
+### Auto-Commit & Auto-Push
 
 Each queue task automatically commits QUEUE.json and HISTORY.json to git upon completion (whether success or failure). This lets you track queue progress via `git log` even when running unattended overnight.
+
+Add `--auto-push` to automatically push to remote after each task completes:
+
+```bash
+awsl queue add "Build feature" --auto-push      # per-task
+awsl queue start --auto-push                     # all tasks in this run
+```
+
+The push runs after each successful commit. If push fails (network, auth), execution continues — the commit is preserved locally.
 
 ### Rate Limit Recovery
 
@@ -349,6 +358,7 @@ Features:
 - **Clear History** — One-click button to clear all execution history (deletes HISTORY.json)
 - **Live log stream** — Real-time SSE-based log panel showing agent stdout/stderr as it happens
 - **Browser notifications** — Alerts on task failure and queue completion (requires permission)
+- **Agent analysis** — Shows unique agent roles, average/peak parallelism, total waves, and per-run wave breakdown with agent badges
 - **Pixel art aesthetic** — Press Start 2P font, retro animations
 
 API endpoints:

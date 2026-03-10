@@ -308,9 +308,18 @@ awsl queue start --once                  # 一次性模式：处理当前可执�
 
 如果你偏好手动守护模式，不带 `--once` 的 `queue start` 仍会每 30 秒轮询一次。删除任务（`queue remove`）或修改时间（`set-time`）会自动清理系统定时任务。
 
-### 自动提交
+### 自动提交 & 自动推送
 
 每个队列任务完成后（无论成功或失败），会自动将 QUEUE.json 和 HISTORY.json 的状态变更提交到 git。这样即使通宵无人值守执行，也可以通过 `git log` 追踪队列进度。
+
+添加 `--auto-push` 可在每个任务完成后自动推送到远程仓库：
+
+```bash
+awsl queue add "构建功能" --auto-push      # 单个任务
+awsl queue start --auto-push               # 本次运行的所有任务
+```
+
+推送在每次成功提交后执行。如果推送失败（网络、认证问题），执行不会中断 — 提交会保留在本地。
 
 ### 限额自动恢复
 
@@ -349,6 +358,7 @@ awsl dashboard stop         # 停止后台仪表盘进程
 - **清除历史** — 一键清除所有执行历史记录（删除 HISTORY.json）
 - **实时日志流** — 基于 SSE 的实时日志面板，展示 agent 的 stdout/stderr
 - **浏览器通知** — 任务失败和队列完成时弹出提醒（需授权）
+- **Agent 分析** — 展示使用的 agent 角色、平均/峰值并行度、总波次数，每次运行可展开查看波次详情和 agent 徽章
 - **像素艺术风格** — Press Start 2P 字体、复古动画
 
 API 端点：

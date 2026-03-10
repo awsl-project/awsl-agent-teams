@@ -18,6 +18,19 @@ import { appendHistory } from "./history.js";
 import { atomicCommit } from "./planning.js";
 import { scheduleQueueRun, cancelScheduledRun } from "./scheduler.js";
 
+// ─── Git Push Helper ────────────────────────────────────────
+
+function gitPush(cwd: string): boolean {
+	try {
+		execSync("git push", { cwd, stdio: "pipe", timeout: 60000 });
+		log.info("git", "Pushed to remote");
+		return true;
+	} catch (e: any) {
+		log.warn("git", `Push failed: ${e.message?.slice(0, 200) ?? e}`);
+		return false;
+	}
+}
+
 // ─── Interfaces for queue plan ──────────────────────────────
 
 export interface PlannedTask {
@@ -38,6 +51,7 @@ export interface QueueTask {
 		quick?: boolean;
 		agentsDirs?: string[];
 		autoCommit?: boolean;
+		autoPush?: boolean;
 		verify?: boolean;
 		replan?: boolean;
 	};
@@ -174,7 +188,7 @@ export class TaskQueue {
 	/**
 	 * Main daemon loop — execute pending tasks sequentially.
 	 */
-	async start(defaultEngine?: Engine, options?: { once?: boolean; ignoreRunAt?: boolean }): Promise<void> {
+	async start(defaultEngine?: Engine, options?: { once?: boolean; ignoreRunAt?: boolean; autoPush?: boolean }): Promise<void> {
 		log.section("Queue: Starting task execution");
 
 		// Recover from crash: any task left "running" from a prior session is stale
@@ -384,6 +398,9 @@ export class TaskQueue {
 							inputTokens: teamResult.inputTokens ?? 0,
 							outputTokens: teamResult.outputTokens ?? 0,
 							costUsd: teamResult.costUsd ?? 0,
+							waves: teamResult.waves,
+							agents: teamResult.agents,
+							maxConcurrency: teamResult.maxConcurrency,
 						});
 					} catch (e) {
 						log.warn("queue", `Failed to record history: ${e}`);
@@ -392,7 +409,10 @@ export class TaskQueue {
 
 				// Auto-commit queue state after task completion
 				try {
-					atomicCommit(this.cwd, nextTask.id, `queue: ${nextTask.id} ${teamResult.success ? "done" : "failed"} — ${nextTask.goal}`);
+					const committed = atomicCommit(this.cwd, nextTask.id, `queue: ${nextTask.id} ${teamResult.success ? "done" : "failed"} — ${nextTask.goal}`);
+					if (committed && (nextTask.options.autoPush ?? options?.autoPush ?? false)) {
+						gitPush(this.cwd);
+					}
 				} catch (e) {
 					log.warn("queue", `Failed to auto-commit after task: ${e}`);
 				}
@@ -435,7 +455,10 @@ export class TaskQueue {
 
 				// Auto-commit queue state after task failure
 				try {
-					atomicCommit(this.cwd, nextTask.id, `queue: ${nextTask.id} failed — ${nextTask.goal}`);
+					const committed = atomicCommit(this.cwd, nextTask.id, `queue: ${nextTask.id} failed — ${nextTask.goal}`);
+					if (committed && (nextTask.options.autoPush ?? options?.autoPush ?? false)) {
+						gitPush(this.cwd);
+					}
 				} catch (e) {
 					log.warn("queue", `Failed to auto-commit after task: ${e}`);
 				}

@@ -1116,7 +1116,8 @@ awsl queue add "goal" \
   --concurrency 3 \          # 并行度
   --model anthropic:... \    # 模型
   --depends-on q_1,q_2 \     # 依赖
-  --at "03:00"               # 定时调度
+  --at "03:00" \             # 定时调度
+  --auto-push                # 完成后自动 git push
 ```
 
 ### QUEUE.json 格式
@@ -1190,6 +1191,7 @@ awsl dashboard
 | **限额恢复** | 每个任务自动带限额恢复（指数退避 + 检查点） |
 | **锁管理** | 任务间自动交接锁，无需手动管理 |
 | **自动提交** | 每个任务完成后（成功或失败），自动 commit QUEUE.json + HISTORY.json，可通过 `git log` 追踪进度 |
+| **自动推送** | 加 `--auto-push` 可在每次 commit 后自动 `git push`。支持 per-task（`queue add --auto-push`）或全局（`queue start --auto-push`）。push 失败不阻塞后续任务 |
 | **中断恢复** | Ctrl+C 中断后，已完成任务状态保留。重新 `queue start` 会跳过已完成的任务 |
 | **失败处理** | 单个任务失败不影响后续无依赖任务的执行 |
 | **日志** | 所有日志输出到 stderr，可重定向：`awsl queue start 2>queue.log` |
@@ -1231,6 +1233,21 @@ awsl dashboard
 - 点击 pending 任务的时间单元格，弹出编辑对话框，可设置/修改/清除调度时间
 - 后端接口：`POST /api/queue/set-time`，body 为 `{ id, runAt }`（`runAt` 为 null 时清除）
 - 底层调用 `queue.ts` 的 `setRunAt(id, runAt)` 方法
+
+**多机聚合性能优化：**
+- 聚合阶段使用原地 `push` 代替重复 `concat`，减少内存分配
+- 队列依赖查找通过 ID→task 映射表 + 缓存，从 O(Q²) 降到 O(Q)
+- Timeline 渲染复用 `stats()` 预计算的按日分组数据，无 filter 时跳过二次分组
+- 脏检查机制：数据未变时跳过全量重渲染（30s 轮询周期内常见）
+
+**Agent 分析面板：**
+- 统计汇总：使用的 agent 角色数、平均并行度、峰值并行度、总波次数
+- 角色卡片：每个 agent 角色（coder/reviewer/tester 等）的参与次数
+- 运行详情：Timeline 中展开每条记录可看到：
+  - 参与的 agent 角色（彩色徽章）
+  - 波次分解（每波并行了哪些角色、几个 agent 同时跑）
+- 数据来源：orchestrator 执行时收集 wave 和 agent 信息，写入 HISTORY.json
+- 远程客户端的数据同样参与聚合统计
 
 **后台启动仪表盘：**
 ```bash

@@ -206,11 +206,16 @@
       "options": {
         "quick": false
       },
-      "status": "running",
+      "status": "done",
       "scheduledAt": "2026-03-10T12:13:31.009Z",
-      "startedAt": "2026-03-10T12:15:38.599Z"
+      "startedAt": "2026-03-10T12:15:38.599Z",
+      "completedAt": "2026-03-10T12:23:42.650Z",
+      "result": {
+        "success": true,
+        "summary": "✅ 2/2 tasks completed successfully.\n\n✅ task_1 (coder): Aggregate all-machines stats in render [public/dashboard.html]\n✅ task_2 (reviewer): Review the aggregation fix [public/dashboard.html]"
+      }
     }
   ],
   "createdAt": "2026-03-09T10:11:39.245Z",
-  "updatedAt": "2026-03-10T12:15:38.599Z"
+  "updatedAt": "2026-03-10T12:23:42.650Z"
 }

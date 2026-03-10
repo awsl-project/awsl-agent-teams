@@ -244,7 +244,26 @@
       "inputTokens": 16682,
       "outputTokens": 21952,
       "costUsd": 2.8741438
+    },
+    {
+      "id": "h_14",
+      "date": "2026-03-10T12:23:42.651Z",
+      "project": "awsl-agent-teams",
+      "projectPath": "C:\\Users\\11421\\awsl-agent-teams",
+      "queueTaskId": "q_15",
+      "goal": "队列每次做完一个任务都push可以吗",
+      "status": "done",
+      "startedAt": "2026-03-10T12:15:38.599Z",
+      "completedAt": "2026-03-10T12:23:42.650Z",
+      "duration": 484051,
+      "tasksCompleted": 2,
+      "tasksTotal": 2,
+      "summary": "✅ 2/2 tasks completed successfully.\n\n✅ task_1 (coder): Aggregate all-machines stats in render [public/dashboard.html]\n✅ task_2 (reviewer): Review the aggregation fix [public/dashboard.html]",
+      "engine": "claude-code",
+      "inputTokens": 1454,
+      "outputTokens": 17821,
+      "costUsd": 1.9298656500000002
     }
   ],
-  "updatedAt": "2026-03-10T12:15:38.293Z"
+  "updatedAt": "2026-03-10T12:23:42.651Z"
 }

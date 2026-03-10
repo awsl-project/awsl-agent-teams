@@ -10,6 +10,13 @@ import { log } from "./log.js";
 
 // ─── Interfaces ──────────────────────────────────────────────
 
+export interface WaveInfo {
+	wave: number;
+	taskIds: string[];
+	agents: string[];
+	parallel: number;
+}
+
 export interface HistoryEntry {
 	id: string;
 	date: string;
@@ -29,6 +36,12 @@ export interface HistoryEntry {
 	inputTokens?: number;
 	outputTokens?: number;
 	costUsd?: number;
+	/** Wave breakdown — which tasks ran in parallel */
+	waves?: WaveInfo[];
+	/** Unique agent roles used */
+	agents?: string[];
+	/** Peak parallel agents across all waves */
+	maxConcurrency?: number;
 }
 
 export interface HistoryData {
