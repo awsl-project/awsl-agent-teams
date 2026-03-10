@@ -1,54 +1,45 @@
-# task_2: Review the changes made to public/dashboard.html for the col
+# task_2: Review collapse state changes
 
 Assignee: reviewer
 Status: done
 
 ## Result
+Review complete. Here are my findings:
+
 ## AWSL_RESULT
 
-### Security & Code Review: Timeline Collapse State Persistence
+### Security & Code Review — Collapse State Tracking (task_1)
 
-**Verdict: PASS** — All 6 changes verified correct. Implementation matches the design spec exactly. No security issues found.
-
----
-
-### Checklist Results
-
-1. **[PASS] collapsedDates global** — Line 842: `var collapsedDates = {};` properly declared at script-level scope alongside other globals (`hist`, `queue`, `filterProj`, etc.). Correct.
-
-2. **[PASS] State save in renderTimeline** — Lines 1137-1147: Saves collapsed groups (`collapsedDates[key] = true`) AND cleans expanded groups (`delete collapsedDates[key]`) before `el.innerHTML = ''`. Both directions tracked, preventing stale state.
-
-3. **[PASS] data-date attribute** — Line 1176: `group.setAttribute('data-date', ds)` set on every date-group div via DOM API (not innerHTML). Safe.
-
-4. **[PASS] State restore** — Lines 1178-1181: `if (collapsedDates[viewKey + '|' + ds]) group.classList.add('collapsed')` — correctly restores after DOM rebuild.
-
-5. **[PASS] onclick closure** — Lines 1185-1191: IIFE pattern `function(g, dateStr) { return function(e) { ... }; }(group, ds)` correctly captures both `group` element and `ds` string per iteration. Classic closure pattern, no variable-capture bug.
-
-6. **[PASS] toggleAllDays tracking** — Lines 1119-1131: Reads `data-date` via `getAttribute`, updates `collapsedDates` with consistent `viewKey + '|' + dk` key format. Matches renderTimeline's key format.
-
-7. **[PASS] clearHistory remote guard** — Lines 1611-1621: Checks `if (selectedClient)`, shows `alert()`, returns early before `fetch('/api/history/clear')`. Prevents accidental local-API call when viewing remote data.
-
-8. **[PASS] No XSS/injection risks**:
-   - `ds` comes from `localDate()` (line 867) which formats via `Date` object → `YYYY-MM-DD` — no user-controlled characters
-   - `setAttribute('data-date', ds)` is DOM API, not innerHTML — safe
-   - `hd.innerHTML` uses `esc(ds)` (line 1184) — properly HTML-escaped via `textContent`→`innerHTML` pattern (line 863)
-   - `viewKey` used only as JS object key, never injected into DOM
-   - No new `innerHTML` assignments with unescaped input
-
-9. **[PASS] viewKey construction** — `selectedClient || '_local'` used consistently in all 4 locations (renderTimeline line 1135, onclick line 1188, toggleAllDays line 1120). `selectedClient` is set from server-provided client list, used only as object property key.
+**Scope:** 3 changes in `public/dashboard.html` — new state object (line 843), persist in `toggleTimeline()` (lines 1119-1121), restore in `renderTimeline()` (lines 1142-1151).
 
 ---
 
-### Minor Findings
+**1. [PASS] Injection / XSS** — Severity: n/a
+The changes only manipulate DOM classes (`collapsed`) and set `btn.textContent` (not `innerHTML`). No user-supplied strings are interpolated into HTML. No XSS risk.
 
-1. **[WARN] UX ordering in clearHistory** — Severity: minor — Location: `dashboard.html:1612-1616`
-   - `confirm()` dialog appears *before* the remote-client check. User confirms, then gets told they can't do it. However, this matches the design spec exactly, so no change required.
-   - Suggestion: Future improvement could check `selectedClient` before `confirm()`.
+**2. [PASS] State integrity** — Severity: n/a
+The `viewKey` is derived from `selectedClient || '_local'`, which is a controlled internal value. The state object `timelineWrapCollapsed` uses simple boolean values — no risk of prototype pollution or unexpected object injection.
 
-2. **[PASS] No memory leak concern** — Stale entries in `collapsedDates` for dates that disappear from data are harmless (design doc explicitly acknowledges this). Session-only lifetime means no accumulation across page loads.
+**3. [WARN] Null safety — `wrap` / `btn` could be null** — Severity: minor
+Location: `dashboard.html:1143-1144`
+If `renderTimeline()` is called before the `.timeline-wrap` element exists in the DOM, `wrap` and `btn` would be null, causing a runtime error. The same pattern exists in `toggleTimeline()` (lines 1114-1115). This is pre-existing (not introduced by task_1), but the new restore block at lines 1143-1144 adds another null-dereference path.
+Suggestion: Guard with `if (!wrap || !btn) return;` or confirm call order guarantees.
 
-### Files Reviewed
-- `public/dashboard.html` — Lines 842, 1119-1131, 1133-1199, 1611-1621
-- `.planning/designs/timeline-remote-collapse.md` — Full design spec
+**4. [PASS] Memory / performance** — Severity: n/a
+`timelineWrapCollapsed` stores one boolean per connected client — negligible memory. No leaks, no unbounded growth.
 
-### Quality Gate: **PASS** — 0 critical, 0 major, 1 minor (non-blocking)
+**5. [PASS] Logic correctness** — Severity: n/a
+- Toggle sets state → restore reads it. Consistent key format (`selectedClient || '_local'`).
+- Restore correctly applies both collapsed and expanded states (add/remove class + update button text).
+- The `delete` cleanup in toggle prevents stale entries.
+
+**6. [PASS] No secrets or sensitive data** — Severity: n/a
+
+---
+
+### Quality Gate: **PASS**
+- 0 critical findings
+- 0 major findings
+- 1 minor warning (pre-existing null safety pattern, non-blocking)
+
+The implementation is clean, minimal, and correctly tracks per-client collapse state without introducing security or correctness issues.
