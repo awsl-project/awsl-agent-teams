@@ -1,20 +1,18 @@
-The existing `conventions.md` is accurate and up to date. Here's the summary:
-
-## AWSL Coding Conventions
-
-| Category | Key Patterns |
-|----------|-------------|
-| **Naming** | camelCase functions, PascalCase types, UPPER_SNAKE constants, no enums (string unions) |
-| **Style** | ES modules with `.js` imports, `node:` prefix for builtins, `import type` for types, tabs, no semicolons, section dividers `// ─── Name ────` |
-| **Error Handling** | Fail-soft (return defaults, don't throw), bare `catch {}` when error unused, `catch (e: any)` when message needed, output truncation with `.slice()` |
-| **Async** | async/await only, sync fs ops (`readFileSync`), `spawn` for streaming, `Promise.allSettled` for parallel agents |
-| **Logging** | `log.info/warn/debug(source, msg)` from `./log.js`, never `console.log`, all output to stderr, ANSI colors by role |
-| **State** | File-as-state in `.planning/`, JSON for data, Markdown for plans, `SharedMemory` Map for in-session IPC |
-| **Testing** | Command-based verification (`tsc --noEmit`, `npm test`, `eslint`), provider pattern with mtime-based cache |
-| **Architecture** | Conductor/Guardian split, dual engine (claude-code subprocess vs builtin in-process), factory functions, topo-sort waves, checkpoint/resume |
-
-Full document already at `memory/conventions.md` (96 lines). No updates needed — it matches the current codebase.
-
 ## AWSL_RESULT
 
-Conventions documented in `memory/conventions.md`. All patterns verified against current source. Key characteristics: strict TypeScript, fail-soft error handling, file-as-state persistence, dual-engine architecture with factory functions and provider patterns.
+### Coding Conventions Summary
+
+The conventions file at `memory/conventions.md` is already comprehensive and accurate. Updated with newer modules (relay, remote). Key patterns:
+
+| Category | Convention |
+|---|---|
+| **Naming** | Files: lowercase. Types: PascalCase. Functions: camelCase verb-first. Constants: UPPER_SNAKE. No enums — string literal unions. |
+| **Style** | ES modules with `.js` extensions, `node:` prefix for builtins, `import type` for type-only, tabs, no semicolons, double quotes, factory functions. |
+| **Error handling** | Fail-soft (return null/false), bare `catch {}` when unused, `catch (e: any)` when needed, atomic `wx` flag for race safety. |
+| **Async** | async/await only (no `.then()`), sync fs throughout, `Promise.all` for parallel agents. |
+| **Logging** | `log.info/warn/debug(source, msg)` to stderr, ANSI role colors, ISO timestamps, debug gated by `DEBUG` env. |
+| **State** | File-as-state in `.planning/`, JSON for data, Markdown for plans, `SharedMemory` KV for inter-agent comms. |
+| **Testing** | No test framework — command-based verification (`tsc --noEmit`, `npm test`), provider pattern with mtime-based cache (5min TTL). |
+| **Architecture** | Conductor/Guardian model, dual engine, topo-sort waves, 7-strategy parsing, checkpoint/resume, RAII-style RunContext. |
+
+Full details in `memory/conventions.md`.

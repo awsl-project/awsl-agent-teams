@@ -1,24 +1,22 @@
 ## AWSL_RESULT
 
-### Security Audit Design Document
+### Bug Diagnosis
 
-**File produced**: `.planning/SECURITY_AUDIT.md`
+**Root cause**: `dashboard.html:1184-1194` — the `render()` function uses only LOCAL `hist.entries` when no machine is selected. Remote machines' history (`clients[i].status.history`) is never aggregated into the default view. On a remote-only deployment, stats show **nothing**.
 
-**5 verified security issues found, prioritized by impact:**
+### Design: Client-Side History Aggregation
 
-| # | Severity | File | Issue |
-|---|----------|------|-------|
-| FIX 1 | **HIGH** | `src/tools.ts` | Read tool has zero path validation — complete sandbox bypass |
-| FIX 2 | **HIGH** | `src/dashboard.ts` | Dashboard binds to 0.0.0.0 with `CORS: *` — network-accessible mutation APIs |
-| FIX 3 | **MEDIUM** | `src/dashboard.ts` | No HTTP body size limit — memory exhaustion DoS |
-| FIX 4 | **MEDIUM** | `src/sandbox.ts` | Coder denylist only has 7 patterns — trivially bypassed |
-| FIX 5 | **MEDIUM** | `src/planning.ts` | `execSync` with string interpolation for git commands — shell injection |
+**Fix scope**: Single function (`render()`) in single file (`public/dashboard.html`)
 
-**Key decisions:**
-1. Read tool reuses `writePaths` for validation (no new config surface)
-2. Dashboard defaults to `127.0.0.1` (localhost only)
-3. Keep denylist for coder role but expand patterns significantly
-4. Switch git commands from `execSync` to `execFileSync` (array args, no shell)
-5. 1MB body size cap on dashboard API
+**What changes**:
+- When `selectedClient` is null (aggregate view): merge `hist.entries` + all `clients[i].status.history` with dedup by `id+startedAt`
+- When a machine is selected: show only that machine's data (unchanged)
+- Queue behavior: unchanged (local queue in aggregate, machine queue when selected)
 
-**Non-issues confirmed safe:** prototype pollution (Map-based), lock TOCTOU (wx flag), regex DoS (lazy quantifiers), Windows process check.
+**Why this approach**:
+- All data is already available client-side — no backend changes needed
+- Simplest possible fix (one function, ~15 lines added)
+- Dedup prevents duplicates if dashboard machine also connects as remote client
+
+### Files Produced
+- `.planning/design-stats-machines.md` — Full design document with code diff

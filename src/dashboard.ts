@@ -35,7 +35,7 @@ function collectBody(req: http.IncomingMessage, res: http.ServerResponse, cb: (b
 	req.on('end', () => { if (!req.destroyed) cb(body) })
 }
 
-export function startDashboard(cwd: string, port: number = 3120): http.Server {
+export function startDashboard(cwd: string, port: number = 3120, host: string = '127.0.0.1'): http.Server {
 	// Resolve dashboard HTML path — try multiple locations
 	const htmlPaths = [
 		path.join(__dirname, "..", "public", "dashboard.html"), // from dist/
@@ -59,12 +59,14 @@ export function startDashboard(cwd: string, port: number = 3120): http.Server {
 	}
 
 	const server = http.createServer((req, res) => {
-		// CORS headers for all responses
-		// Allow remote access when dashboard is on a server
-		const origin = req.headers.origin;
-		res.setHeader("Access-Control-Allow-Origin", origin ?? "*");
-		res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
-		res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+		// CORS headers — restrict to localhost origins only
+		const origin = req.headers.origin
+		const allowedOrigin = origin && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin) ? origin : undefined
+		if (allowedOrigin) {
+			res.setHeader("Access-Control-Allow-Origin", allowedOrigin)
+			res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+			res.setHeader("Access-Control-Allow-Headers", "Content-Type")
+		}
 
 		// Handle CORS preflight
 		if (req.method === "OPTIONS") {
@@ -251,8 +253,8 @@ export function startDashboard(cwd: string, port: number = 3120): http.Server {
 		throw err;
 	});
 
-	server.listen(port, '0.0.0.0', () => {
-		log.info("dashboard", `Dashboard running at http://0.0.0.0:${port}`);
+	server.listen(port, host, () => {
+		log.info("dashboard", `Dashboard running at http://${host}:${port}`);
 		log.info("dashboard", `API: /api/history, /api/stats, /api/queue, /api/queue/add|remove|clear|start, /api/history/clear`);
 		log.info("dashboard", `Relay: /ws/relay (WebSocket), /api/clients, /api/clients/command`);
 	});

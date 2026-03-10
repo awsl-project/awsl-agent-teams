@@ -7,6 +7,6 @@
 (none)
 
 ## Position
-- Goal: 给 builtin engine 增加最少限度的沙箱：写路径限制在项目目录内，bash 至少按 phase 或 allowlist 控制
-- Tasks: 6/6 completed
+- Goal: 检查有没有安全问题 如果有就直接修复
+- Tasks: 5/5 completed
 - Status: SUCCESS

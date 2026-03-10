@@ -18,10 +18,11 @@
 
 ### [PASS] git-diff: `git diff --stat`
 ```
-.planning/.lock              |   6 +--
- .planning/.verify-cache.json |   4 +-
- .planning/CHECKPOINT.json    |  20 ++++++--
- .planning/VERIFICATION.md    | 115 +++++++++++++++++++++++++++++++++++++------
- .planning/task_6-SUMMARY.md  |  78 ++++++-----------------------
- 5 files changed, 134 insertions(+), 89 deletions(-)
+.planning/.lock              |  6 +--
+ .planning/.verify-cache.json |  4 +-
+ .planning/CHECKPOINT.json    | 20 ++++++++--
+ .planning/VERIFICATION.md    | 87 +++++++++++++++++++++++++++++++++++---------
+ .planning/task_5-SUMMARY.md  | 36 +++++++++---------
+ src/index.ts                 |  2 +-
+ 6 files changed, 110 insertions(+), 45 deletions(-)
 ```
