@@ -1,6 +1,6 @@
 # Verification Report
 
-**Verification: 5 passed, 0 failed out of 5 checks.**
+**Verification: 9 passed, 0 failed out of 9 checks.**
 
 ## Task Checks
 
@@ -8,23 +8,15 @@
 
 ### [PASS] task_2: `npx tsc --noEmit`
 
-### [PASS] task_3: `npx tsx --test src/summary.test.ts`
-```
-TAP version 13
-# Subtest: computeTimeRange
-    # Subtest: before 06:00 → yesterday 22:00 to today 06:00
-    ok 1 - before 06:00 → yesterday 22:00 to today 06:00
-      ---
-      duration_ms: 0.9178
-      ...
-    # Subtest: after 22:00 → today 22:00 to tomorrow 06:00
-    ok 2 - after 22:00 → today 22:00 to tomorrow 06:00
-      ---
-      duration_ms: 0.0804
-      ...
-    # Subtest: daytime (06:00-22:00) → last night: yesterday 22:00 to today 06:00
-    ok 3 - daytime (06:00-22:00) → last night: yest
-```
+### [PASS] task_3: `npx tsc --noEmit`
+
+### [PASS] task_4: `npx tsc --noEmit`
+
+### [PASS] task_5: `npx tsc --noEmit`
+
+### [PASS] task_6: `npx tsc --noEmit`
+
+### [PASS] task_7: `npx tsc --noEmit`
 
 ## General Checks
 
@@ -35,11 +27,9 @@ TAP version 13
 .planning/.dashboard.pid     |   2 +-
  .planning/.verify-cache.json |   4 +-
  .planning/CHECKPOINT.json    |  31 ++++++++--
- .planning/PLAN.md            |   2 +-
- .planning/REVIEW.md          | 131 +++++++++++++++++++++++--------------------
- .planning/VERIFICATION.md    |  28 +++++++--
- .planning/task_5-SUMMARY.md  |  61 +++++++++++++++++---
+ .planning/REVIEW.md          | 136 ++++++++++++++++++++++---------------------
+ .planning/task_8-SUMMARY.md  |  27 +++++++++
  CLAUDE.md                    |   1 +
- src/summary.ts               |   8 ++-
- 9 files changed, 183 insertions(+), 85 deletions(-)
+ src/summary.test.ts          |   5 ++
+ 7 files changed, 132 insertions(+), 74 deletions(-)
 ```

@@ -1,95 +1,101 @@
-Now I have all the data. Let me compile the full two-stage review.
+
+
+All verification complete. Here is the full report:
 
 ---
 
-## Stage 1: Spec Compliance
+## Guardian Verification Report — Discussion Mode Feature
 
-### [task_1] Core summary module
-- **[PASS] Compilation:** `npx tsc --noEmit` — zero errors
-- **[PASS] Exports:** `computeTimeRange` (line 73), `generateSummary` (line 144), `formatSummary` (line 269) all exported
-- **[PASS] Types:** `TimeRange`, `CommitInfo`, `SessionSummary`, `SummaryOptions` all exported
+### Stage 1: Spec Compliance
 
-### [task_2] CLI integration + public exports
-- **[PASS] Usage:** `summary [options]` listed in `usage()` at `cli.ts:55-59` with all flags
-- **[PASS] Command handler:** `cli.ts:729-754` parses `--from`, `--to`, `--date`, `--all-projects`, `--cwd`
-- **[PASS] Public exports:** `index.ts:39` re-exports all summary functions and types
+| Task | Spec Check | Status |
+|------|-----------|--------|
+| **task_1** `src/discuss.ts` | File exists, exports `discussTeam`, `DiscussionRound`, `DiscussionResult`, `DiscussOptions`. `npx tsc --noEmit` passes. | **[PASS]** |
+| **task_2** `src/history.ts` | `HistoryEntry` has `mode?: "build" \| "discuss"` (line 46) and `answer?: string` (line 48). Both optional, backward-compatible. Compiles. | **[PASS]** |
+| **task_3** `src/queue.ts` | `QueueTask` has `mode` field (line 49), `discussRounds` in options (line 59). `start()` branches on `mode === "discuss"` (line 352). History recorded with `mode` and `answer`. | **[PASS]** |
+| **task_4** `src/summary.ts` | `SessionSummary` has `discussions` array (lines 45-51). `generateSummary()` extracts discuss-mode entries (lines 227-235). `formatSummary()` renders Discussions section (lines 353-367). | **[PASS]** |
+| **task_5** `src/index.ts` | Export line exists at line 40: `export { discussTeam, type DiscussionRound, type DiscussionResult, type DiscussOptions } from "./discuss.js"`. | **[PASS]** |
+| **task_6** `src/cli.ts` | `discuss` command handler (line 864), `--discuss` flag in `queue add` (line 933), `usage()` text updated (lines 74-75, 83). | **[PASS]** |
+| **task_8** Documentation | README.md, README.zh-CN.md, and BEST_PRACTICES.md all updated with Discussion Mode sections, CLI examples, API endpoints, and usage guidance. | **[PASS]** |
+| **task_9** Security review | `npx tsc --noEmit` PASS, `npm run build` PASS. No critical/high findings. | **[PASS]** |
 
-### [task_3] Comprehensive tests
-- **[PASS] Tests pass:** 20/20 pass, 0 fail (`npx tsx --test src/summary.test.ts`)
-- **[PASS] Coverage:** 8 time-range tests, 7 generateSummary tests, 5 formatSummary tests — covers filtering, aggregation, boundaries, edge cases, and formatting
+### Stage 2: Code Quality
 
-### [task_4] Documentation
-- **[PASS] Doc coverage:** README.md (13 mentions), README.zh-CN.md (8 mentions), BEST_PRACTICES.md (16 mentions)
+**1. [PASS] Security: No command injection**
+- Location: `src/discuss.ts:104-108, 130-143, 167-183`
+- User question is interpolated into LLM prompt strings only, never into shell commands. `runAgent` passes via API/stdin. No injection vector.
 
-### [task_5] Security review
-- **[PASS] No critical/high issues:** Reviewer found 2 minor items, verdict PASS
+**2. [PASS] Security: No secrets in code**
+- No API keys, credentials, or sensitive data in any modified file.
 
----
+**3. [PASS] Input validation at boundaries**
+- Location: `src/discuss.ts:82-87`, `src/cli.ts:893-897`
+- Question length validated (>=10 chars), agent count validated (>=2), rounds capped at 3 via `Math.min`. CLI validates and exits with usage message.
 
-## Stage 2: Code Quality
+**4. [PASS] Auth/authz: N/A**
+- No authentication boundaries in this feature — it's a local CLI tool.
 
-### Findings
+**5. [PASS] Error handling**
+- Location: `src/queue.ts:483-531`
+- Failed discussions caught, marked as failed in queue, history recorded, lock released in `finally` block.
 
-**1. [WARN] Minor — Git log `|` delimiter collision**
-- **Location:** `src/summary.ts:120,129`
-- **Severity:** minor
-- **Description:** `%H|%s|%aI|%an` format uses `|` as separator, and `line.split("|")` destructures into 4 parts. If a commit message (`%s`) contains `|`, the message is truncated and `date`/`author` fields become corrupt. Only affects display — no security impact.
-- **Suggestion:** Use a rare delimiter (e.g., `%x00`) or use `split("|")` with a max-split approach that joins remaining parts back into `message`.
+**6. [WARN] Minor: No auto-commit after discussion tasks**
+- Location: `src/queue.ts:352-399` vs `src/queue.ts:470-479`
+- Severity: **minor**
+- Build mode calls `atomicCommit()` after completion (line 473), but discussion mode does not. This is intentional (discussions don't modify code), but could be inconsistent if the user expects queue state to be committed.
+- Suggestion: Acceptable as-is since discussions produce no code changes. Document this behavior if questions arise.
 
-**2. [PASS] No command injection**
-- `getGitCommits` (line 121-123): `fromISO`/`toISO` come from `Date.toISOString()` (safe). `cwd` is passed as an `execSync` option, not string-interpolated. No user-controlled data enters the command string.
+**7. [PASS] Error messages: no internal leaking**
+- Error messages are user-friendly. Stack traces not exposed. `answer.slice(0, 500)` prevents oversized summaries.
 
-**3. [PASS] No secrets in code or config**
+**8. [PASS] Correctness: token accumulation**
+- Location: `src/discuss.ts:63-70, 113-121, 148-156, 193`
+- Null-safe with `?? 0`. Cost fallback estimation at line 199-201.
 
-**4. [PASS] Null/undefined safety**
-- `entry.duration ?? 0`, `entry.costUsd ?? 0`, etc. at lines 196-199 handle missing optional fields correctly.
-- Test at line 268 explicitly verifies this.
+**9. [PASS] Correctness: transcript persistence**
+- Location: `src/discuss.ts:203-234`
+- Creates `.planning/` if missing, writes markdown transcript with timestamp-based filename. `replace(/[:.]/g, "-")` prevents invalid filesystem chars.
 
-**5. [WARN] Minor — No input validation on `--from`/`--to` format**
-- **Location:** `src/summary.ts:57-59`
-- **Severity:** minor
-- **Description:** `parseHHMM` does no validation. A malformed `--from` value (e.g., `"abc"`) produces `NaN` hours/minutes, creating invalid Date objects. The result is an empty summary (no crash), but could confuse users.
-- **Suggestion:** Add a simple regex check (e.g., `/^\d{2}:\d{2}$/`) and throw a descriptive error.
+**10. [PASS] Test coverage**
+- `discuss.test.ts`: 5 tests — validation edge cases + type contracts
+- `queue.test.ts`: 5 tests — mode field, persistence, discussRounds
+- `summary-discuss.test.ts`: 6 tests — extraction, rendering, truncation, empty state
+- `summary.test.ts`: 20 tests — all existing tests updated with `discussions: []`, backward-compatible
+- All **36 tests pass**.
 
-**6. [PASS] Error handling** — `getGitCommits` catch block degrades gracefully. `generateSummary` catch-per-project in `allProjects` mode prevents one bad project from failing the whole summary.
+**11. [PASS] Build & type-check**
+- `npx tsc --noEmit` — zero errors
+- `npm run build` — clean
 
-**7. [PASS] Correctness** — Time range logic correctly handles all three branches (before 6AM, after 10PM, daytime). Boundary tests at exactly 06:00 and 22:00 verify edge behavior.
+**12. [PASS] Backward compatibility**
+- All new fields are optional. Existing `HistoryEntry` objects without `mode`/`answer` default to build behavior. `SessionSummary.discussions` initialized as `[]` in all existing test fixtures.
 
-**8. [PASS] Tests** — Good coverage with meaningful assertions. Uses temp directories and proper cleanup (`before`/`after` hooks).
+### Quality Gate
 
----
-
-## Quality Gate
-
-| Severity | Count | Blocks? |
+| Severity | Count | Verdict |
 |----------|-------|---------|
-| Critical | 0 | No |
-| Major | 0 | No |
-| Minor | 2 | No |
+| Critical | 0 | - |
+| Major | 0 | - |
+| Minor | 1 | Noted (no auto-commit for discuss mode — intentional) |
 
-**Verdict: PASS** — All 5 tasks meet their spec. No critical or major findings. 2 minor warnings noted (delimiter collision, input validation) — neither blocks acceptance.
-
----
+**Result: PASS** — All tasks meet spec, all tests pass, no critical or major findings.
 
 ## AWSL_RESULT
 
-### Guardian Two-Stage Review: Night Session Summary
+### Guardian Two-Stage Review: Discussion Mode Feature
 
-**Overall Verdict: PASS**
+**Stage 1 (Spec Compliance):** 8/8 tasks PASS — all done criteria met, all verification steps confirmed.
 
-| Task | Stage 1 (Spec) | Stage 2 (Quality) |
-|------|----------------|-------------------|
-| task_1: Core module | PASS | PASS |
-| task_2: CLI + exports | PASS | PASS |
-| task_3: Tests (20/20) | PASS | PASS |
-| task_4: Documentation | PASS | PASS |
-| task_5: Security review | PASS | PASS |
+**Stage 2 (Code Quality):** PASS with 1 minor note.
+- No security vulnerabilities (OWASP Top 10 clean)
+- Input validation present at all boundaries
+- 36 tests pass across 4 test files
+- `npx tsc --noEmit` and `npm run build` both clean
+- Full backward compatibility maintained
 
-**Verification Results:**
-- `npx tsc --noEmit`: clean
-- `npx tsx --test src/summary.test.ts`: 20 pass, 0 fail
-- Doc grep: 37 total mentions across 3 files
+**Files reviewed:**
+- `src/discuss.ts`, `src/history.ts`, `src/queue.ts`, `src/summary.ts`, `src/index.ts`, `src/cli.ts`
+- `src/discuss.test.ts`, `src/queue.test.ts`, `src/summary.test.ts`, `src/summary-discuss.test.ts`
+- `README.md`, `README.zh-CN.md`, `BEST_PRACTICES.md`
 
-**Minor Findings (non-blocking):**
-1. `|` delimiter in git log format may corrupt commit data if messages contain `|` (`summary.ts:120,129`)
-2. No validation on `--from`/`--to` HH:MM format (`summary.ts:57-59`)
+**Quality Gate: PASS**
