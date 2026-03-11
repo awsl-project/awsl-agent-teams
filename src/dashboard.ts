@@ -506,6 +506,11 @@ export function startDashboard(cwd: string, port: number = 3120, host: string = 
 	// Attach WebSocket relay server for remote client connections
 	const relay = new RelayServer(server);
 
+	// Clean up relay (heartbeat interval, WebSocket connections) when server closes
+	server.on("close", () => {
+		relay.close();
+	});
+
 	server.on("error", (err: NodeJS.ErrnoException) => {
 		if (err.code === "EADDRINUSE") {
 			log.warn("dashboard", `Port ${port} is already in use. Use --port to specify another port, or run 'awsl dashboard stop' first.`);
