@@ -1,24 +1,40 @@
-# task_2: Add a new `queue split` subcommand in `src/cli.ts` inside th
+# task_2: Add JavaScript logic for date filtering in public/dashboard.
 
 Assignee: coder
 Status: done
 
 ## Result
-Everything looks correct. 
+All tests pass, TypeScript compiles clean.
 
 ## AWSL_RESULT
 
-**Added `queue split` subcommand to `src/cli.ts`:**
+### Deliverable: Date Filter JavaScript Logic
 
-1. **Option parsing** (lines 1146-1163): Parses `--engine`, `--quick`, `--concurrency`, `--model`, `--yes`/`-y`, plus description text from remaining args
-2. **Preview table** (lines 1175-1186): Calls `queue.planPreview(description)`, prints numbered table with `#`, `Deps`, `Goal` columns using `─` separator
-3. **Confirmation prompt** (lines 1188-1201): Uses `node:readline` `createInterface` + `rl.question()` wrapped in a Promise. Skipped when `--yes` flag is set. Prints `已取消` on decline
-4. **Commit & output** (lines 1203-1214): Calls `queue.planCommit(planned, defaults)`, prints result table with actual `q_N` IDs (same format as `queue plan` output)
-5. **Usage updated** (line 78-79): Added `queue split` with `--yes` flag documentation
-6. **Error message updated** (line 1217): Added `split` to list of valid queue subcommands
+**File modified:** `public/dashboard.html`
 
-**Files modified:**
-- `src/cli.ts` — Added `createInterface` import, `queue split` subcommand, usage entry, updated error message
+**Changes made:**
 
-**Verification:**
-- `npx tsc --noEmit` — clean, no errors
+1. **State variable** (line 1074): Added `var dateFilterMode = 'all';` alongside existing `filterProj`/`selectedClient` globals.
+
+2. **`setDateFilter(mode)` function** (lines 1127–1135):
+   - Sets `dateFilterMode` to the chosen mode
+   - Removes `active` class from all `.date-filter` buttons, adds it to the matching one
+   - Resets `render._lastKey = null` to force re-render
+   - Calls `render()`
+
+3. **`filterByDate(entries)` function** (lines 1137–1173):
+   - `'all'`: returns entries unchanged
+   - `'today'`: filters to entries where `localDate(e.date||e.startedAt) === today`
+   - `'week'`: computes Monday of current week, filters `monday <= date <= today`
+   - `'month'`: reads `dfMonthInput.value` (YYYY-MM), matches `substring(0,7)`; empty value returns all
+   - `'custom'`: reads `dfStartInput.value` / `dfEndInput.value`, filters range (skips empty bounds)
+
+4. **Input event handlers** (lines 1175–1177):
+   - `dfMonthInput.onchange` → `setDateFilter('month')`
+   - `dfStartInput.onchange` / `dfEndInput.onchange` → `setDateFilter('custom')`
+
+5. **Render wiring** (line 1884): `entries = filterByDate(entries);` inserted before `stats(entries)`
+
+6. **Dirty-check key** (line 1878): Appended `dateFilterMode`, `dfMonthInput.value`, `dfStartInput.value`, `dfEndInput.value` to the cache key so filter changes trigger re-render.
+
+**Test file:** `tests/filterByDate.test.cjs` — 8 tests covering all filter modes (all, today, week, month, custom with start/end/both/neither). All pass.
