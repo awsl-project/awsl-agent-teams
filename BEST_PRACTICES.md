@@ -52,7 +52,8 @@ awsl run "goal" --engine claude-code
 检查代码质量             →  awsl review
 排队多任务，通宵执行     →  awsl queue add "goal" + awsl queue start
 定时调度任务             →  awsl queue add "goal" --at "03:00"
-一句话排队多任务         →  awsl queue plan "先做A，然后B，最后C"
+一句话排队（先预览）     →  awsl queue split "先做A，然后B，最后C"
+一句话排队（直接添加）   →  awsl queue plan "先做A，然后B，最后C"
 一键启动所有服务          →  awsl start
 启动并配置远程面板        →  awsl start --server http://server:3120
 停止所有服务              →  awsl stop
@@ -1177,20 +1178,47 @@ awsl queue show q_1
 awsl queue start
 ```
 
-### 自然语言排队（推荐）
+### 自然语言排队
 
-不想一条条 `queue add`？一句话搞定：
+不想一条条 `queue add`？一句话搞定。有三种方式添加任务，适用不同场景：
+
+| 命令 | 说明 | 适用场景 |
+|------|------|---------|
+| `queue split` | **推荐。** 先预览再确认，不满意可以取消 | 日常使用，想确认拆分结果再添加 |
+| `queue plan` | 直接添加，无预览（向后兼容） | 脚本自动化、确定不需要预览 |
+| `queue add` | 手动添加单个任务 | 精确控制每个任务的 goal 和依赖 |
+
+**`queue split`（推荐）：**
 
 ```bash
-awsl queue plan "先构建用户认证 REST API（Express + JWT），然后在认证基础上加 RBAC 权限，最后写集成测试" --engine claude-code
+awsl queue split "先构建用户认证 REST API（Express + JWT），然后在认证基础上加 RBAC 权限，最后写集成测试" --engine claude-code
 ```
 
-AWSL 会调用 Claude 自动解析为：
+输出预览表格，等待确认：
 ```
-  q_1  (none)  构建用户认证 REST API（Express + JWT）
-  q_2  q_1     在认证基础上添加 RBAC 权限系统
-  q_3  all     写集成测试
+Planned tasks:
+
+  #   Deps       Goal
+  ─────────────────────────────────────────────────
+  1   (none)     构建用户认证 REST API（Express + JWT）
+  2   1          在认证基础上添加 RBAC 权限系统
+  3   all        写集成测试
+
+确认添加 3 个任务到队列？(y/N)
 ```
+
+输入 `y` 后才添加到队列。使用 `--yes` 跳过确认（适合脚本）：
+```bash
+awsl queue split "..." --yes
+```
+
+**`queue plan`（无预览，向后兼容）：**
+
+```bash
+awsl queue plan "先构建用户认证，然后加支付，最后测试" --engine claude-code
+```
+
+直接添加到队列，不显示预览，不要求确认。
 
 **关键词推断规则：**
 - "先...然后...最后" → 顺序依赖链
@@ -1200,7 +1228,7 @@ AWSL 会调用 Claude 自动解析为：
 
 **选项继承：** `--engine`、`--quick`、`--concurrency` 会应用到所有解析出的任务。
 
-**提示：** 解析后先 `awsl queue list` 确认，不满意可以 `awsl queue clear` 重来。
+**提示：** `queue split` 自带预览，不满意直接输入 `n` 取消。`queue plan` 添加后可用 `awsl queue list` 确认，不满意用 `awsl queue clear` 重来。
 
 ### 依赖管理
 
@@ -1300,8 +1328,8 @@ awsl queue add "goal" \
 ```bash
 # 1. 排好队列（二选一）
 
-# 方式 A：一句话自然语言
-awsl queue plan "先用 Express+TS 构建电商 API（商品、购物车、订单、支付），然后加用户系统（注册登录个人中心），再加后台管理，最后全面集成测试" --engine claude-code
+# 方式 A：一句话自然语言（推荐用 split，先预览再确认）
+awsl queue split "先用 Express+TS 构建电商 API（商品、购物车、订单、支付），然后加用户系统（注册登录个人中心），再加后台管理，最后全面集成测试" --engine claude-code
 
 # 方式 B：逐条添加（精确控制依赖）
 awsl queue add "用 Express+TS 构建电商 API：商品、购物车、订单、支付" --engine claude-code

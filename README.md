@@ -261,7 +261,10 @@ awsl queue add "Deploy to staging" --at "2026-03-10 03:00" # specific datetime
 awsl queue add "Cleanup temp files" --at "+30m"            # 30 minutes from now
 awsl queue add "Heavy refactor" --at "+2h"                 # 2 hours from now
 
-# Or: describe everything in natural language — auto-split into tasks with dependencies
+# Or: describe everything in natural language — preview before committing (recommended)
+awsl queue split "Build auth, then payments, finally integration tests" --engine claude-code
+
+# Or: auto-split without preview (backward-compatible)
 awsl queue plan "First build user auth with JWT, then add payment with Stripe, finally write E2E tests" --engine claude-code
 
 # Review the queue
@@ -276,7 +279,36 @@ awsl queue start
 
 ### Natural Language Queue Planning
 
-Describe multiple tasks in one sentence — AWSL uses Claude to parse them into structured queue tasks with inferred dependencies.
+Describe multiple tasks in one sentence — AWSL uses Claude to parse them into structured queue tasks with inferred dependencies. Two commands are available:
+
+**`queue split` (recommended)** — Preview before committing. Shows a table of planned tasks and asks for confirmation before adding to the queue. Use `--yes` to skip the confirmation prompt.
+
+```bash
+awsl queue split "Build auth, then payments, finally integration tests" --engine claude-code
+```
+
+Output:
+```
+Planned tasks:
+
+  #   Deps       Goal
+  ─────────────────────────────────────────────────
+  1   (none)     Build auth module
+  2   1          Add payment integration
+  3   all        Write integration tests
+
+Confirm? Add 3 task(s) to queue? (y/N) y
+
+Added 3 task(s):
+
+  ID       Deps       Goal
+  ------------------------------------------------------------
+  q_1      (none)     Build auth module
+  q_2      q_1        Add payment integration
+  q_3      all        Write integration tests
+```
+
+**`queue plan`** — Adds tasks directly without preview (backward-compatible).
 
 ```bash
 awsl queue plan "先构建用户认证，然后加支付模块，最后写集成测试" --engine claude-code
@@ -903,7 +935,9 @@ awsl queue add "Add auth" --depends-on q_1   # Add with dependency
 awsl queue add "Write tests" --depends-on all # Wait for all prior tasks
 awsl queue add "Nightly build" --at "03:00"  # Schedule for 3:00 AM
 awsl queue add "Later task" --at "+2h"       # Schedule 2 hours from now
-awsl queue plan "First auth, then payments, finally tests"  # Natural language → auto-split
+awsl queue split "First auth, then payments, finally tests" # Natural language → preview → confirm → add
+awsl queue split "..." --yes                             # Skip confirmation prompt
+awsl queue plan "First auth, then payments, finally tests"  # Natural language → auto-split (no preview)
 awsl queue list                               # Show queue status
 awsl queue show q_1                           # Show detailed info for a single task
 awsl queue remove q_1                         # Remove a task

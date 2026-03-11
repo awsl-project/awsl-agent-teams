@@ -261,7 +261,10 @@ awsl queue add "部署到测试环境" --at "2026-03-10 03:00" # 指定日期时
 awsl queue add "清理临时文件" --at "+30m"               # 30 分钟后
 awsl queue add "大规模重构" --at "+2h"                  # 2 小时后
 
-# 或者：用自然语言一句话描述，自动拆分为多个任务并推断依赖
+# 或者：用自然语言描述，先预览再确认添加（推荐）
+awsl queue split "先构建认证，然后加支付，最后写集成测试" --engine claude-code
+
+# 或者：自然语言直接添加，无预览（向后兼容）
 awsl queue plan "先构建用户认证，然后加支付模块，最后写集成测试" --engine claude-code
 
 # 查看队列
@@ -276,7 +279,36 @@ awsl queue start
 
 ### 自然语言队列规划
 
-一句话描述多个任务 — AWSL 使用 Claude 自动解析为结构化队列任务，并推断依赖关系。
+一句话描述多个任务 — AWSL 使用 Claude 自动解析为结构化队列任务，并推断依赖关系。提供两种命令：
+
+**`queue split`（推荐）** — 先预览再确认。展示拆分结果表格，确认后才添加到队列。使用 `--yes` 可跳过确认提示。
+
+```bash
+awsl queue split "先构建认证，然后加支付，最后写集成测试" --engine claude-code
+```
+
+输出：
+```
+Planned tasks:
+
+  #   Deps       Goal
+  ─────────────────────────────────────────────────
+  1   (none)     构建认证模块
+  2   1          添加支付集成
+  3   all        写集成测试
+
+确认添加 3 个任务到队列？(y/N) y
+
+Added 3 task(s):
+
+  ID       Deps       Goal
+  ------------------------------------------------------------
+  q_1      (none)     构建认证模块
+  q_2      q_1        添加支付集成
+  q_3      all        写集成测试
+```
+
+**`queue plan`** — 直接添加，无预览（向后兼容）。
 
 ```bash
 awsl queue plan "先构建用户认证，然后加支付模块，最后写集成测试" --engine claude-code
@@ -898,7 +930,9 @@ awsl queue add "添加认证" --depends-on q_1     # 带依赖的任务
 awsl queue add "写测试" --depends-on all       # 等待所有前置任务
 awsl queue add "通宵构建" --at "03:00"         # 定时调度到凌晨 3 点
 awsl queue add "延后任务" --at "+2h"           # 2 小时后执行
-awsl queue plan "先认证，然后支付，最后测试"    # 自然语言 → 自动拆分
+awsl queue split "先认证，然后支付，最后测试"   # 自然语言 → 预览 → 确认 → 添加
+awsl queue split "..." --yes                   # 跳过确认提示
+awsl queue plan "先认证，然后支付，最后测试"    # 自然语言 → 直接添加（无预览）
 awsl queue list                                # 查看队列
 awsl queue show q_1                            # 查看单个任务详情
 awsl queue remove q_1                          # 移除任务
