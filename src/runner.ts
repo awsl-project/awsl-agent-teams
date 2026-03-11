@@ -116,9 +116,12 @@ ${memSummary === "(empty)" ? "No shared data yet." : memSummary}
 		write: "Write",
 		edit: "Edit",
 		bash: "Bash",
+		grep: "Grep",
+		glob: "Glob",
+		agent: "Agent",
 	};
 	const allowedTools = agentDef.tools
-		? agentDef.tools.map(t => toolMap[t]).filter(Boolean)
+		? agentDef.tools.map(t => toolMap[t.toLowerCase()] ?? t).filter(Boolean)
 		: ["Read", "Write", "Edit", "Bash", "Grep", "Glob"];
 
 	// Resolve claude CLI path — on Windows, claude is a .cmd wrapper;
