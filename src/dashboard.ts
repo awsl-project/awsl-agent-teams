@@ -121,18 +121,36 @@ export function startDashboard(cwd: string, port: number = 3120, host: string = 
 			return;
 		}
 
+		if (url.pathname === "/api/discussions" && req.method === "GET") {
+			const data = loadHistory(cwd);
+			const discussions = data.entries
+				.filter((e: any) => e.mode === "discuss" && e.answer)
+				.map((e: any) => ({
+					id: e.queueTaskId,
+					question: e.goal,
+					answer: e.answer,
+					agents: e.agents ?? [],
+					date: e.completedAt,
+					duration: e.duration,
+					costUsd: e.costUsd ?? 0,
+				}));
+			res.writeHead(200, { "Content-Type": "application/json" });
+			res.end(JSON.stringify(discussions));
+			return;
+		}
+
 		// ── Queue mutations ───────────────────────────────
 		if (req.method === "POST" && url.pathname === "/api/queue/add") {
 			collectBody(req, res, (body) => {
 				try {
-					const { goal, engine, quick, dependsOn, runAt } = JSON.parse(body);
+					const { goal, engine, quick, dependsOn, runAt, mode, discussRounds } = JSON.parse(body);
 					if (!goal || typeof goal !== "string") {
 						res.writeHead(400, { "Content-Type": "application/json" });
 						res.end(JSON.stringify({ error: "goal is required" }));
 						return;
 					}
 					const queue = new TaskQueue(cwd);
-					const task = queue.add(goal, { quick: !!quick }, { engine, dependsOn, runAt });
+					const task = queue.add(goal, { quick: !!quick, discussRounds }, { engine, dependsOn, runAt, mode });
 					res.writeHead(200, { "Content-Type": "application/json" });
 					res.end(JSON.stringify(task));
 				} catch {
