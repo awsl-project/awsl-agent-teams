@@ -15,7 +15,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { createInterface } from "node:readline";
-import { loadAgents, saveAgent, deleteAgent, getAgent, serializeAgent, BUILTINS } from "./agents.js";
+import { loadAgents, saveAgent, deleteAgent, getAgent, serializeAgent, BUILTINS, PROMPT_TEMPLATES, getPromptTemplates, composePromptPreview } from "./agents.js";
+import { SkillRegistry } from "./skills.js";
 import { executeTeam } from "./orchestrator.js";
 import { type Engine, detectEngine } from "./runner.js";
 import { validatePlan } from "./validate.js";
@@ -53,6 +54,7 @@ Commands:
     --description <text>     Agent description
     --prompt <text>          Inline system prompt
     --prompt-file <path>     Read system prompt from file
+    --template <name>        Pre-populate prompt from built-in template
     --tools <a,b,c>          Comma-separated tools
     --model <model>          Model override
     --skills <a,b,c>         Comma-separated skills
@@ -60,6 +62,12 @@ Commands:
   agents edit <name>       Update an existing custom agent (same flags as create)
   agents delete <name>     Delete a custom agent file
   agents reset <name>      Reset a builtin agent to defaults (removes override file)
+  agents templates         List available prompt templates
+  agents prompt <name>     Edit agent prompt interactively (opens $EDITOR)
+    --show                   Print current prompt to stdout
+    --set <text>             Set prompt inline
+    --file <path>            Set prompt from file
+  agents preview <name>    Show full composed prompt (base + skills + team context)
   dashboard [--port N]     Open the sleep mode pixel dashboard (default: 3120)
   dashboard --bg           Start dashboard in background (detached)
   dashboard stop           Stop background dashboard
@@ -135,6 +143,7 @@ import type { TeamAgentDef } from "./agents.js";
 
 function parseAgentFlags(flagArgs: string[]): Partial<Omit<TeamAgentDef, "name" | "source">> {
 	const result: Partial<Omit<TeamAgentDef, "name" | "source">> = {};
+	let templateName: string | undefined;
 	for (let i = 0; i < flagArgs.length; i++) {
 		const arg = flagArgs[i];
 		const next = () => {
@@ -149,12 +158,25 @@ function parseAgentFlags(flagArgs: string[]): Partial<Omit<TeamAgentDef, "name" 
 			if (!fs.existsSync(filePath)) { console.error(`Prompt file not found: ${filePath}`); process.exit(1); }
 			result.systemPrompt = fs.readFileSync(filePath, "utf-8");
 		}
+		else if (arg === "--template") templateName = next();
 		else if (arg === "--tools") result.tools = next().split(",").map(s => s.trim()).filter(Boolean);
 		else if (arg === "--model") result.model = next();
 		else if (arg === "--skills") result.skills = next().split(",").map(s => s.trim()).filter(Boolean);
 		else if (arg === "--thinking") result.thinkingLevel = next();
 		else if (arg === "--cwd") { i++; } // skip --cwd, handled by parseCwdAndForce
 	}
+
+	// Apply template (--prompt/--prompt-file override template; template sets role if not explicit)
+	if (templateName) {
+		const tmpl = PROMPT_TEMPLATES[templateName];
+		if (!tmpl) {
+			console.error(`Unknown template "${templateName}". Available: ${Object.keys(PROMPT_TEMPLATES).join(", ")}`);
+			process.exit(1);
+		}
+		if (!result.systemPrompt) result.systemPrompt = tmpl.prompt;
+		if (!result.role) result.role = templateName;
+	}
+
 	return result;
 }
 
@@ -488,9 +510,103 @@ async function main() {
 			process.exit(0);
 		}
 
+		if (sub === "templates") {
+			const templates = getPromptTemplates();
+			console.log("Available prompt templates:\n");
+			for (const t of templates) {
+				console.log(`  ${t.name}`);
+				console.log(`    ${t.description}`);
+				console.log();
+			}
+			console.log(`Use with: awsl agents create <name> --template <template>`);
+			process.exit(0);
+		}
+
+		if (sub === "prompt") {
+			const name = args[2];
+			if (!name) { console.error("Usage: awsl agents prompt <name> [--show | --set <text> | --file <path>]"); process.exit(1); }
+			const agent = getAgent(agentsDirs, name);
+			if (!agent) { console.error(`Agent "${name}" not found.`); process.exit(1); }
+
+			// Parse prompt subcommand flags
+			let mode: "show" | "set" | "file" | "editor" = "editor";
+			let value = "";
+			for (let i = 3; i < args.length; i++) {
+				if (args[i] === "--show") mode = "show";
+				else if (args[i] === "--set" && i + 1 < args.length) { mode = "set"; value = args[++i]; }
+				else if (args[i] === "--file" && i + 1 < args.length) { mode = "file"; value = args[++i]; }
+				else if (args[i] === "--cwd") { i++; } // skip --cwd
+			}
+
+			if (mode === "show") {
+				console.log(agent.systemPrompt);
+				process.exit(0);
+			}
+
+			if (mode === "set") {
+				saveAgent(agentsDir, { name, systemPrompt: value });
+				console.log(`Updated prompt for "${name}".`);
+				process.exit(0);
+			}
+
+			if (mode === "file") {
+				const filePath = path.resolve(value);
+				if (!fs.existsSync(filePath)) { console.error(`File not found: ${filePath}`); process.exit(1); }
+				const content = fs.readFileSync(filePath, "utf-8");
+				saveAgent(agentsDir, { name, systemPrompt: content });
+				console.log(`Updated prompt for "${name}" from ${filePath}.`);
+				process.exit(0);
+			}
+
+			// mode === "editor": open $EDITOR
+			const editor = process.env.EDITOR || process.env.VISUAL || (process.platform === "win32" ? "notepad" : "vi");
+			const os = await import("node:os");
+			const tmpFile = path.join(os.tmpdir(), `awsl-prompt-${name}-${Date.now()}.md`);
+			fs.writeFileSync(tmpFile, agent.systemPrompt, "utf-8");
+			try {
+				const { spawnSync } = await import("node:child_process");
+				const result = spawnSync(editor, [tmpFile], { stdio: "inherit", shell: true });
+				if (result.status !== 0) {
+					console.error(`$EDITOR exited with code ${result.status}. No changes saved.`);
+					process.exit(1);
+				}
+				const newPrompt = fs.readFileSync(tmpFile, "utf-8");
+				if (newPrompt === agent.systemPrompt) {
+					console.log("No changes detected.");
+				} else {
+					saveAgent(agentsDir, { name, systemPrompt: newPrompt });
+					console.log(`Updated prompt for "${name}".`);
+				}
+			} finally {
+				try { fs.unlinkSync(tmpFile); } catch { /* ignore cleanup errors */ }
+			}
+			process.exit(0);
+		}
+
+		if (sub === "preview") {
+			const name = args[2];
+			if (!name) { console.error("Usage: awsl agents preview <name>"); process.exit(1); }
+			const allAgents = loadAgents(agentsDirs);
+			const agent = allAgents.find(a => a.name === name);
+			if (!agent) { console.error(`Agent "${name}" not found.`); process.exit(1); }
+
+			const registry = new SkillRegistry();
+			const skillInstructions = registry.buildInstructions(agent.role, agent.skills);
+			const { composed, sections } = composePromptPreview(agent, allAgents, skillInstructions);
+
+			console.log("=== Composed Prompt Preview ===\n");
+			console.log(composed);
+			console.log(`\n=== Section Sizes ===`);
+			console.log(`  Base prompt:  ${sections.base.length} chars`);
+			console.log(`  Skills:       ${sections.skills.length} chars`);
+			console.log(`  Team roster:  ${sections.team.length} chars`);
+			console.log(`  Total:        ${composed.length} chars`);
+			process.exit(0);
+		}
+
 		// Default: list all agents
 		if (sub && !sub.startsWith("--")) {
-			console.error(`Unknown subcommand: ${sub}. Use: show, create, edit, delete, reset`);
+			console.error(`Unknown subcommand: ${sub}. Use: show, create, edit, delete, reset, templates, prompt, preview`);
 			process.exit(1);
 		}
 

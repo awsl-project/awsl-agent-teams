@@ -1,30 +1,32 @@
-# task_6: Create tests/agents.test.ts using node:test and node:assert/
+# task_6: Unit tests for agent CRUD
 
 Assignee: tester
 Status: done
 
 ## Result
-All 25 tests pass across 6 test suites.
+Type check clean.
 
 ## AWSL_RESULT
 
-### Task 6 Complete: Agent CRUD Tests (`tests/agents.test.ts`)
+### Task 6: Unit Tests for Agent CRUD — Complete
 
-**Framework:** `node:test` + `node:assert/strict`
+Enhanced `tests/agents.test.ts` with comprehensive coverage. Added **7 new describe blocks** and **32 new tests** (25 existing → 57 total).
 
-**6 test suites, 25 tests — all passing:**
+### Test Suites Added
 
 | Suite | Tests | Coverage |
 |-------|-------|----------|
-| `serializeAgent` | 4 | Basic serialization, optional fields, omits undefined, round-trip |
-| `saveAgent` | 4 | New agent, merge update, atomic write, nested dirs |
-| `deleteAgent` | 2 | Delete existing (returns true), non-existent (returns false) |
-| `getAgent` | 4 | Builtin lookup, custom lookup, not-found, builtin override |
-| `saveAgent name validation` | 7 | Uppercase, leading digit, underscore, empty, too long, boundary (50), special chars |
-| `BUILTINS` | 4 | Non-empty, all 5 agents present, source=builtin, frozen |
+| `loadAgents` | 9 | Multiple dirs, precedence, non-existent dirs, non-.md files, missing name, invalid schema, no frontmatter |
+| `PROMPT_TEMPLATES` | 4 | 7 roles, shape validation, Guidelines section, report instruction |
+| `getPromptTemplates` | 4 | Array conversion, fields, key matching, value matching |
+| `composePromptPreview` | 7 | All sections, self-exclusion, sections breakdown, empty skills, roster format, solo agent, 10-agent roster |
+| `saveAgent defaults` | 5 | Default role/description/prompt, empty tools array, full overwrite |
+| `deleteAgent edge cases` | 3 | Delete→get undefined, re-create after delete, double delete |
 
-**File created:**
-- `tests/agents.test.ts`
+### Test Results
+- **57/57 tests pass** (12 suites, 0 failures)
+- TypeScript type-check: clean
+- Existing `src/agents.test.ts`: 24/24 still pass
 
-**Verification:**
-- `npx tsx tests/agents.test.ts` — 25/25 passed, 0 failed
+### Files Modified
+- **`tests/agents.test.ts`** — Added imports for `PROMPT_TEMPLATES`, `getPromptTemplates`, `composePromptPreview` + 7 new describe blocks with 32 tests
