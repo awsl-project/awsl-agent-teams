@@ -1,25 +1,27 @@
-# task_4: Update all three documentation files:
-
-1) README.md: Find th
+# task_4: Add an 'Agent Roles' (角色管理) collapsible card section to publ
 
 Assignee: coder
 Status: done
 
 ## Result
-All three documentation files contain the date filter feature documentation:
-
-- **README.md:407** — English date filter description in the Dashboard features list
-- **README.zh-CN.md:407** — Chinese equivalent in the same location
-- **BEST_PRACTICES.md:1408-1411** — Usage guidance for productivity analysis with date filters
+All 25 tests pass. Type-check clean.
 
 ## AWSL_RESULT
 
-### Deliverable: Date Filter Documentation
+### Task 4 Complete: Agent Roles (角色管理) Dashboard UI
 
-**Files modified:**
+**Added to `public/dashboard.html`:**
 
-1. **README.md** (line 407): Added `- **Date filter** — Filter statistics by day, week, month, or custom date range. All dashboard widgets update in real-time based on the selected time period` to the Dashboard features list.
+| Component | Description |
+|-----------|-------------|
+| **Agent Roles Card** | Collapsible `角色管理` section with `[+New]` and `[Collapse]` buttons. Displays agent cards in a flex grid. Each card shows: name, role badge (color-coded), source badge (`built-in` grey / `custom` green / `override` yellow), and truncated description. Cards are clickable to open editor. |
+| **Agent Editor Modal** | Overlay modal with fields: Name (readonly when editing), Role (dropdown), Description, Model, Tools (comma-separated), Skills (comma-separated), Thinking Level (dropdown), System Prompt (monospace textarea, 200px min height). Action buttons: `[Save]`, `[Reset to Default]` (only for overridden builtins), `[Delete]` (only for custom/override agents), `[Cancel]`. |
+| **JavaScript CRUD** | `loadAgentRoles()` — GET /api/agents, `openAgentEditor(name?)` — open modal pre-filled or blank, `saveAgentFromEditor()` — POST (new) or PUT (edit), `deleteAgentFromEditor()` — DELETE with confirmation, `resetAgentToDefault()` — DELETE override to restore builtin default. |
+| **Auto-refresh** | `loadAgentRoles()` + `renderAgentRoles()` called on init and in 30s refresh interval. |
 
-2. **README.zh-CN.md** (line 407): Added `- **日期筛选** — 支持按天、周、月或自定义日期范围筛选统计数据。所有面板组件根据所选时间段实时更新` to the Dashboard features list.
+**CSS added:** ~160 lines matching existing dashboard style (card-based layout, var() colors, responsive breakpoints).
 
-3. **BEST_PRACTICES.md** (lines 1408-1411): Added a "日期筛选器" section in the dashboard advanced features area with guidance on using date filters for productivity analysis (daily completion, monthly comparison, custom range for project cycles), quick-select buttons, month/custom date inputs, and real-time widget updates.
+**Verification:**
+- `npx tsc --noEmit` — clean, no errors
+- `tests/agents.test.ts` — **25/25 passed**
+- All UI follows existing patterns (card layout, badge styling, modal overlay, responsive `@media` rules)
