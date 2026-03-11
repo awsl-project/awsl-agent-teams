@@ -21,9 +21,14 @@
       "options": {
         "quick": false
       },
-      "status": "running",
+      "status": "done",
       "scheduledAt": "2026-03-10T14:58:20.207Z",
-      "startedAt": "2026-03-11T01:01:01.694Z"
+      "startedAt": "2026-03-11T01:01:01.694Z",
+      "completedAt": "2026-03-11T01:23:17.827Z",
+      "result": {
+        "success": true,
+        "summary": "✅ 5/5 tasks completed successfully.\n\n✅ task_1 (coder): Create src/summary.ts implementing the night session summary module per the d... [src/summary.ts]\n   → ## AWSL_RESULT\n\n### Deliverable: `src/summary.ts` — Night Session Summary Module\n\n**Status:** Complete — compiles with zero errors, all 9 tests pass.\n\n### Files Created\n\n| File | Description |\n|------|-------------|\n| `src/summary.ts` | Core module: types, `computeTimeRange()`, `generateSummary()`,\n\n✅ task_2 (coder): Integrate the summary command into CLI and add public exports.\n\n1. src/cli.ts... [src/cli.ts, src/index.ts]\n   → All 20 original tests pass. All 3 CLI integration tests pass. Type-check clean.\n\n## AWSL_RESULT\n\n### Deliverable: CLI Summary Integration + Public Exports\n\n**Status:** Complete — zero type errors, all tests pass (20 module + 3 CLI integration).\n\n### Files Modified\n\n| File | Changes |\n|------|-------\n\n✅ task_3 (tester): Create src/summary.test.ts with comprehensive tests using node:test.\n\nTests t... [src/summary.test.ts]\n   → No type errors in `summary.test.ts`.\n\n## AWSL_RESULT\n\n### Deliverable: `src/summary.test.ts` — Comprehensive Tests (node:test)\n\n**Status:** Complete — 20 tests pass, zero type errors.\n\n### Test Structure\n\n| Suite | Tests | Coverage |\n|-------|-------|----------|\n| `computeTimeRange` | 8 | before 6AM\n\n✅ task_4 (coder): Add documentation for the awsl summary command to all three doc files.\n\n1. RE... [README.md, README.zh-CN.md, BEST_PRACTICES.md]\n   → Sections 0-19, all sequential with no gaps or duplicates.\n\n## AWSL_RESULT\n\n### Deliverable: Documentation for `awsl summary` in all three doc files\n\n**Status:** Complete — all three files updated, 37 mentions of \"summary\" across docs, type-check clean.\n\n### Files Modified\n\n| File | Changes |\n|------\n\n✅ task_5 (reviewer): Review the night session summary implementation for:\n\n1. Security:\n   - Check... [src/summary.ts, src/cli.ts, src/summary.test.ts]\n   → All tests pass and type-check is clean. Now let me compile my review findings.\n\n## AWSL_RESULT\n\n### Security & Code Review: Night Session Summary\n\n**Verdict: PASS** — No critical or high-severity issues found. 2 minor findings noted.\n\n---\n\n### Findings\n\n**1. [WARN] Minor — Git commit message delimit"
+      }
     },
     {
       "id": "q_3",
@@ -31,8 +36,9 @@
       "options": {
         "quick": false
       },
-      "status": "pending",
-      "scheduledAt": "2026-03-10T15:00:03.122Z"
+      "status": "running",
+      "scheduledAt": "2026-03-10T15:00:03.122Z",
+      "startedAt": "2026-03-11T01:23:17.854Z"
     },
     {
       "id": "q_4",
@@ -54,5 +60,5 @@
     }
   ],
   "createdAt": "2026-03-10T14:57:06.247Z",
-  "updatedAt": "2026-03-11T01:01:01.694Z"
+  "updatedAt": "2026-03-11T01:23:17.854Z"
 }

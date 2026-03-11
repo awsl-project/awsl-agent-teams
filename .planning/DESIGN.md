@@ -1,37 +1,37 @@
 ## AWSL_RESULT
 
-### Design: Night Session Summary Module (`awsl summary`)
+### Design: Discussion Mode (多Agent讨论模式)
 
-**Approach:** History + Git Hybrid (Approach B)
+**Approach:** New `src/discuss.ts` module — separate from the build pipeline, called from queue when `mode === "discuss"`.
 
-**Why:** Uses existing data (HISTORY.json + git log) without new state files. Captures both automated queue tasks and manual commits. Simple, extensible.
+**Discussion Flow:**
+1. **Parallel Perspectives** — All agents (architect, coder, reviewer, tester) independently analyze the question from their role
+2. **Debate Rounds** (optional, 1-3) — Agents respond to each other's perspectives
+3. **Synthesis** — Combined into a final coherent answer
+4. **Persist** — `.planning/DISCUSSION-{id}.md` + answer in HISTORY.json
 
-### Key Decisions
+**Key Data Model Changes:**
+- `QueueTask.mode?: "build" | "discuss"` — backward compatible
+- `HistoryEntry.mode?` + `HistoryEntry.answer?` — stores discussion output
+- `SessionSummary.discussions[]` — rendered in summary timeline
 
-| Decision | Rationale |
-|----------|-----------|
-| Cross-midnight auto-detection | If now < 06:00 → last night; if now >= 22:00 → tonight; else → last night |
-| Multi-project via `--all-projects` | Reuses `ProjectManager.list()` to aggregate across registered projects |
-| `--json` flag for scripting | Enables dashboard API integration later |
-| Git log for completeness | Captures manual work not tracked by queue |
-| No new persistence files | Pure read-only aggregation over existing data |
+**Integration Points:**
+| Component | Change |
+|-----------|--------|
+| `src/discuss.ts` | **NEW** — discussion orchestration (~150 lines) |
+| `src/queue.ts` | Branch on mode: discuss → `discussTeam()`, build → `executeTeam()` |
+| `src/history.ts` | Add `mode` and `answer` fields |
+| `src/summary.ts` | Add discussions section to summary output |
+| `src/dashboard.ts` | Accept `mode` in queue/add API, new `/api/discussions` endpoint |
+| `src/cli.ts` | `--discuss` flag, `--rounds N`, `awsl discuss` alias |
+| Dashboard HTML | Toggle switch for discussion mode, answer display in timeline |
 
-### Interfaces
+**Why this approach:**
+- Clean separation — discussion pipeline ≠ build pipeline
+- Minimal changes to existing code — only queue.ts needs a branch
+- All new fields are optional → zero migration cost
+- Naturally fits the queue/sleep model — question goes in, answer comes out overnight
 
-- `SessionSummary` — tasks (total/done/failed/entries), git (commits), metrics (duration/cost/tokens), agent breakdown, projects
-- `SummaryOptions` — from, to, date, allProjects, cwd
-- `TimeRange`, `CommitInfo` — supporting types
-
-### Execution Plan (4 tasks, 3 waves)
-
-| Wave | Task | Assignee | Description |
-|------|------|----------|-------------|
-| 1 | task_1 | coder | Core `src/summary.ts` module |
-| 2 | task_2 | coder | CLI integration + index exports |
-| 2 | task_3 | coder | Documentation (README, README.zh-CN, BEST_PRACTICES) |
-| 3 | task_4 | reviewer | Security + correctness review |
-
-### Files Produced
-
-- `.planning/designs/night-summary.md` — Full design document
-- `.planning/PLAN.md` — Execution plan ready for `/awsl-go`
+**Design documents produced:**
+- `.planning/designs/discussion-mode.md` — Full design (detailed)
+- `.planning/designs/discussion-mode-summary.md` — Implementation guide (concise)

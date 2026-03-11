@@ -1,86 +1,95 @@
-## AWSL_RESULT
-
-### Guardian Two-Stage Verification Report
+Now I have all the data. Let me compile the full two-stage review.
 
 ---
 
 ## Stage 1: Spec Compliance
 
-### [task_1] Aggregate all-machines stats in render()
+### [task_1] Core summary module
+- **[PASS] Compilation:** `npx tsc --noEmit` — zero errors
+- **[PASS] Exports:** `computeTimeRange` (line 73), `generateSummary` (line 144), `formatSummary` (line 269) all exported
+- **[PASS] Types:** `TimeRange`, `CommitInfo`, `SessionSummary`, `SummaryOptions` all exported
 
-**1. [FAIL] Spec: Deduplication not implemented**
-- **Severity:** critical
-- **Location:** `public/dashboard.html:1343-1354`
-- **Description:** The architect's design (`.planning/design-stats-machines.md:48-66`) explicitly specifies deduplication using `id + startedAt` composite key to prevent double-counting when the dashboard machine is also a remote client. The coder's implementation uses a simple `.concat()` with no dedup logic at all.
-- **Spec reference:** Design doc line 73-76: "Use `id + startedAt` as composite key. This handles the edge case where the dashboard machine also connects as a remote client."
-- **Suggestion:** Replace `.concat(cs.history)` with the `seen{}` hash-based dedup from the design doc.
+### [task_2] CLI integration + public exports
+- **[PASS] Usage:** `summary [options]` listed in `usage()` at `cli.ts:55-59` with all flags
+- **[PASS] Command handler:** `cli.ts:729-754` parses `--from`, `--to`, `--date`, `--all-projects`, `--cwd`
+- **[PASS] Public exports:** `index.ts:39` re-exports all summary functions and types
 
-**2. [FAIL] Spec: Queue should NOT be aggregated**
-- **Severity:** critical
-- **Location:** `public/dashboard.html:1346,1350,1353`
-- **Description:** The architect's design explicitly states: "Queue is action-oriented. When no machine is selected, show local queue." (design doc lines 79-81, 95). The implementation aggregates queue tasks from all machines (`allQt.concat(cs.queue)`), directly contradicting the spec.
-- **Spec reference:** Design doc line 80: "**No change**. Queue is action-oriented (add/remove/start tasks). When no machine is selected, show local queue."
-- **Suggestion:** Remove lines 1346, 1350, 1353 — leave `qt` as the local queue only in the aggregated view.
+### [task_3] Comprehensive tests
+- **[PASS] Tests pass:** 20/20 pass, 0 fail (`npx tsx --test src/summary.test.ts`)
+- **[PASS] Coverage:** 8 time-range tests, 7 generateSummary tests, 5 formatSummary tests — covers filtering, aggregation, boundaries, edge cases, and formatting
 
-**3. [PASS] Spec: Stats cards show aggregated data when no client selected**
-- Done criteria met for history entries — the `else if` branch correctly aggregates `hist.entries` + all remote `status.history`.
+### [task_4] Documentation
+- **[PASS] Doc coverage:** README.md (13 mentions), README.zh-CN.md (8 mentions), BEST_PRACTICES.md (16 mentions)
 
-**4. [PASS] Spec: Selected client shows only that client's data**
-- The `if (selectedClient)` branch at line 1339 is unchanged and correct.
-
-### [task_2] Review the render() function change
-
-**5. [PASS] Spec: All issues flagged**
-- The reviewer correctly identified both the duplicate entries problem (#1) and the queue action mismatch (#4). Done criteria met: "all issues flagged for fix."
+### [task_5] Security review
+- **[PASS] No critical/high issues:** Reviewer found 2 minor items, verdict PASS
 
 ---
 
 ## Stage 2: Code Quality
 
-**6. [WARN] Duplicate entries cause incorrect stats — confirmed by reviewer finding #1**
-- **Severity:** major
-- **Location:** `public/dashboard.html:1345-1349`
-- **Description:** When the dashboard host also registers as a remote client, all its history entries are counted twice. Stats (Done, Failed, Total Time, Cost) will be inflated by 2x for that machine's contributions.
+### Findings
 
-**7. [WARN] Queue actions operate on wrong target — confirmed by reviewer finding #4**
-- **Severity:** major
-- **Location:** `public/dashboard.html:1295-1331` + `1595-1636`
-- **Description:** In the aggregated view, `removeTask()`, `clearQueue()`, and `startQueue()` all operate on local queue only, while the rendered table shows tasks from all machines. The delete button could fail silently for remote tasks or accidentally delete a local task with the same ID.
-
-**8. [PASS] Null safety**
-- `clients[i].status` guard with `cs && cs.history` / `cs && cs.queue` is correct.
-
-**9. [PASS] Array immutability**
-- `.slice()` copies + `.concat()` returns new arrays. Original `hist.entries` not mutated.
-
-**10. [PASS] No security issues**
-- No XSS (`esc()` used on all user-facing strings), no injection vectors, no secrets in code, no auth bypass.
-
-**11. [WARN] Tests are source-pattern-based only**
+**1. [WARN] Minor — Git log `|` delimiter collision**
+- **Location:** `src/summary.ts:120,129`
 - **Severity:** minor
-- **Location:** `test/aggregate-stats.test.ts`
-- **Description:** Tests verify code patterns (regex matching on source text) rather than runtime behavior. They confirm the code structure exists but cannot catch logic bugs like missing dedup or incorrect queue aggregation.
+- **Description:** `%H|%s|%aI|%an` format uses `|` as separator, and `line.split("|")` destructures into 4 parts. If a commit message (`%s`) contains `|`, the message is truncated and `date`/`author` fields become corrupt. Only affects display — no security impact.
+- **Suggestion:** Use a rare delimiter (e.g., `%x00`) or use `split("|")` with a max-split approach that joins remaining parts back into `message`.
+
+**2. [PASS] No command injection**
+- `getGitCommits` (line 121-123): `fromISO`/`toISO` come from `Date.toISOString()` (safe). `cwd` is passed as an `execSync` option, not string-interpolated. No user-controlled data enters the command string.
+
+**3. [PASS] No secrets in code or config**
+
+**4. [PASS] Null/undefined safety**
+- `entry.duration ?? 0`, `entry.costUsd ?? 0`, etc. at lines 196-199 handle missing optional fields correctly.
+- Test at line 268 explicitly verifies this.
+
+**5. [WARN] Minor — No input validation on `--from`/`--to` format**
+- **Location:** `src/summary.ts:57-59`
+- **Severity:** minor
+- **Description:** `parseHHMM` does no validation. A malformed `--from` value (e.g., `"abc"`) produces `NaN` hours/minutes, creating invalid Date objects. The result is an empty summary (no crash), but could confuse users.
+- **Suggestion:** Add a simple regex check (e.g., `/^\d{2}:\d{2}$/`) and throw a descriptive error.
+
+**6. [PASS] Error handling** — `getGitCommits` catch block degrades gracefully. `generateSummary` catch-per-project in `allProjects` mode prevents one bad project from failing the whole summary.
+
+**7. [PASS] Correctness** — Time range logic correctly handles all three branches (before 6AM, after 10PM, daytime). Boundary tests at exactly 06:00 and 22:00 verify edge behavior.
+
+**8. [PASS] Tests** — Good coverage with meaningful assertions. Uses temp directories and proper cleanup (`before`/`after` hooks).
 
 ---
 
 ## Quality Gate
 
-| # | Finding | Severity | Verdict |
-|---|---------|----------|---------|
-| 1 | Dedup not implemented (spec violation) | **critical** | FAIL |
-| 2 | Queue aggregated against spec | **critical** | FAIL |
-| 3 | Stats aggregation logic present | — | PASS |
-| 4 | Selected client logic preserved | — | PASS |
-| 5 | Reviewer flagged all issues | — | PASS |
-| 6 | Duplicate entries inflate stats | major | WARN |
-| 7 | Queue actions target wrong machine | major | WARN |
-| 8 | Null safety | — | PASS |
-| 9 | Array immutability | — | PASS |
-| 10 | Security (XSS/injection/auth) | — | PASS |
-| 11 | Tests are pattern-based only | minor | WARN |
+| Severity | Count | Blocks? |
+|----------|-------|---------|
+| Critical | 0 | No |
+| Major | 0 | No |
+| Minor | 2 | No |
 
-### Verdict: **FAIL** — 2 critical findings must be fixed
+**Verdict: PASS** — All 5 tasks meet their spec. No critical or major findings. 2 minor warnings noted (delimiter collision, input validation) — neither blocks acceptance.
 
-**Required fixes before passing:**
-1. **Add dedup logic** using `id + startedAt` composite key as specified in the design doc
-2. **Remove queue aggregation** — leave `qt` as local-only when no client is selected (per design spec)
+---
+
+## AWSL_RESULT
+
+### Guardian Two-Stage Review: Night Session Summary
+
+**Overall Verdict: PASS**
+
+| Task | Stage 1 (Spec) | Stage 2 (Quality) |
+|------|----------------|-------------------|
+| task_1: Core module | PASS | PASS |
+| task_2: CLI + exports | PASS | PASS |
+| task_3: Tests (20/20) | PASS | PASS |
+| task_4: Documentation | PASS | PASS |
+| task_5: Security review | PASS | PASS |
+
+**Verification Results:**
+- `npx tsc --noEmit`: clean
+- `npx tsx --test src/summary.test.ts`: 20 pass, 0 fail
+- Doc grep: 37 total mentions across 3 files
+
+**Minor Findings (non-blocking):**
+1. `|` delimiter in git log format may corrupt commit data if messages contain `|` (`summary.ts:120,129`)
+2. No validation on `--from`/`--to` HH:MM format (`summary.ts:57-59`)

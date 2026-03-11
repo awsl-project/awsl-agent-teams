@@ -42,6 +42,10 @@ export interface HistoryEntry {
 	agents?: string[];
 	/** Peak parallel agents across all waves */
 	maxConcurrency?: number;
+	/** Task mode: build (default) or discuss */
+	mode?: "build" | "discuss";
+	/** Final answer text — only set for discuss mode */
+	answer?: string;
 }
 
 export interface HistoryData {

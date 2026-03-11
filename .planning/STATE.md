@@ -7,6 +7,6 @@
 (none)
 
 ## Position
-- Goal: awsl现在是基于项目的吗 我能不能比我我现在有个Machines页面管理 我再加一个 项目管理 这样我的队列可以使用多个awsl执行 帮我设计合理开发方案并执行
-- Tasks: 4/4 completed
+- Goal: 要有一个模块是 总结我今晚做了啥的（所有的任务纬度 从晚上10点到早上6点
+- Tasks: 5/5 completed
 - Status: SUCCESS
