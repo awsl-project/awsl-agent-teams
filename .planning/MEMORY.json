@@ -1,75 +1,161 @@
 {
   "design": {
-    "title": "Collapsible Timeline",
-    "summary": "Add two-level collapse to the timeline section in dashboard.html: (1) section-level collapse via a button in the header, (2) day-level collapse via clickable date headers with chevrons.",
+    "title": "Projects Management Page in Dashboard",
+    "summary": "Add a dedicated Projects management section to the dashboard (modeled after Machines section) that displays all registered projects with live status, allows queue management across projects, and supports add/remove/scan operations. Backend APIs already exist — this is purely a frontend implementation.",
+
     "modify_files": ["public/dashboard.html"],
-    "approach": "CSS class toggle with JavaScript — consistent with existing entry-level expand/collapse pattern",
+    "no_backend_changes": true,
+    "reason": "All project APIs already exist: GET /api/projects, POST /api/projects/add, POST /api/projects/remove, POST /api/projects/scan, GET /api/projects/queue, POST /api/projects/queue/add, POST /api/projects/queue/start, POST /api/projects/queue/clear, GET /api/projects/history, GET /api/projects/stats",
+
+    "approach": "Add #projectsWrap card section with project cards grid, following the same interaction pattern as the Machines section. Selecting a project switches the Queue panel and Timeline to show that project's data.",
+
     "alternatives_rejected": [
-      "Native <details>/<summary> — less styling control, inconsistent cross-browser chevron",
-      "CSS checkbox hack — fragile, poor accessibility, complex markup"
+      "Tab navigation system — major UI restructure, overkill for current needs",
+      "Expand existing sidebar — limited space, poor UX for queue management"
     ],
+
     "implementation": {
       "file": "public/dashboard.html",
       "change_points": [
         {
-          "location": "CSS section (~line 370-430)",
-          "action": "Add styles for .tl-collapse-btn, .tl-collapsed, .date-group, .date-toggle, .day-collapsed, .date-count",
-          "details": "Section collapse hides #tl and #filterBar. Day collapse hides .entry children. Chevron rotates 90deg when expanded."
+          "id": "css",
+          "location": "CSS section (after .clients styles, ~line 640)",
+          "action": "Add styles for .projects-bar, .project-card, .project-card.selected, .project-header, .project-meta, .project-queue-summary, .project-status-dot, .projects-actions, .projects-toolbar",
+          "details": "Reuse client-card patterns: horizontal scrollable card row, green/red status dots, selected state with border highlight. Add project-specific styles: queue progress bar, lock indicator, path truncation with ellipsis."
         },
         {
-          "location": "HTML timeline header (~line 781)",
-          "action": "Add Collapse/Expand button next to Clear History button",
-          "details": "<button class='tl-collapse-btn' onclick='toggleTimeline()'>Collapse</button>"
+          "id": "html",
+          "location": "HTML section — insert BEFORE #clientsWrap (~line 827)",
+          "action": "Add the Projects card section",
+          "html_structure": "<div class='card' id='projectsWrap'>\n  <h2>📁 Projects <span id='projectCount'></span></h2>\n  <div class='projects-toolbar'>\n    <button onclick='scanProjects()'>Scan</button>\n    <button onclick='showAddProject()'>Add</button>\n  </div>\n  <div class='projects-bar' id='projectsList'></div>\n  <div class='projects-actions' id='projectActions' style='display:none'>\n    <span class='sel-label'>Selected: <strong id='projectSelName'>-</strong></span>\n    <button onclick='projectQueueStart()'>Start Queue</button>\n    <button onclick='projectQueueClear()'>Clear Queue</button>\n    <button onclick='removeProject()'>Remove</button>\n    <button onclick='selectProject(null)'>← Back to Local</button>\n  </div>\n</div>"
         },
         {
-          "location": "renderTimeline() function (~lines 1119-1152)",
-          "action": "Wrap each day's entries in a <div class='date-group'> container. Add chevron and entry count to date headers. Add click handler on date headers.",
-          "details": "Currently entries are flat siblings after date-head. New structure: date-group > (date-head + entries). Click handler: group.classList.toggle('day-collapsed')"
+          "id": "js_state",
+          "location": "JavaScript state variables (~line 864)",
+          "action": "Add: var projects = [], selectedProject = null;",
+          "details": "selectedProject stores the path of the selected project. When set, Queue panel shows that project's queue instead of local queue."
         },
         {
-          "location": "JavaScript section (new functions)",
-          "action": "Add toggleTimeline() and toggleAllDays() helper functions",
-          "details": "toggleTimeline toggles .tl-collapsed on .timeline-wrap and updates button text. toggleAllDays batch-collapses/expands all day groups."
+          "id": "js_load",
+          "location": "JavaScript — new function after loadClients()",
+          "action": "Add loadProjects() function",
+          "details": "async function loadProjects() { var res = await fetch('/api/projects'); projects = await res.json(); } — called in the main load/refresh cycle"
+        },
+        {
+          "id": "js_render",
+          "location": "JavaScript — new function after renderClients()",
+          "action": "Add renderProjectsPage() function",
+          "details": "Renders project cards in #projectsList. Each card shows: name, truncated path, status dot (green=has queue tasks, gray=idle, red=locked), queue summary (pending/running/done/failed counts), last run info. Cards are clickable via selectProject(path)."
+        },
+        {
+          "id": "js_select",
+          "location": "JavaScript — new function",
+          "action": "Add selectProject(path) function",
+          "details": "Sets selectedProject = path. Updates projectActions visibility. Loads project's queue via GET /api/projects/queue?path=<path>. Updates queueTarget label. Calls render() to refresh all views. When selectedProject is set, Queue panel uses project data instead of local data."
+        },
+        {
+          "id": "js_actions",
+          "location": "JavaScript — new functions",
+          "action": "Add projectQueueStart(), projectQueueClear(), removeProject(), scanProjects(), showAddProject()",
+          "details": "Each function calls the corresponding /api/projects/* endpoint. projectQueueStart() calls POST /api/projects/queue/start with path. scanProjects() calls POST /api/projects/scan then reloads. showAddProject() prompts for path then calls POST /api/projects/add."
+        },
+        {
+          "id": "js_queue_switch",
+          "location": "renderQueue() function and addTask()/startQueue()/clearQueue() functions",
+          "action": "Add project-aware branching",
+          "details": "When selectedProject is set: renderQueue uses project queue data. addTask() calls POST /api/projects/queue/add. startQueue() calls POST /api/projects/queue/start. clearQueue() calls POST /api/projects/queue/clear. When null, uses existing local behavior."
+        },
+        {
+          "id": "js_refresh",
+          "location": "Main refresh cycle (~line 1483)",
+          "action": "Add loadProjects() to refresh cycle and renderProjectsPage() to render()",
+          "details": "loadProjects() runs in parallel with loadClients(). renderProjectsPage() called in render() function."
         }
       ]
     },
+
+    "interaction_model": {
+      "context_priority": "selectedProject > selectedClient > local",
+      "description": "Three contexts: local (default), remote machine, or registered project. Project selection takes precedence. Selecting a project clears machine selection and vice versa.",
+      "queue_panel_behavior": "Queue panel header shows '@ project-name' when a project is selected. All queue operations route to that project's API endpoints.",
+      "timeline_integration": "When a project is selected, timeline loads that project's history via GET /api/projects/history?path=<path>"
+    },
+
+    "project_card_layout": {
+      "visual": "┌─────────────────────────────┐\n│ ● project-name              │\n│ C:/Users/.../project-path   │\n│ Queue: 3 pending, 1 running │\n│ Last: 2h ago ✓              │\n│ ████████░░ 80%              │\n└─────────────────────────────┘",
+      "fields": [
+        "status dot (green=active/running, gray=idle, red=locked/failed)",
+        "project name (bold)",
+        "truncated path (tooltip for full path)",
+        "queue summary: pending/running/done/failed counts",
+        "last run: relative time + status icon",
+        "progress bar: done/total ratio"
+      ]
+    },
+
     "key_decisions": [
       {
-        "decision": "Use CSS class toggle pattern",
-        "rationale": "Matches existing .entry.expanded pattern used for individual entry collapse. Consistent UX and code style."
+        "decision": "Model after Machines section pattern",
+        "rationale": "Consistent UX — users already understand select-card → actions-bar → queue-switch pattern from Machines"
       },
       {
-        "decision": "Wrap day entries in <div class='date-group'>",
-        "rationale": "Currently entries are flat siblings of date-head. A wrapper div is needed to collapse a day's entries as a unit."
+        "decision": "No backend changes needed",
+        "rationale": "All 10+ project API endpoints already exist and are tested. ProjectManager module is complete."
       },
       {
-        "decision": "No state persistence (collapse resets on re-render)",
-        "rationale": "Simplest approach. Re-render happens on data refresh. Can add localStorage persistence later if needed."
+        "decision": "selectedProject > selectedClient > local priority",
+        "rationale": "Avoids ambiguity — only one context active at a time. Selecting project clears machine selection."
       },
       {
-        "decision": "Show entry count badge on date headers",
-        "rationale": "When a day is collapsed, the count badge (e.g. '(5)') gives quick context about how many entries are hidden."
+        "decision": "Projects section always visible (unlike Machines which hides when no clients)",
+        "rationale": "Projects is a primary feature. Show 'No projects registered' empty state with Scan button."
       },
       {
-        "decision": "Default state: all expanded",
-        "rationale": "Matches current behavior. No surprise UI changes for existing users."
+        "decision": "Queue operations route through /api/projects/* endpoints when project selected",
+        "rationale": "These endpoints handle cross-project path resolution and spawn detached child processes."
+      },
+      {
+        "decision": "Auto-load projects on refresh cycle (30s)",
+        "rationale": "Projects status changes as queues run. Regular polling keeps cards up-to-date."
       }
     ],
+
     "edge_cases": [
-      "Empty timeline → 'Nothing here' message, no collapse controls rendered",
-      "Filtered by project → collapse state works independently of filter, count reflects filtered entries",
-      "Re-render (new data arrives via polling) → collapse state resets (acceptable trade-off)",
-      "Single entry in a day → collapse still works, just one entry hidden"
+      "No projects registered → show empty state with 'Scan' and 'Add' buttons",
+      "Project directory deleted → show 'missing' badge, disable queue operations",
+      "Project locked by another process → show lock icon, allow queue add but warn on start",
+      "Many projects (10+) → horizontal scroll bar on .projects-bar (same as Machines)",
+      "Long Windows paths → truncate with ellipsis, show full path in title tooltip",
+      "Selecting project then machine → project clears, machine takes over (and vice versa)"
     ],
-    "css_classes": {
-      "tl-collapse-btn": "Section collapse button styling",
-      "tl-collapsed": "Applied to .timeline-wrap to hide #tl and #filterBar",
-      "date-group": "Wrapper div for each day (header + entries)",
-      "date-toggle": "Chevron icon on date headers (▸), rotates when expanded",
-      "day-collapsed": "Applied to .date-group to hide child .entry elements",
-      "date-count": "Entry count badge on date headers"
-    },
-    "visual_hierarchy": "📋 Timeline [Collapse] [Clear History]\n├── ▾ 2026-03-10 MON (3)\n│   ├── ▸ ✓ project  2m  14:30\n│   └── ▸ ✗ other    1m  12:00\n├── ▸ 2026-03-09 SUN (2)  ← collapsed day\n└── ▾ 2026-03-08 SAT (1)\n    └── ▸ ✓ project  3m  10:00",
-    "scope": "~50 lines CSS + ~30 lines JS changes, all in public/dashboard.html"
+
+    "scope_estimate": "~200 lines CSS + ~250 lines JS, all in public/dashboard.html",
+
+    "waves": [
+      {
+        "wave": 1,
+        "tasks": [
+          "CSS: Add project card styles (reuse client-card patterns)",
+          "HTML: Add #projectsWrap section structure",
+          "JS: Add state variables (projects, selectedProject)"
+        ]
+      },
+      {
+        "wave": 2,
+        "tasks": [
+          "JS: loadProjects() + renderProjectsPage()",
+          "JS: selectProject(path) with context switching",
+          "JS: Project action functions (start/clear/remove/scan/add)"
+        ]
+      },
+      {
+        "wave": 3,
+        "tasks": [
+          "JS: Modify queue functions for project-aware routing",
+          "JS: Modify timeline to load project history when selected",
+          "JS: Wire into refresh cycle"
+        ]
+      }
+    ]
   }
 }

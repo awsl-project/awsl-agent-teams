@@ -1,17 +1,19 @@
-The conventions file already exists and is comprehensive. It covers everything requested. Here's the summary:
-
 ## AWSL_RESULT
 
-The conventions document already exists at `memory/conventions.md` (132 lines) and is thorough. Key highlights:
+Conventions document verified and updated at `memory/conventions.md` (132→135 lines).
 
-**Naming**: camelCase vars/functions, PascalCase classes/types, UPPER_SNAKE constants, no enums (string literal unions), `_` prefix for private/unused, `create` prefix for factories.
+### Summary of Conventions
 
-**Style**: TypeScript strict, ES modules with `.js` extensions, `node:` prefix for builtins, tabs, `import type` for type-only, named exports only, barrel from `index.ts`.
+| Category | Key Patterns |
+|----------|-------------|
+| **Naming** | camelCase functions, PascalCase types/classes, UPPER_SNAKE constants, no enums (string literal unions), `create` prefix for factories |
+| **Style** | TypeScript strict, ES modules with `.js` extensions, `node:` prefix for builtins, `import type` for type-only, tabs, double quotes, section dividers `// ───` |
+| **Error handling** | Fail-soft (return defaults, don't throw), bare `catch {}` when unused, `catch (e: any)` when message needed, never throw in agent tools, atomic file writes with `wx` flag |
+| **Async** | async/await only, sync fs throughout, `Promise.all` for fail-fast, `Promise.allSettled` for best-effort, manual worker pool with concurrency limit |
+| **Testing** | `node:test` + `node:assert/strict` in `test/`; plain-function tests in `src/`; no mocking framework; temp dirs via `mkdtempSync`; source-inspection assertions |
+| **Architecture** | Conductor/Guardian pattern, dual engine, factory functions, provider pattern, topo-sort waves, file-as-state in `.planning/`, `SharedMemory` for inter-agent comms |
 
-**Error Handling**: Fail-soft (return defaults, not throw), bare `catch {}` when unused, `catch (e: any)` when message needed, never throw in agent tools, atomic file ops with `flag: "wx"`.
+### Update made
+- Testing section: added secondary `src/*.test.ts` pattern, test isolation via `_testRegistryPath` override, and `setup()`/`teardown()` helper convention.
 
-**Async**: async/await (no `.then`), sync fs ops (`readFileSync`), `Promise.all` for parallel, `Promise.allSettled` for non-fail-fast, manual worker pool with concurrency limit.
-
-**Testing**: `node:test` + `node:assert/strict`, files in `test/*.test.ts`, run via `npx tsx --test`, source inspection patterns, no mocking framework.
-
-No updates needed — the existing document is already accurate and complete.
+**Files:** `memory/conventions.md` (updated)

@@ -696,6 +696,122 @@ a { color: var(--blue); text-decoration: none; }
 .clients-actions button:hover { border-color: var(--blue); color: var(--blue); }
 .clients-actions button.danger:hover { border-color: var(--red); color: var(--red); }
 
+/* ─── Projects Panel ──────────── */
+
+.projects-bar {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 4px 0;
+}
+
+.project-card {
+  flex-shrink: 0;
+  padding: 10px 14px;
+  background: var(--bg);
+  border-radius: 10px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  min-width: 180px;
+  max-width: 260px;
+  transition: all 0.15s;
+}
+
+.project-card:hover { border-color: var(--ink4); }
+.project-card.selected { border-color: var(--blue); background: var(--blue-bg); }
+
+.project-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.project-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.project-dot.idle { background: var(--ink4); }
+.project-dot.active { background: var(--green); }
+.project-dot.running { background: var(--blue); animation: pulse 1.5s ease infinite; }
+.project-dot.locked { background: var(--orange); }
+.project-dot.missing { background: var(--red); }
+
+.project-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-path {
+  font-size: 11px;
+  color: var(--ink4);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-bottom: 4px;
+}
+
+.project-meta {
+  font-size: 11px;
+  color: var(--ink3);
+  line-height: 1.6;
+}
+
+.project-progress {
+  margin-top: 4px;
+  height: 3px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.project-progress-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.3s;
+}
+
+.projects-actions {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.projects-actions .sel-label {
+  font-size: 12px;
+  color: var(--ink2);
+  font-weight: 500;
+}
+
+.projects-actions button {
+  font-family: var(--font);
+  font-size: 11px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card);
+  color: var(--ink2);
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.15s;
+}
+
+.projects-actions button:hover { border-color: var(--blue); color: var(--blue); }
+
+.projects-empty {
+  padding: 16px 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--ink4);
+}
+
 /* ─── Footer ──────────────────── */
 
 .foot {
@@ -824,6 +940,18 @@ a { color: var(--blue); text-decoration: none; }
     </div>
   </div>
 
+  <div class="card" id="projectsWrap">
+    <h2>&#128193; Projects <span id="projectCount" style="font-weight:400;color:var(--ink3);font-size:11px"></span></h2>
+    <div class="projects-bar" id="projectsList"></div>
+    <div class="projects-actions" id="projectActions" style="display:none">
+      <span class="sel-label">Selected: <strong id="projectSelName">-</strong></span>
+      <button onclick="selectProject(null)">&#8592; Back to Local</button>
+    </div>
+    <div class="projects-empty" id="projectsEmpty" style="display:none">
+      <span>No projects registered</span>
+    </div>
+  </div>
+
   <div class="card" id="clientsWrap" style="display:none">
     <h2>&#128421; Machines <span id="clientCount" style="font-weight:400;color:var(--ink3);font-size:11px"></span></h2>
     <div class="clients-bar" id="clientsList"></div>
@@ -862,6 +990,7 @@ a { color: var(--blue); text-decoration: none; }
 
 <script>
 var hist = null, queue = null, filterProj = null, clients = [], selectedClient = null;
+var projects = [], selectedProject = null;
 var collapsedDates = {};
 var timelineWrapCollapsed = {};
 
@@ -887,6 +1016,16 @@ function dn(d) { return ['SUN','MON','TUE','WED','THU','FRI','SAT'][d.getDay()];
 function esc(s) { var d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
 function trunc(s, n) { return !s ? '' : s.length > (n||80) ? s.slice(0, n||80) + '...' : s; }
 function fmtK(n) { if (n >= 1000000) return (n/1000000).toFixed(1) + 'M'; if (n >= 1000) return (n/1000).toFixed(1) + 'K'; return String(n); }
+
+function timeAgo(iso) {
+  if (!iso) return '';
+  var ms = Date.now() - new Date(iso).getTime();
+  if (ms < 0) return 'future';
+  if (ms < 60000) return 'just now';
+  if (ms < 3600000) return Math.floor(ms / 60000) + 'm ago';
+  if (ms < 86400000) return Math.floor(ms / 3600000) + 'h ago';
+  return Math.floor(ms / 86400000) + 'd ago';
+}
 
 function localDate(iso) {
   if (!iso) return '';
@@ -930,6 +1069,14 @@ async function loadClients() {
     if (res.ok) clients = await res.json();
     else clients = [];
   } catch(e) { clients = []; }
+}
+
+async function loadProjects() {
+  try {
+    var res = await fetch('/api/projects');
+    if (res.ok) projects = await res.json();
+    else projects = [];
+  } catch(e) { projects = []; }
 }
 
 function fmtMem(bytes) {
@@ -989,9 +1136,97 @@ function renderClients() {
   }
 }
 
+function renderProjectCards() {
+  var el = document.getElementById('projectsList');
+  var actions = document.getElementById('projectActions');
+  var empty = document.getElementById('projectsEmpty');
+
+  if (projects.length === 0) {
+    el.innerHTML = '';
+    actions.style.display = 'none';
+    empty.style.display = 'block';
+    document.getElementById('projectCount').textContent = '';
+    return;
+  }
+
+  empty.style.display = 'none';
+  document.getElementById('projectCount').textContent = projects.length + ' registered';
+
+  var h = '';
+  for (var i = 0; i < projects.length; i++) {
+    var p = projects[i];
+    var sel = selectedProject === p.path ? ' selected' : '';
+    var q = p.queue || { pending: 0, running: 0, done: 0, failed: 0, total: 0 };
+
+    var dotClass = 'idle';
+    if (!p.exists) dotClass = 'missing';
+    else if (q.running > 0) dotClass = 'running';
+    else if (p.isLocked) dotClass = 'locked';
+    else if (q.total > 0 && q.pending === 0 && q.running === 0) dotClass = 'active';
+
+    var qParts = [];
+    if (q.running > 0) qParts.push(q.running + ' running');
+    if (q.pending > 0) qParts.push(q.pending + ' pending');
+    if (q.done > 0) qParts.push(q.done + ' done');
+    if (q.failed > 0) qParts.push(q.failed + ' failed');
+    var qSummary = qParts.length > 0 ? qParts.join(', ') : 'empty';
+
+    var lastStr = '';
+    if (p.lastRun) {
+      lastStr = timeAgo(p.lastRun.date) + ' ' + (p.lastRun.status === 'done' ? '\u2713' : '\u2717');
+    }
+
+    var pct = q.total > 0 ? Math.round((q.done + q.failed) / q.total * 100) : 0;
+    var barColor = q.failed > 0 && q.done === 0 ? 'var(--red)' : 'var(--green)';
+
+    h += '<div class="project-card' + sel + '" data-project-path="' + esc(p.path) + '">';
+    h += '<div class="project-header"><span class="project-dot ' + dotClass + '"></span><span class="project-name">' + esc(p.name) + '</span></div>';
+    h += '<div class="project-path" title="' + esc(p.path) + '">' + esc(p.path) + '</div>';
+    h += '<div class="project-meta">';
+    h += 'Queue: ' + qSummary;
+    if (lastStr) h += '<br>Last: ' + lastStr;
+    h += '</div>';
+    if (q.total > 0) {
+      h += '<div class="project-progress"><div class="project-progress-fill" style="width:' + pct + '%;background:' + barColor + '"></div></div>';
+    }
+    h += '</div>';
+  }
+  el.innerHTML = h;
+
+  if (selectedProject) {
+    var sp = projects.find(function(p) { return p.path === selectedProject; });
+    if (sp) {
+      document.getElementById('projectSelName').textContent = sp.name;
+      actions.style.display = 'flex';
+    } else {
+      selectedProject = null;
+      actions.style.display = 'none';
+    }
+  } else {
+    actions.style.display = 'none';
+  }
+}
+
+function selectProject(projPath) {
+  selectedProject = projPath;
+  if (projPath) selectedClient = null;
+  renderProjectCards();
+  renderClients();
+  var sp = projPath ? projects.find(function(p) { return p.path === projPath; }) : null;
+  document.getElementById('queueTarget').textContent = sp ? '@ ' + sp.name : (selectedClient ? '@ ' + selectedClient : '');
+  if (sp) {
+    document.getElementById('projLabel').textContent = sp.name;
+    document.getElementById('projLabel').title = sp.path;
+  }
+  render._lastKey = '';
+  render();
+}
+
 function selectClient(id) {
   selectedClient = id;
+  if (id) selectedProject = null;
   renderClients();
+  renderProjectCards();
   document.getElementById('queueTarget').textContent = id ? '@ ' + id : '';
   // Re-render queue with selected client's data
   render();
@@ -1473,7 +1708,7 @@ function render() {
   document.getElementById('app').style.display = 'block';
 
   // Dirty check — skip full re-render if data unchanged since last render
-  var rk = entries.length + '|' + qt.length + '|' + clients.length + '|' + (filterProj||'') + '|' + (selectedClient||'');
+  var rk = entries.length + '|' + qt.length + '|' + clients.length + '|' + (filterProj||'') + '|' + (selectedClient||'') + '|' + projects.length + '|' + (selectedProject||'');
   if (entries.length > 0) rk += '|' + (entries[entries.length-1].id || entries[entries.length-1].date || '');
   if (qt.length > 0) rk += '|' + qt[qt.length-1].id + ':' + qt[qt.length-1].status;
   if (rk === render._lastKey) return;
@@ -1482,10 +1717,17 @@ function render() {
   var s = stats(entries);
   renderStats(s); renderAgents(s); renderHeatmap(s.byD); renderTrend(s.byD); renderProjects(s.byP); renderTimeline(entries, s.byD); renderQueue(qt);
   renderClients();
+  renderProjectCards();
   checkNotifications(qt);
 }
 
 document.getElementById('filterClear').onclick = function() { filterProj = null; render(); };
+document.getElementById('projectsList').onclick = function(e) {
+  var card = e.target.closest('.project-card');
+  if (!card) return;
+  var projPath = card.getAttribute('data-project-path');
+  selectProject(selectedProject === projPath ? null : projPath);
+};
 document.addEventListener('mousemove', function(e) {
   var t = document.getElementById('hmTip');
   if (t.style.display === 'block') { t.style.left = (e.clientX+10)+'px'; t.style.top = (e.clientY-18)+'px'; }
@@ -1504,10 +1746,11 @@ async function init() {
     }
   } catch(e) {}
   await loadClients();
+  await loadProjects();
   var ok = await load();
   document.getElementById('loading').style.display = 'none';
   if (ok) render();
-  setInterval(async function() { await loadClients(); if (await load()) render(); }, 30000);
+  setInterval(async function() { await loadClients(); await loadProjects(); if (await load()) render(); }, 30000);
 }
 
 // ─── Trend chart (SVG with area fill) ─────────────────
