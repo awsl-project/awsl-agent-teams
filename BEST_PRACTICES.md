@@ -20,10 +20,10 @@ awsl run "goal" --engine claude-code
   → architect brainstorm        (claude -p: 苏格拉底探索)
   → architect research ×2       (claude -p ×2 并行: 分析代码库)
   → planner plan                (claude -p: 生成结构化任务 DAG)
-  → coder/tester/reviewer ×N    (claude -p ×N: 按 wave 并行执行)
-  → LLM review → REVIEW.md      (claude -p: 审查者检查规格合规+代码质量)
+  → coder/tester ×N              (claude -p ×N: 按 wave 并行执行)
+    └─ 每个 coder 任务完成后 → reviewer 读取 git diff → 严重问题阻断提交
   → verify → VERIFICATION.md   (代码：tsc + npm test + eslint)
-  → auto-fix (最多3轮)          (claude -p: 读取两份报告 → 修复 → 重新验证)
+  → auto-fix (最多3轮)          (claude -p: 读取 VERIFICATION.md → 修复 → 重新验证)
   → git checkpoint per wave     (代码：原子提交)
 ```
 
@@ -245,13 +245,14 @@ Wave 2: task-2          ← 依赖 task-1，等 Wave 1 完成
 
 | 文件 | 写入者 | 内容 |
 |------|--------|------|
-| `REVIEW.md` | Phase 3 LLM 审查者 | `[CRITICAL]`/`[PASS]`/`[WARN]` 级别的发现（规格合规 + 代码质量） |
-| `VERIFICATION.md` | Phase 3b 确定性检查 | tsc、eslint、npm test 的通过/失败结果 |
+| `REVIEW.md` | 逐任务代码审查（Phase 2 中每个 coder 任务完成后） | 审查者读取真实 `git diff`，逐行检查反模式清单。`[CRITICAL]` 发现阻断提交，任务标记失败 |
+| `VERIFICATION.md` | Phase 3 确定性检查 | tsc、eslint、npm test 的通过/失败结果 |
 
-**为什么分离？** 之前两者都写入 `VERIFICATION.md`，确定性检查会覆盖 LLM 审查者的发现。分离后：
-- LLM 审查者的代码质量发现不会丢失
-- Auto-fix 读取 **两个** 文件，同时修复代码质量问题和测试/类型错误
-- 两种报告独立演进，互不干扰
+**审查时机变化：** 之前审查者在 Phase 3 末尾批量审查所有任务（只看 200 字摘要）。现在审查者在每个 coder 任务完成后**立即**介入，读取**真实 git diff** 逐行检查。这意味着：
+- 问题在提交**之前**就被发现并阻断
+- 审查者看到的是实际代码变更，不是摘要
+- Phase 3 现在专注于自动化验证（tsc、npm test、eslint）
+- Auto-fix 循环只需要读取 VERIFICATION.md
 
 **验证器超时和缓存：**
 - TypeScript 类型检查：120 秒超时
@@ -480,7 +481,7 @@ frontmatter 会做 TypeBox schema 校验。无效配置会输出友好错误（�
 
 ### 规则
 
-- role 决定 Guardian 技能注入（`coder` → TDD，`reviewer` → 两阶段审查，`tester` → 系统化调试）
+- role 决定 Guardian 技能注入（`coder` → TDD，`reviewer` → 逐任务代码审查，`tester` → 系统化调试）
 - 自定义 agent 的 system prompt 会附加到 Guardian 技能之后
 - 覆盖文件保存在 `agents/` 目录，原始内置定义不会被修改
 - 建议把 `agents/` 目录提交到 git — 团队共享自定义智能体配置
@@ -497,7 +498,7 @@ frontmatter 会做 TypeBox schema 校验。无效配置会输出友好错误（�
 - `.planning/PLAN.md` — 任务计划
 - `.planning/WAVES.md` — 执行波次
 - `.planning/STATE.md` — 进度和决策
-- `.planning/REVIEW.md` — LLM 审查者发现（规格合规 + 代码质量）
+- `.planning/REVIEW.md` — 逐任务审查者发现（git diff 审查 + 反模式清单）
 - `.planning/VERIFICATION.md` — 确定性检查结果（tsc、eslint、测试）
 
 **第二天：**
@@ -558,16 +559,27 @@ Guardian 是质量保证层，按 role 自动注入到每个子 agent：
 | Role | 自动注入的 Guardian 技能 |
 |------|------------------------|
 | coder | TDD (RED-GREEN-REFACTOR) — 先写测试，再写实现 |
-| reviewer | 两阶段审查 — 先查 spec 合规，再查代码质量 |
+| reviewer | 逐任务代码审查 — 每个 coder 任务完成后立即读取 git diff，逐行检查反模式清单 |
 | tester | 系统化调试 — 复现→隔离→根因→修复 |
 
 **TDD 流程（coder 自动执行）：**
 1. 写失败测试 → 2. 确认 RED → 3. 写最少代码通过 → 4. 确认 GREEN → 5. 重构
 
-**两阶段审查（reviewer 自动执行）：**
-1. Stage 1：spec 合规（是否满足需求）
-2. Stage 2：代码质量（安全、性能、可维护性）
-3. Critical 发现 → 任务失败，必须修复
+**逐任务代码审查（reviewer 自动执行）：**
+
+每个 coder 任务完成后，审查者立即收到该任务的真实 `git diff`，逐行检查以下反模式清单：
+- 设计缺陷（职责不清、接口不合理）
+- 竞态条件（race conditions）
+- Busy-wait（忙等待循环，应改用事件/信号）
+- 过期锁/缺失释放（stale locks，缺少 `finally` 块）
+- Delta/merge 混淆（增量更新 vs 全量覆盖搞混）
+- 缺失 cleanup/error 处理
+- 其他常见反模式
+
+审查结果：
+- `[CRITICAL]` → 任务**在提交前**就被标记失败，阻断 commit
+- `[WARN]` → 记录但不阻断
+- `[PASS]` → 通过
 
 ## 9. 沙箱配置（内置引擎）
 
@@ -722,16 +734,16 @@ verify 字段决定了 `awsl verify` 能否自动跑测试。**必须是可执�
 - Markdown 格式要求：`## task-1: 名称` 标题 + `- **Role:** coder` 等字段
 - 排查：查看 `.planning/` 目录下是否有 PLAN.md，手动确认格式是否正确
 
-**verify 失败（测试/lint/类型检查不过）或 review 发现 critical 问题：**
-- **终端模式：** 代码自动启动修复 agent（读取 REVIEW.md + VERIFICATION.md）→ 重新 verify → 最多 3 轮，全自动
-- **CC 模式：** CC 读取 REVIEW.md + VERIFICATION.md → Agent 修复 → 重新 verify
+**verify 失败（测试/lint/类型检查不过）：**
+- **终端模式：** 代码自动启动修复 agent（读取 VERIFICATION.md）→ 重新 verify → 最多 3 轮，全自动
+- **CC 模式：** CC 读取 VERIFICATION.md → Agent 修复 → 重新 verify
 
 **单个 task Agent 失败：**
 - **终端模式：** 自动重试 2 次，用不同 prompt（包含上次错误信息）→ 再失败才 replan
 - **CC 模式：** 修改 PLAN.md 中该 task 的 Action 字段 → `/awsl-go`
 
-**reviewer 发现 critical 问题：**
-- **终端模式：** 代码自动阻断该 task，标记 failed，触发重试/replan
+**逐任务审查发现 critical 问题：**
+- **终端模式：** 审查者在 coder 任务完成后立即读取 git diff，发现 critical 问题时直接阻断提交，任务标记 failed，触发重试/replan
 - **CC 模式：** 依赖 CC 遵守 SKILL.md 指令
 
 **全部失败：**
@@ -787,7 +799,7 @@ awsl run "Build a REST API with auth" --engine claude-code
 - 失败自动重试 2 次，再失败 replan
 - 每个 wave 成功后 git checkpoint
 - verify 失败自动修复（最多 3 轮）
-- reviewer critical 发现直接阻断
+- 逐任务 reviewer 读取 git diff，critical 发现在提交前阻断
 - 文件冲突自动检测，冲突 task 串行化
 
 **实测数据（User Auth + TODO API 复杂项目）：**
@@ -796,8 +808,9 @@ Phase 0a Brainstorm:   ~2.5 min (1 architect agent)
 Phase 0  Research:     ~2.3 min (2 architect agents 并行)
 Phase 1  Planning:     ~2.3 min (1 planner agent)
 Phase 2  Execution:    ~8 min   (7 waves, 10 tasks, 并行度 2)
-Phase 3  Review+Verify:~1.5 min (LLM reviewer → REVIEW.md; tsc + npm test → VERIFICATION.md)
-Phase 3b Auto-Fix:     ~6 min   (reads both files; 3 rounds: 6/8 → 6/8 → 7/8 passed)
+Phase 2  Per-task review:        (每个 coder 任务完成后 reviewer 读取 git diff，阻断严重问题)
+Phase 3  Verify:       ~1.5 min (tsc + npm test → VERIFICATION.md)
+Phase 3b Auto-Fix:     ~6 min   (reads VERIFICATION.md; 3 rounds: 6/8 → 6/8 → 7/8 passed)
 Total:                 ~23 min
 Result:                SUCCESS (10/10 tasks verified)
 Git:                   17 commits (per-task + wave checkpoints)
@@ -838,7 +851,7 @@ awsl run "goal" --engine claude-code --no-verify
 
 | 跳过的阶段 | 说明 |
 |-----------|------|
-| Phase 3: Reviewer agent | 不启动 LLM 审查者（不生成 REVIEW.md） |
+| Phase 2: 逐任务代码审查 | 不启动 reviewer 审查 git diff（不生成 REVIEW.md） |
 | Phase 3: Provider verify | 不执行 tsc、npm test、eslint（不生成 VERIFICATION.md） |
 | Phase 3b: Auto-fix loop | 不进入自动修复循环 |
 
@@ -853,7 +866,7 @@ awsl run "goal" --engine claude-code --no-verify
 
 **何时不要用：**
 - 通宵无人值守构建（验证是质量保障的核心）
-- 多模块大项目（需要 reviewer 捕获跨模块问题）
+- 多模块大项目（需要逐任务 reviewer 通过 git diff 捕获反模式）
 - 任何需要高代码质量的场景
 
 ### 终端使用 builtin 引擎（需要 ANTHROPIC_API_KEY）
@@ -897,7 +910,7 @@ Review: 0 critical, 3 warnings, 1 info across 14 files.
 
 报告自动保存到 `.planning/REVIEW.md`。
 
-> **注意区分：** `awsl review`（CLI 静态扫描）和 Phase 3 LLM 审查者都写入 `REVIEW.md`，但终端模式流水线中是 LLM 审查者写入。确定性检查（tsc、eslint、测试）的结果写入 `VERIFICATION.md`。Auto-fix 读取两个文件。
+> **注意区分：** `awsl review`（CLI 静态扫描）和逐任务代码审查都写入 `REVIEW.md`，但终端模式流水线中是逐任务审查者（读取 git diff）写入。确定性检查（tsc、eslint、测试）的结果写入 `VERIFICATION.md`。Auto-fix 读取 VERIFICATION.md。
 
 ## 14. 断点续跑（崩溃恢复）
 

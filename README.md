@@ -38,7 +38,7 @@ AWSL's architecture splits orchestration into two independent layers:
   ┌──────────────────┐          ┌──────────────────┐
   │ Task decomposition│          │ TDD enforcement  │
   │ Wave parallelism  │          │ Systematic debug │
-  │ Fresh context     │  ─────>  │ Two-stage review │
+  │ Fresh context     │  ─────>  │ Per-task review  │
   │ State persistence │  <─────  │ Quality gates    │
   │ Atomic commits    │          │ Socratic design  │
   │ Dynamic re-plan   │          │ Micro-task sizing│
@@ -46,7 +46,7 @@ AWSL's architecture splits orchestration into two independent layers:
 ```
 
 - **Conductor** handles the **what** and **when** — decompose the goal, schedule waves, manage dependencies, checkpoint progress, recover from failures.
-- **Guardian** handles the **how** — enforce TDD for coders, run two-stage review for reviewers, guide Socratic exploration for architects. Guardian skills are injected per-role automatically.
+- **Guardian** handles the **how** — enforce TDD for coders, run per-task code review (on actual git diff) for reviewers, guide Socratic exploration for architects. Guardian skills are injected per-role automatically.
 
 This separation means orchestration logic and quality enforcement evolve independently. You can customize agents without touching the scheduler, or change the execution strategy without affecting quality gates.
 
@@ -63,7 +63,7 @@ Both modes piggyback on your existing Claude Code subscription. CC Mode uses Cla
 | Advantage | How |
 |-----------|-----|
 | **4-10x faster for large projects** | Wave parallelism — independent tasks run concurrently via parallel agents |
-| **Higher code quality** | Writer ≠ Reviewer. Dedicated reviewer agent catches spec deviations, security issues, and code smells that the coder misses |
+| **Higher code quality** | Writer ≠ Reviewer. After each coder task, a reviewer reads the actual `git diff` line-by-line against an anti-pattern checklist (busy-waits, race conditions, missing cleanup, etc.). Critical findings block the commit before it happens |
 | **Fresh context per task** | Every agent gets a clean 200K token window. No context rot, no attention degradation |
 | **Crash recovery** | `.planning/` persists all state. Process dies → restart → resume from last checkpoint |
 | **Bisectable git history** | One atomic commit per completed task. `git bisect` works. Partial reverts work |
@@ -165,7 +165,7 @@ awsl run "goal" --engine claude-code [options]
 | `--engine claude-code` | auto | Use Claude Code CLI as execution engine |
 | `--quick` | false | Skip brainstorm & research phases |
 | `--concurrency <n>` | 2 | Max parallel agents per wave |
-| `--no-verify` | false | Skip ALL verification: reviewer agent, provider verification (tsc, npm test, eslint), and auto-fix loop. Task auto-retry still runs (handles execution failures, not verification) |
+| `--no-verify` | false | Skip ALL verification: per-task code review, provider verification (tsc, npm test, eslint), and auto-fix loop. Task auto-retry still runs (handles execution failures, not verification) |
 | `--no-commit` | false | Skip git commits |
 | `--plan-only` | false | Generate plan only, don't execute |
 | `--execute-plan` | false | Execute existing `.planning/PLAN.md` |
@@ -178,9 +178,10 @@ awsl run "goal" --engine claude-code [options]
 Phase 0a: Brainstorm    architect agent explores requirements (Socratic method)
 Phase 0b: Research      parallel agents analyze existing codebase
 Phase 1:  Plan          planner agent creates structured task DAG
-Phase 2:  Execute       coder/tester/reviewer agents run in topological waves
-Phase 3:  Review+Verify LLM reviewer → REVIEW.md; tsc/test/eslint → VERIFICATION.md  [skipped by --no-verify]
-Phase 3b: Auto-Fix      on failure → coder reads both files → fixes → re-verify (max 3 rounds)  [skipped by --no-verify]
+Phase 2:  Execute       coder/tester agents run in topological waves
+  └─ Per-task review    after each coder task, reviewer reads actual git diff → blocks on critical findings
+Phase 3:  Verify        tsc/test/eslint → VERIFICATION.md  [skipped by --no-verify]
+Phase 3b: Auto-Fix      on failure → coder reads VERIFICATION.md → fixes → re-verify (max 3 rounds)  [skipped by --no-verify]
 Phase 4:  Re-plan       on task failure → retry 2x → replan with different approach
 ```
 
@@ -188,7 +189,8 @@ Phase 4:  Re-plan       on task failure → retry 2x → replan with different a
 
 | Feature | Description |
 |---------|-------------|
-| **Auto-fix loop** | Review/verify fails → coder reads both REVIEW.md + VERIFICATION.md → fixes → re-verify → up to 3 attempts |
+| **Per-task code review** | After each coder task, reviewer reads the actual `git diff` line-by-line with a checklist (design flaws, race conditions, busy-waits, missing cleanup, delta/merge confusion, etc.). Critical findings block the commit — the task is marked failed before code is committed |
+| **Auto-fix loop** | Verify fails → coder reads VERIFICATION.md → fixes → re-verify → up to 3 attempts |
 | **Task auto-retry** | Failed tasks retry 2x with error context before re-planning |
 | **Reviewer hard-block** | Critical severity findings = task failed, must fix |
 | **File conflict detection** | Same-wave tasks sharing files → auto-split to different waves |
@@ -666,10 +668,10 @@ awsl run "Build a REST API"
 ║  │   (claude -p) (claude -p)         (claude -p)     │    ║
 ║  │                                                   │    ║
 ║  │  Self-Healing:                                    │    ║
+║  │    per-task review (git diff) → block on critical │    ║
 ║  │    verify fail → auto-fix (3x)                    │    ║
 ║  │    task fail → retry (2x) → replan                │    ║
 ║  │    file conflict → auto-split waves               │    ║
-║  │    critical review → hard-block                   │    ║
 ║  └───────────────────────────────────────────────────┘    ║
 ║                                                          ║
 ║  Engine: claude-code (claude -p per task)                 ║
@@ -704,12 +706,12 @@ Guardian skills auto-activate based on agent role:
 | `coder` | TDD (red/green/refactor), Systematic Debug |
 | `architect` | Socratic Brainstorm |
 | `planner` | Micro-Task Planning |
-| `reviewer` | Two-Stage Code Review, Quality Gate |
+| `reviewer` | Per-Task Code Review (git diff + checklist), Quality Gate |
 | `tester` | Systematic Debug |
 
 **TDD** — Enforces RED-GREEN-REFACTOR. Write failing test first. Minimal code to pass. Refactor.
 
-**Two-Stage Review** — Stage 1: Does it match the spec? Stage 2: Is the code quality acceptable? Critical findings block the task.
+**Per-Task Code Review** — After each coder task completes, the reviewer immediately receives the actual `git diff` and reads it line-by-line against a specific checklist: design flaws, race conditions, busy-waits, stale locks, delta/merge confusion, missing `finally` blocks, and more. Critical findings block the commit — the task is marked failed before any code is committed. Phase 3 now focuses solely on automated verification (tsc, npm test, eslint).
 
 **Socratic Brainstorm** — Explore requirements through targeted questions. Challenge assumptions. Document decisions.
 
@@ -747,7 +749,7 @@ The builtin engine enforces a sandbox policy on every agent. Write operations ar
 | planner | planner | Decomposes goals into structured micro-tasks |
 | architect | architect | Designs system architecture and interfaces |
 | coder | coder | Full-stack developer with sub-agent parallelism (Agent tool enabled) |
-| reviewer | reviewer | Two-stage review with quality gate |
+| reviewer | reviewer | Per-task code review with git diff checklist + quality gate |
 | tester | tester | Designs and runs tests, debugs failures |
 
 ### Two-Level Parallelism
@@ -920,7 +922,7 @@ State persists across sessions:
 ├── PLAN.md               # Structured task breakdown
 ├── WAVES.md              # Computed wave schedule
 ├── VERIFICATION.md       # Deterministic check results (tsc, eslint, tests)
-├── REVIEW.md             # LLM reviewer findings (spec compliance + code quality)
+├── REVIEW.md             # Per-task reviewer findings (git diff review with anti-pattern checklist)
 ├── CHECKPOINT.json       # Rate-limit recovery checkpoint (auto-managed)
 ├── QUEUE.json            # Task queue for sleep mode (auto-managed)
 ├── HISTORY.json          # Sleep mode execution history (auto-managed)
@@ -999,7 +1001,7 @@ const result = await executeTeam(
   {
     brainstorm: true,      // Socratic exploration
     research: true,        // Codebase analysis
-    verify: true,          // Two-stage review
+    verify: true,          // Per-task code review + verification
     autoCommit: true,      // Atomic commits per task
     replan: true,          // Failure recovery
     qualityGate: true,     // Block on critical findings
@@ -1148,7 +1150,7 @@ awsl remote stop                             # Stop background client
 | **Planning** | Code-enforced DAG | Skill-guided | Manual |
 | **Parallelism** | Real (concurrent `claude -p`) | CC Agent tool | None |
 | **Self-healing** | Auto-fix + retry + replan | Manual | Manual |
-| **Code review** | Reviewer agent + static | Reviewer agent | None |
+| **Code review** | Per-task git diff review + static | Reviewer agent | None |
 | **Git history** | Per-task atomic commits | Single commit | Single commit |
 | **Spec compliance** | High (reviewer loop) | Medium | Variable |
 | **Speed** | ~20 min | ~6 min | ~5 min |
