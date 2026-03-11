@@ -1,28 +1,30 @@
-# task_6: Modify `src/cli.ts` to support discussion mode:
+# task_6: Create tests/agents.test.ts using node:test and node:assert/
 
-1. **Update
-
-Assignee: coder
+Assignee: tester
 Status: done
 
 ## Result
-All three changes are in place and type-check passes.
+All 25 tests pass across 6 test suites.
 
 ## AWSL_RESULT
 
-### Task: Modify `src/cli.ts` to support discussion mode
+### Task 6 Complete: Agent CRUD Tests (`tests/agents.test.ts`)
 
-**Status:** Complete
+**Framework:** `node:test` + `node:assert/strict`
 
-**Files modified:**
-- `src/cli.ts`
+**6 test suites, 25 tests — all passing:**
 
-**Changes made:**
+| Suite | Tests | Coverage |
+|-------|-------|----------|
+| `serializeAgent` | 4 | Basic serialization, optional fields, omits undefined, round-trip |
+| `saveAgent` | 4 | New agent, merge update, atomic write, nested dirs |
+| `deleteAgent` | 2 | Delete existing (returns true), non-existent (returns false) |
+| `getAgent` | 4 | Builtin lookup, custom lookup, not-found, builtin override |
+| `saveAgent name validation` | 7 | Uppercase, leading digit, underscore, empty, too long, boundary (50), special chars |
+| `BUILTINS` | 4 | Non-empty, all 5 agents present, source=builtin, frozen |
 
-1. **`usage()` text updated** — Added `--discuss` and `--rounds` flags under `queue add`, plus `discuss <question>` alias at the end of the Queue Commands section.
+**File created:**
+- `tests/agents.test.ts`
 
-2. **`discuss` command handler** — New block before the `queue` command (line ~862). Parses `--rounds`, `--at`, and `--cwd` flags. Validates question is at least 10 characters. Calls `queue.add()` with `mode: "discuss"` and `discussRounds`.
-
-3. **`queue add --discuss` flag** — Added `--discuss` and `--rounds` parsing in the flag loop. Passes `discussRounds` and `mode: "discuss"` to `queue.add()` when `--discuss` is set. Outputs mode info after task creation.
-
-**Verification:** `npx tsc --noEmit` passes with zero errors.
+**Verification:**
+- `npx tsx tests/agents.test.ts` — 25/25 passed, 0 failed
