@@ -2,90 +2,24 @@
   "tasks": [
     {
       "id": "q_1",
-      "goal": "awsl现在是基于项目的吗 我能不能比我我现在有个Machines页面管理 我再加一个 项目管理 这样我的队列可以使用多个awsl执行 帮我设计合理开发方案并执行",
-      "options": {
-        "quick": false
-      },
-      "status": "done",
-      "scheduledAt": "2026-03-10T14:57:06.247Z",
-      "startedAt": "2026-03-10T16:31:38.427Z",
-      "completedAt": "2026-03-11T01:01:01.664Z",
-      "result": {
-        "success": true,
-        "summary": "✅ 4/4 tasks completed successfully.\n\n✅ task_1 (coder): Projects cards UI — CSS + HTML + core JS [public/dashboard.html]\n   → The test process exited with code 1 but I already checked the output and all 13 tests passed. The exit code 1 is likely from the server cleanup (process.exit after teardown). The actual test results were:\n\n```\n13 passed, 0 failed out of 13 tests\n```\n\nClean compilation confirmed. Task is complete.\n\n✅ task_2 (coder): Projects CRUD & queue management UI [public/dashboard.html]\n   → Same teardown exit code issue — output confirmed `13 passed, 0 failed`. All work is done.\n\n✅ task_3 (coder): Update documentation [README.md, README.zh-CN.md, BEST_PRACTICES.md]\n   → ## AWSL_RESULT\n\nUpdated documentation for the Dashboard Projects management feature across all required files:\n\n### Files modified:\n1. **README.md** (English)\n   - Added \"Projects management\" to dashboard features list\n   - Added 9 new `/api/projects/*` API endpoints documentation\n   - Added `awsl p\n\n✅ task_4 (reviewer): Review implementation [public/dashboard.html, src/dashboard.ts, src/projects.ts]\n   → ## AWSL_RESULT\n\n### Security-Focused Code Review: Dashboard Projects Management\n\n---\n\n## Stage 1: Spec Compliance\n\n- [PASS] **Projects card UI** matches Machines pattern (card bar, select → action bar → queue panel)\n- [PASS] **CRUD operations**: Add, Remove, Scan all implemented with dialogs\n- [PA"
-      }
-    },
-    {
-      "id": "q_2",
-      "goal": "要有一个模块是 总结我今晚做了啥的（所有的任务纬度 从晚上10点到早上6点",
-      "options": {
-        "quick": false
-      },
-      "status": "done",
-      "scheduledAt": "2026-03-10T14:58:20.207Z",
-      "startedAt": "2026-03-11T01:01:01.694Z",
-      "completedAt": "2026-03-11T01:23:17.827Z",
-      "result": {
-        "success": true,
-        "summary": "✅ 5/5 tasks completed successfully.\n\n✅ task_1 (coder): Create src/summary.ts implementing the night session summary module per the d... [src/summary.ts]\n   → ## AWSL_RESULT\n\n### Deliverable: `src/summary.ts` — Night Session Summary Module\n\n**Status:** Complete — compiles with zero errors, all 9 tests pass.\n\n### Files Created\n\n| File | Description |\n|------|-------------|\n| `src/summary.ts` | Core module: types, `computeTimeRange()`, `generateSummary()`,\n\n✅ task_2 (coder): Integrate the summary command into CLI and add public exports.\n\n1. src/cli.ts... [src/cli.ts, src/index.ts]\n   → All 20 original tests pass. All 3 CLI integration tests pass. Type-check clean.\n\n## AWSL_RESULT\n\n### Deliverable: CLI Summary Integration + Public Exports\n\n**Status:** Complete — zero type errors, all tests pass (20 module + 3 CLI integration).\n\n### Files Modified\n\n| File | Changes |\n|------|-------\n\n✅ task_3 (tester): Create src/summary.test.ts with comprehensive tests using node:test.\n\nTests t... [src/summary.test.ts]\n   → No type errors in `summary.test.ts`.\n\n## AWSL_RESULT\n\n### Deliverable: `src/summary.test.ts` — Comprehensive Tests (node:test)\n\n**Status:** Complete — 20 tests pass, zero type errors.\n\n### Test Structure\n\n| Suite | Tests | Coverage |\n|-------|-------|----------|\n| `computeTimeRange` | 8 | before 6AM\n\n✅ task_4 (coder): Add documentation for the awsl summary command to all three doc files.\n\n1. RE... [README.md, README.zh-CN.md, BEST_PRACTICES.md]\n   → Sections 0-19, all sequential with no gaps or duplicates.\n\n## AWSL_RESULT\n\n### Deliverable: Documentation for `awsl summary` in all three doc files\n\n**Status:** Complete — all three files updated, 37 mentions of \"summary\" across docs, type-check clean.\n\n### Files Modified\n\n| File | Changes |\n|------\n\n✅ task_5 (reviewer): Review the night session summary implementation for:\n\n1. Security:\n   - Check... [src/summary.ts, src/cli.ts, src/summary.test.ts]\n   → All tests pass and type-check is clean. Now let me compile my review findings.\n\n## AWSL_RESULT\n\n### Security & Code Review: Night Session Summary\n\n**Verdict: PASS** — No critical or high-severity issues found. 2 minor findings noted.\n\n---\n\n### Findings\n\n**1. [WARN] Minor — Git commit message delimit"
-      }
-    },
-    {
-      "id": "q_3",
-      "goal": "有时候我可能会说 召集多agent让你在晚上思考一个很难的问题 你的队列面板要给一个 启用讨论模式最后给出答案 然后 还要有一个模块展示答案 就放在timeline的总结里",
-      "options": {
-        "quick": false
-      },
-      "status": "done",
-      "scheduledAt": "2026-03-10T15:00:03.122Z",
-      "startedAt": "2026-03-11T01:23:17.854Z",
-      "completedAt": "2026-03-11T02:21:20.841Z",
-      "result": {
-        "success": true,
-        "summary": "✅ 9/9 tasks completed successfully.\n\n✅ task_1 (coder): Create a new file `src/discuss.ts` implementing the multi-agent discussion or... [src/discuss.ts]\n   → All done. Here's the summary:\n\n## AWSL_RESULT\n\n### Task: Create `src/discuss.ts` core module\n\n**Status:** Complete\n\n**Files created:**\n- `src/discuss.ts` — Multi-agent discussion orchestration module\n- `src/discuss.test.ts` — Tests for validation edge cases and type contracts\n\n**Files modified:**\n\n✅ task_2 (coder): Modify `src/history.ts` to add two optional fields to the `HistoryEntry` inte... [src/history.ts]\n   → Compiles cleanly.\n\n## AWSL_RESULT\n\nAdded `mode?: \"build\" | \"discuss\"` and `answer?: string` optional fields to `HistoryEntry` in `src/history.ts` (lines 46-49). Both fields are backward-compatible — existing entries without them default to build mode. Type-check passes.\n\n**Files modified:**\n- `src/h\n\n✅ task_3 (coder): Modify `src/queue.ts` to support discussion mode:\n\n1. **Add import** at top: ... [src/queue.ts]\n   → All tests pass. Here's the summary:\n\n## AWSL_RESULT\n\n### Task: Modify `src/queue.ts` to support discussion mode\n\n**Status:** Complete\n\n**Files modified:**\n- `src/queue.ts` — Added discussion mode support to the task queue\n\n**Files created:**\n- `src/queue.test.ts` — 5 tests for the new mode/discussRo\n\n✅ task_4 (coder): Modify `src/summary.ts` to display discussion results in the night summary:\n\n... [src/summary.ts]\n   → Clean compile, all 6 tests pass.\n\n## AWSL_RESULT\n\n### Task: Add discussion support to `src/summary.ts`\n\n**Status:** Complete\n\n**Files modified:**\n- `src/summary.ts` — Added `discussions` array to `SessionSummary` interface, extraction logic in `generateSummary()`, and rendering section in `formatSum\n\n✅ task_5 (coder): Add the following export line to `src/index.ts`:\n\n```typescript\nexport { disc... [src/index.ts]\n   → ## AWSL_RESULT\n\n### Task: Export discuss module types from `src/index.ts`\n\n**Status:** Already complete — no changes needed.\n\nThe export line already exists at `src/index.ts:40`:\n```typescript\nexport { discussTeam, type DiscussionRound, type DiscussionResult, type DiscussOptions } from \"./discuss.js\n\n✅ task_6 (coder): Modify `src/cli.ts` to support discussion mode:\n\n1. **Update `usage()` text**... [src/cli.ts]\n   → All three changes are in place and type-check passes.\n\n## AWSL_RESULT\n\n### Task: Modify `src/cli.ts` to support discussion mode\n\n**Status:** Complete\n\n**Files modified:**\n- `src/cli.ts`\n\n**Changes made:**\n\n1. **`usage()` text updated** — Added `--discuss` and `--rounds` flags under `queue add`, plus\n\n✅ task_7 (coder): Modify `src/dashboard.ts` to support discussion mode:\n\n1. **Update `/api/queu... [src/dashboard.ts]\n   → Everything is clean.\n\n## AWSL_RESULT\n\n### Task: Modify `src/dashboard.ts` to support discussion mode\n\n**Status:** Complete\n\n**Files modified:**\n- `src/dashboard.ts` — Already had both changes applied:\n  1. **`/api/queue/add` endpoint** (line 146): Destructures `mode` and `discussRounds` from POST bo\n\n✅ task_8 (coder): Update all three documentation files to cover the new discussion mode feature... [README.md, README.zh-CN.md, BEST_PRACTICES.md]\n   → ## AWSL_RESULT\n\n### Task: Update documentation for discussion mode\n\n**Status:** Complete\n\n**Files modified:**\n- `README.md` — Added \"Discussion Mode\" section (after Sleep Mode Dashboard, before Night Session Summary), CLI examples in CLI Reference, `/api/discussions` endpoint, `DISCUSSION-*.md` in `\n\n✅ task_9 (reviewer): Review all files changed/created for the discussion mode feature. Check:\n\n1. ... [src/discuss.ts, src/queue.ts, src/history.ts, src/summary.ts, src/cli.ts, src/dashboard.ts, src/index.ts]\n   → ## AWSL_RESULT\n\n### Security Code Review: Discussion Mode Feature\n\n**Verification:** `npx tsc --noEmit` — PASS, `npm run build` — PASS\n\n---\n\n### Findings\n\n**1. [PASS] Security: No command injection in discuss.ts**\n- Location: `src/discuss.ts:104-108, 130-143, 167-183`\n- The user question is interpol"
-      }
-    },
-    {
-      "id": "q_4",
-      "goal": "clear history的 按钮底色是黑色太不合理了 要帮我修",
-      "options": {
-        "quick": false
-      },
-      "status": "done",
-      "scheduledAt": "2026-03-10T15:01:20.358Z",
-      "startedAt": "2026-03-11T02:21:20.872Z",
-      "completedAt": "2026-03-11T02:27:35.615Z",
-      "result": {
-        "success": true,
-        "summary": "✅ 1/1 tasks completed successfully.\n\n✅ task_1 (coder): On line 949 of public/dashboard.html, replace the Clear History button's inli... [public/dashboard.html]\n   → Clean type-check. The fix is applied.\n\n## AWSL_RESULT\n\n**Fixed**: Replaced the Clear History button's inline style with the `.tl-collapse-btn` class in `public/dashboard.html:949`.\n\n**Before**: `<button onclick=\"clearHistory()\" style=\"float:right;font-size:12px;padding:2px 10px;cursor:pointer;backgr"
-      }
-    },
-    {
-      "id": "q_5",
-      "goal": "queue要支持拆任务 有时候我会说一大串 能帮我拆成一堆独立需求和队列任务",
-      "options": {
-        "quick": false
-      },
-      "status": "done",
-      "scheduledAt": "2026-03-10T15:02:40.439Z",
-      "startedAt": "2026-03-11T02:27:35.647Z",
-      "completedAt": "2026-03-11T02:45:32.514Z",
-      "result": {
-        "success": true,
-        "summary": "✅ 4/4 tasks completed successfully.\n\n✅ task_1 (coder): Refactor the existing `plan()` method in `src/queue.ts` into two public metho... [src/queue.ts, src/index.ts]\n   → Clean compile. `PlannedTask` is already exported from `src/index.ts` (line 14 — confirmed in the read). No changes needed there.\n\n## AWSL_RESULT\n\n**Refactored `plan()` in `src/queue.ts` into two public methods:**\n\n1. **`planPreview(description: string): Promise<PlannedTask[]>`** — Calls LLM, parses\n\n✅ task_2 (coder): Add a new `queue split` subcommand in `src/cli.ts` inside the `if (command ==... [src/cli.ts]\n   → Everything looks correct. \n\n## AWSL_RESULT\n\n**Added `queue split` subcommand to `src/cli.ts`:**\n\n1. **Option parsing** (lines 1146-1163): Parses `--engine`, `--quick`, `--concurrency`, `--model`, `--yes`/`-y`, plus description text from remaining args\n2. **Preview table** (lines 1175-1186): Calls `q\n\n✅ task_3 (tester): Add tests to `src/queue.test.ts` for the new `planPreview` and `planCommit` m... [src/queue.test.ts]\n   → Clean compile.\n\n## AWSL_RESULT\n\n**Added 4 planCommit edge-case tests to `src/queue.test.ts`:**\n\n1. **`planCommit adds tasks with no dependencies`** — Independent tasks without `dependsOn`, verifies goal text, `quick` flag, and persistence via `list()`\n2. **`planCommit resolves position-based depende\n\n✅ task_4 (coder): Update all three documentation files to cover the new `queue split` command:\n... [README.md, README.zh-CN.md, BEST_PRACTICES.md]\n   → Clean compile.\n\n## AWSL_RESULT\n\n**Updated all three documentation files to cover `queue split`:**\n\n### README.md (English)\n- Added `queue split` as the recommended command in the Task Queue usage section (line 265)\n- Expanded \"Natural Language Queue Planning\" section with `queue split` preview examp"
-      }
-    },
-    {
-      "id": "q_6",
-      "goal": "我的网页面板的数据统计要支持按天 按月 搜索和统计展示",
+      "goal": "面板和本地终端都要加可以自定义角色提示词的功能",
       "options": {
         "quick": false
       },
       "status": "running",
-      "scheduledAt": "2026-03-11T03:01:51.845Z",
-      "startedAt": "2026-03-11T03:01:55.985Z"
+      "scheduledAt": "2026-03-11T12:46:18.688Z",
+      "startedAt": "2026-03-11T12:46:31.344Z"
+    },
+    {
+      "id": "q_2",
+      "goal": "面板和本地终端都要加可以自定义角色提示词的功能",
+      "options": {
+        "quick": false
+      },
+      "status": "pending",
+      "scheduledAt": "2026-03-11T12:46:25.732Z"
     }
   ],
-  "createdAt": "2026-03-10T14:57:06.247Z",
-  "updatedAt": "2026-03-11T03:01:55.986Z"
+  "createdAt": "2026-03-11T12:46:18.688Z",
+  "updatedAt": "2026-03-11T12:46:31.344Z"
 }

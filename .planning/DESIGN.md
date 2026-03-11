@@ -1,47 +1,49 @@
 ## AWSL_RESULT
 
-### Design: Dashboard Date Filter & Statistics
+### Design: Custom Role Prompts (Dashboard + CLI)
 
-**Problem:** Dashboard shows all-time stats only. User wants to view stats by day, month, or custom range.
+**Design document saved to:** `.planning/DESIGN-custom-role-prompts.md`
 
-**Solution:** Client-side date filtering in `public/dashboard.html` (~120 lines). No backend changes.
+---
 
-#### Key Decisions
+### Socratic Analysis Summary
 
-| Decision | Rationale |
-|----------|-----------|
-| Client-side only | Data volume is tiny. Entries already fully loaded. Zero backend risk. |
-| Filter before `stats()` | All widgets (stats cards, heatmap, trend, agents, timeline) respect the filter. |
-| Pill-style button bar | Clean, compact. Modes: All / Today / 7 Days / 30 Days / Month / Custom. |
-| Composes with project filter | Date filter at `render()` level, project filter inside `renderTimeline()`. |
-| No localStorage persistence | Filter resets on reload — simple, avoids stale state. |
+**核心需求**: 用户希望通过 Dashboard 和 CLI 两个入口自定义 Agent 的角色提示词（system prompt），而不是手动编辑 `.md` 文件。
 
-#### Filter Modes
+**评估了 3 种方案**:
+| 方案 | 选择 | 原因 |
+|------|------|------|
+| A: Agent CRUD API + 文件存储 | **✓ 采用** | 复用已有 `.md` 格式，标准 REST API，可 git 追踪 |
+| B: Prompt Override 覆盖层 | ✗ | 合并逻辑复杂，心智模型混乱 |
+| C: JSON 配置存储 | ✗ | 打破现有约定，丢失 markdown 可读性 |
 
-- **All** (default) — no filter, current behavior
-- **Today** — entries from today only
-- **7 Days** — last 7 days
-- **30 Days** — last 30 days
-- **Month** — pick a specific month via `<input type="month">`
-- **Custom** — date range with from/to `<input type="date">`
+---
 
-#### Architecture
+### Key Architecture Decisions
 
-1. New global: `var dateFilter = { mode: 'all' }`
-2. New function: `filterByDate(entries, df)` — filters by mode using existing `localDate()`
-3. Integration: In `render()`, apply `filterByDate()` before `stats()` call
-4. Dirty-check key updated to include filter state
-5. UI: Filter bar between header and stats cards with pill buttons + conditional inputs
+1. **复用 `.md` 文件格式** — 无需迁移，git 可追踪，人类可读
+2. **内置 Agent 只读，自定义通过 `./agents/{name}.md` 覆盖** — 防止破坏，清晰心智模型
+3. **REST API 在 dashboard.ts** — `GET/POST/PUT/DELETE /api/agents`
+4. **CLI 子命令** — `agents show/create/edit/delete/reset`
+5. **Dashboard 模态编辑器** — 大文本区域编辑提示词，支持所有字段
+6. **Relay 支持** — `agents:list/get/save/delete` 命令，远程管理
 
-#### Files
+### Files to Modify (8 files)
 
-| File | Scope |
-|------|-------|
-| `public/dashboard.html` | CSS (~25 lines) + HTML (~15 lines) + JS (~80 lines) |
+| Wave | File | Changes |
+|------|------|---------|
+| 1 | `src/agents.ts` | Add `serializeAgent()`, `saveAgent()`, `deleteAgent()`, `getAgent()` |
+| 1→2 | `src/dashboard.ts` | Add `/api/agents` CRUD endpoints |
+| 1→2 | `src/cli.ts` | Add `agents show/create/edit/delete/reset` subcommands |
+| 2 | `public/dashboard.html` | Add Agent Roles card + editor modal |
+| 2 | `src/remote.ts` | Handle `agents:*` relay commands |
+| 3 | `README.md`, `README.zh-CN.md`, `BEST_PRACTICES.md` | Documentation |
 
-**No backend changes.** No TypeScript file modifications needed.
+### Task Graph (8 tasks, 4 waves)
 
-#### Design Documents
-
-- `.planning/design.md` — Full design with code samples
-- `.planning/shared-memory.json` — Machine-readable design for coder/tester agents
+```
+Wave 1: task_1 (agents.ts CRUD functions)
+Wave 2: task_2 (API endpoints) + task_3 (CLI commands) + task_5 (relay)  [parallel]
+Wave 3: task_4 (dashboard UI) + task_6 (docs) + task_7 (review)         [parallel]
+Wave 4: task_8 (tests)
+```

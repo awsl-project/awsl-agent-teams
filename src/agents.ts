@@ -9,7 +9,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { parse as parseYaml } from "yaml";
+import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import { Type } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import { log } from "./log.js";
@@ -102,7 +102,7 @@ function loadFromDir(dir: string): TeamAgentDef[] {
 
 // ─── Built-in Agents ─────────────────────────────────────────────
 
-const BUILTINS: TeamAgentDef[] = [
+export const BUILTINS: readonly TeamAgentDef[] = Object.freeze([
 	{
 		name: "planner",
 		role: "planner",
@@ -188,7 +188,75 @@ Rules:
 - Write test code using write tool
 - Call "report" with test results`,
 	},
-];
+]) as readonly TeamAgentDef[];
+
+const AGENT_NAME_RE = /^[a-z][a-z0-9-]*$/;
+const AGENT_NAME_MAX = 50;
+
+/** Serialize a TeamAgentDef back to frontmatter+markdown format. */
+export function serializeAgent(agent: TeamAgentDef): string {
+	const fm: Record<string, unknown> = {
+		name: agent.name,
+		role: agent.role,
+		description: agent.description,
+	};
+	if (agent.model !== undefined) fm.model = agent.model;
+	if (agent.tools !== undefined && agent.tools.length > 0) fm.tools = agent.tools;
+	if (agent.skills !== undefined && agent.skills.length > 0) fm.skills = agent.skills;
+	if (agent.thinkingLevel !== undefined) fm.thinking = agent.thinkingLevel;
+
+	return `---\n${stringifyYaml(fm)}---\n${agent.systemPrompt}\n`;
+}
+
+/** Save an agent to a directory as {name}.md. Merges with existing file if present. */
+export function saveAgent(dir: string, agent: Partial<TeamAgentDef> & { name: string }): TeamAgentDef {
+	const { name } = agent;
+	if (!name || !AGENT_NAME_RE.test(name) || name.length > AGENT_NAME_MAX) {
+		throw new Error(`Invalid agent name "${name}": must match /^[a-z][a-z0-9-]*$/ and be at most ${AGENT_NAME_MAX} chars`);
+	}
+
+	fs.mkdirSync(dir, { recursive: true });
+
+	const filePath = path.join(dir, `${name}.md`);
+	const tmpPath = filePath + ".tmp";
+
+	// Merge with existing if present
+	let base: Partial<TeamAgentDef> = {};
+	if (fs.existsSync(filePath)) {
+		const existing = loadFromDir(dir).find(a => a.name === name);
+		if (existing) base = existing;
+	}
+
+	const merged: TeamAgentDef = {
+		name,
+		role: agent.role ?? base.role ?? "custom",
+		description: agent.description ?? base.description ?? "",
+		model: agent.model ?? base.model,
+		tools: agent.tools ?? base.tools,
+		skills: agent.skills ?? base.skills,
+		thinkingLevel: agent.thinkingLevel ?? base.thinkingLevel,
+		systemPrompt: agent.systemPrompt ?? base.systemPrompt ?? "",
+		source: "file",
+	};
+
+	fs.writeFileSync(tmpPath, serializeAgent(merged), "utf-8");
+	fs.renameSync(tmpPath, filePath);
+
+	return merged;
+}
+
+/** Delete an agent file from a directory. Returns true if deleted, false if not found. */
+export function deleteAgent(dir: string, name: string): boolean {
+	const filePath = path.join(dir, `${name}.md`);
+	if (!fs.existsSync(filePath)) return false;
+	fs.unlinkSync(filePath);
+	return true;
+}
+
+/** Get a single agent by name from loaded agents (builtins + dirs). */
+export function getAgent(dirs: string[], name: string): TeamAgentDef | undefined {
+	return loadAgents(dirs).find(a => a.name === name);
+}
 
 export function loadAgents(dirs: string[]): TeamAgentDef[] {
 	const agentMap = new Map<string, TeamAgentDef>();

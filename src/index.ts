@@ -4,7 +4,7 @@
  * import { executeTeam, loadAgents, SharedMemory } from "awsl-agent-core";
  */
 
-export { loadAgents, type TeamAgentDef } from "./agents.js";
+export { loadAgents, serializeAgent, saveAgent, deleteAgent, getAgent, BUILTINS, type TeamAgentDef } from "./agents.js";
 export { executeTeam, planOnly, type Task, type TeamResult, type TeamEvent, type TeamEventType, type TeamHook, type ExecuteOptions, type PlanOnlyResult, type WaveInfo } from "./orchestrator.js";
 export { validatePlan, type ValidatedTask, type ValidationResult } from "./validate.js";
 export { runFullVerification, runStaticReview, type VerifyResult, type VerifyItem, type ReviewResult, type ReviewFinding } from "./verify.js";

@@ -1,112 +1,218 @@
 # Execution Plan
 
-## task_1: Add date filter UI controls and CSS
+## task_1: Agent CRUD functions in agents.ts
 - **Assignee:** coder
-- **Files:** public/dashboard.html
+- **Files:** src/agents.ts, src/index.ts
 
 ### Action
-Add a date filter bar in public/dashboard.html inside the #app div, right BEFORE the .stats div (around line 862). Implementation:
+Add four new exported functions to src/agents.ts:
 
-1) HTML: Add a div with class 'date-filter' containing:
-   - Quick-select preset buttons: '今日'(Today), '本周'(This Week), '本月'(This Month), '全部'(All, default active)
-   - A <input type='month'> for month selection (labeled '选择月份')
-   - Two <input type='date'> for custom range start/end (labeled '自定义范围')
-   - Each button should have an onclick handler calling setDateFilter('today'), setDateFilter('week'), setDateFilter('month'), setDateFilter('all')
-   - Buttons should have id attributes: dfToday, dfWeek, dfMonth, dfAll
-   - Date inputs should have ids: dfMonthInput, dfStartInput, dfEndInput
+1. `serializeAgent(agent: TeamAgentDef): string` — Convert a TeamAgentDef back to frontmatter+markdown format. Build YAML frontmatter from name, role, description, model, tools, skills, thinking fields. The markdown body is systemPrompt. Use the `yaml` package's `stringify` for the frontmatter section.
 
-2) CSS: Add styles matching the existing dark theme:
-   - .date-filter: display flex, align-items center, gap 8px, flex-wrap wrap, padding 8-12px, margin-bottom 12px, background var(--bg2), border-radius 10px, border 1px solid var(--border)
-   - .date-filter button: pill-shaped (border-radius 16px), background transparent, border 1px solid var(--border), color var(--ink3), padding 4px 14px, cursor pointer, font-size 13px
-   - .date-filter button.active: background var(--blue), color white, border-color var(--blue)
-   - .date-filter input: background var(--bg), border 1px solid var(--border), color var(--ink), border-radius 6px, padding 4px 8px, font-size 13px
-   - .date-filter label: font-size 12px, color var(--ink3)
+2. `saveAgent(dir: string, agent: Partial<TeamAgentDef> & { name: string }): TeamAgentDef` — Validate agent name matches `/^[a-z][a-z0-9-]*$/` and max 50 chars. If an existing file exists in dir, load it first and merge fields. Serialize and write to `{dir}/{name}.md` atomically (write to .tmp then rename). Return the full TeamAgentDef.
+
+3. `deleteAgent(dir: string, name: string): boolean` — Delete `{dir}/{name}.md` if it exists. Return true if deleted, false if not found. Never delete built-in agents (they have no file).
+
+4. `getAgent(dirs: string[], name: string): TeamAgentDef | undefined` — Load all agents via loadAgents(dirs) and find by name.
+
+Also export `BUILTINS` as a readonly array so dashboard can distinguish built-in vs custom.
+
+Update src/index.ts to re-export: `serializeAgent`, `saveAgent`, `deleteAgent`, `getAgent`, `BUILTINS`.
 
 ### Verify
-Open dashboard.html in browser and confirm filter bar appears above stats with all controls visible
+npx tsc --noEmit
 
 ### Done
-Date filter bar with 4 preset buttons and date/month inputs renders correctly in the dashboard
+serializeAgent, saveAgent, deleteAgent, getAgent are exported and type-check passes
 
-## task_2: Add date filter JS logic and wire to render
+## task_2: Dashboard API endpoints for agents
 - **Assignee:** coder
 - **Dependencies:** task_1
-- **Files:** public/dashboard.html
+- **Files:** src/dashboard.ts
 
 ### Action
-Add JavaScript logic for date filtering in public/dashboard.html:
+Add agent CRUD API endpoints to the dashboard HTTP server in src/dashboard.ts. Import `loadAgents`, `saveAgent`, `deleteAgent`, `getAgent`, `BUILTINS` from `./agents.js`.
 
-1) State variables (add near line ~1008, alongside existing filterProj/selectedClient):
-   var dateFilterMode = 'all';  // 'today' | 'week' | 'month' | 'custom' | 'all'
+Add these routes BEFORE the 404 handler:
 
-2) setDateFilter(mode) function:
-   - Sets dateFilterMode = mode
-   - Updates button active states: remove 'active' from all .date-filter buttons, add 'active' to the clicked one
-   - If mode is 'month': read value from dfMonthInput
-   - If mode is 'custom': read values from dfStartInput and dfEndInput
-   - Reset render cache: render._lastKey = null
-   - Call render()
+1. `GET /api/agents` — Load agents from `[path.join(cwd, 'agents')]`. Return JSON array of all TeamAgentDef[]. If query param `name` is present, return single agent or 404.
 
-3) Event handlers for inputs:
-   - dfMonthInput.onchange: call setDateFilter('month')
-   - dfStartInput.onchange and dfEndInput.onchange: call setDateFilter('custom')
+2. `POST /api/agents` — Create new agent. Use collectBody to parse JSON body with fields: name, role, description, systemPrompt, model?, tools?, skills?, thinkingLevel?. Validate: name required + matches pattern, systemPrompt required + non-empty, name must not already exist in custom agents dir. Call saveAgent(agentsDir, parsed). Return 201 with the created agent.
 
-4) filterByDate(entries) function:
-   - If dateFilterMode === 'all': return entries unchanged
-   - If 'today': var today = localDate(new Date().toISOString()); return entries where localDate(e.date||e.startedAt) === today
-   - If 'week': compute Monday of current week as YYYY-MM-DD string; return entries where localDate(e.date||e.startedAt) >= monday && <= today
-   - If 'month': var mv = document.getElementById('dfMonthInput').value (YYYY-MM); return entries where localDate(e.date||e.startedAt) starts with mv
-   - If 'custom': var s = dfStartInput.value, end = dfEndInput.value; return entries where localDate(e.date||e.startedAt) >= s && <= end (skip check if s or end is empty)
+3. `PUT /api/agents` — Update existing agent. Use collectBody, parse JSON body with name + any updatable fields. Agent must exist (in builtins or files). Call saveAgent(agentsDir, parsed) which merges. Return 200 with updated agent.
 
-5) Wire into render() function:
-   - At line ~1770, BEFORE 'var s = stats(entries)', insert: entries = filterByDate(entries);
-   - Update dirty-check key at line ~1764 to append: + '|' + dateFilterMode + '|' + (document.getElementById('dfMonthInput')?.value||'') + '|' + (document.getElementById('dfStartInput')?.value||'') + '|' + (document.getElementById('dfEndInput')?.value||'')
+4. `DELETE /api/agents` — Delete custom agent. Get `name` from query param. Cannot delete if only exists as builtin (return 400). Call deleteAgent(agentsDir, name). Return 200 with { deleted: boolean }.
 
-6) Initialize: set dfAll button to have class 'active' on page load
+Set `const agentsDir = path.join(cwd, 'agents');` at the top of the request handler. Ensure mkdir -p on agentsDir for write operations.
 
 ### Verify
-Open dashboard in browser. Click each preset button and verify stats cards, token counts, heatmap, trend chart, timeline, and agent analysis all update to show only data matching the selected date range.
+npx tsc --noEmit
 
 ### Done
-All dashboard widgets correctly filter by selected date range; preset buttons and custom inputs work; filter persists across 30s auto-refresh
+GET/POST/PUT/DELETE /api/agents endpoints exist and type-check passes
 
-## task_3: Review date filter implementation
-- **Assignee:** reviewer
-- **Dependencies:** task_2
-- **Files:** public/dashboard.html
+## task_3: CLI agents subcommands
+- **Assignee:** coder
+- **Dependencies:** task_1
+- **Files:** src/cli.ts
 
 ### Action
-Review the date filter implementation in public/dashboard.html focusing on:
-1) Date comparison correctness: ensure localDate() is used consistently, timezone handling is correct, YYYY-MM-DD string comparison works (lexicographic comparison of ISO date strings is valid)
-2) Edge cases: entries without date/startedAt fields, empty filter inputs, empty entries array after filtering
-3) Code style: must use var (not let/const), no ES6+ features (arrow functions, template literals), consistent with existing codebase patterns
-4) UX: active button state updates correctly, filter doesn't break auto-refresh, heatmap/trend still show meaningful data when filtered
-5) No XSS vectors from input.value usage
-6) Performance: filtering runs O(n) per render, acceptable for expected data sizes
-Flag issues and suggest fixes.
+Enhance the existing `agents` CLI command in src/cli.ts with subcommands. Import `saveAgent`, `deleteAgent`, `getAgent`, `serializeAgent`, `BUILTINS` from `./agents.js`.
+
+Current `agents` command just lists agents. Refactor to support subcommands:
+
+1. `awsl agents` (no subcommand) — Keep existing list behavior
+2. `awsl agents show <name>` — Load agent by name, print full details including systemPrompt. Use getAgent().
+3. `awsl agents create <name>` — Create new agent. Accept flags: --role (default 'custom'), --description, --prompt (inline text), --prompt-file (read from file), --tools (comma-separated), --model, --skills, --thinking. Validate name pattern. Call saveAgent().
+4. `awsl agents edit <name>` — Update existing agent. Same flags as create. Load existing agent first, merge provided flags, call saveAgent().
+5. `awsl agents delete <name>` — Delete custom agent file. Confirm it's not a builtin-only agent. Call deleteAgent().
+6. `awsl agents reset <name>` — Delete override file for a builtin agent, restoring default. Only works if agent name is in BUILTINS.
+
+Update the `usage()` function to document all new subcommands.
+
+The agentsDir should be `path.join(cwd, 'agents')` where cwd comes from --cwd flag or process.cwd().
 
 ### Verify
-Read the complete dashboard.html and trace all date filter code paths
+npx tsc --noEmit
 
 ### Done
-Review complete with issues documented or confirmation that implementation is correct
+awsl agents show/create/edit/delete/reset subcommands implemented and type-check passes
 
-## task_4: Update documentation for date filter
+## task_4: Dashboard UI agent editor
 - **Assignee:** coder
 - **Dependencies:** task_2
+- **Files:** public/dashboard.html
+
+### Action
+Add an 'Agent Roles' (角色管理) collapsible card section to public/dashboard.html, following the existing pixel art UI style.
+
+Add AFTER the existing card sections:
+
+1. **Agent Roles Card** — Collapsible section with header '角色管理' and a [+New] button. Shows agent cards in a grid/flex layout. Each card shows: agent name, role badge, source badge ('built-in' grey / 'custom' green / 'override' yellow). Cards are clickable to open editor.
+
+2. **Agent Editor Modal** — A modal dialog (overlay) with:
+   - Name field (text input, readonly when editing existing)
+   - Role dropdown (planner, architect, coder, reviewer, tester, custom)
+   - Description text input
+   - Model text input (optional)
+   - Tools text input (comma-separated, optional)
+   - Skills text input (comma-separated, optional)
+   - Thinking level dropdown (low, medium, high, optional)
+   - System Prompt textarea (large, monospaced, min 200px height)
+   - Action buttons: [Save] [Reset to Default] (only for builtins) [Delete] (only for custom)
+
+3. **JavaScript integration** — Add functions:
+   - `loadAgents()` — GET /api/agents, render agent cards
+   - `openAgentEditor(name?)` — Open modal, pre-fill if editing
+   - `saveAgent()` — POST (new) or PUT (edit) /api/agents
+   - `deleteAgent(name)` — DELETE /api/agents?name=X with confirmation
+   - `resetAgent(name)` — DELETE override, reload to show builtin default
+
+Match existing dashboard styling: pixel art aesthetic, dark theme (#0a0a1a background), green accent (#00ff41), monospace fonts, card-based layout with borders.
+
+Call `loadAgents()` on page load alongside existing data loading.
+
+### Verify
+npx tsc --noEmit
+
+### Done
+Agent Roles card with editor modal renders in dashboard, CRUD operations work via API
+
+## task_5: Remote relay agent commands
+- **Assignee:** coder
+- **Dependencies:** task_1
+- **Files:** src/remote.ts
+
+### Action
+Add agent management commands to the RemoteClient's executeCommand switch in src/remote.ts. Import `loadAgents`, `saveAgent`, `deleteAgent` from `./agents.js`.
+
+Add these cases to the switch(action) block:
+
+1. `agents:list` — Load agents from [path.join(this.options.cwd, 'agents')], return TeamAgentDef[].
+2. `agents:get` — Get payload.name, find in loaded agents, return agent or null.
+3. `agents:save` — Get agent fields from payload, call saveAgent(agentsDir, payload). Return saved agent.
+4. `agents:delete` — Get payload.name, call deleteAgent(agentsDir, payload.name). Return { deleted: boolean }.
+
+The agentsDir is `path.join(this.options.cwd, 'agents')`.
+
+### Verify
+npx tsc --noEmit
+
+### Done
+agents:list, agents:get, agents:save, agents:delete relay commands handled in remote.ts
+
+## task_6: Unit tests for agent CRUD
+- **Assignee:** tester
+- **Dependencies:** task_1
+- **Files:** tests/agents.test.ts
+
+### Action
+Create tests/agents.test.ts using node:test and node:assert/strict. Test the new agent CRUD functions:
+
+1. `serializeAgent` — Test that a TeamAgentDef serializes to valid frontmatter + markdown body. Verify round-trip: serialize → parse → same data.
+2. `saveAgent` — Create temp dir, save an agent, verify file exists with correct content. Test merging: save partial update, verify fields merged.
+3. `deleteAgent` — Save agent, delete it, verify file removed. Test deleting non-existent returns false.
+4. `getAgent` — Load agents from temp dir, verify getAgent finds by name. Test not-found returns undefined.
+5. Name validation — Test that saveAgent rejects invalid names (uppercase, special chars, too long, empty).
+6. Built-in agents — Verify BUILTINS array contains expected agents (planner, architect, coder, reviewer, tester).
+
+Use `fs.mkdtempSync(path.join(os.tmpdir(), 'awsl-test-'))` for temp dirs with `finally` cleanup. Import from '../src/agents.js'.
+
+### Verify
+npx tsx tests/agents.test.ts
+
+### Done
+All agent CRUD tests pass: serialize, save, delete, get, validation, builtins
+
+## task_7: Documentation update
+- **Assignee:** coder
+- **Dependencies:** task_2, task_3, task_4, task_5
 - **Files:** README.md, README.zh-CN.md, BEST_PRACTICES.md
 
 ### Action
-Update all three documentation files:
+Update all three documentation files to cover the new custom role prompts feature:
 
-1) README.md: Find the Dashboard section and add a bullet/paragraph about the new date filter feature: 'Filter statistics by day, week, month, or custom date range. All dashboard widgets update in real-time based on the selected time period.'
+**README.md** (English):
+- Add section about custom agent roles under features
+- Document CLI commands: `awsl agents show/create/edit/delete/reset` with examples
+- Document Dashboard agent editor UI
+- Document API endpoints: GET/POST/PUT/DELETE /api/agents
 
-2) README.zh-CN.md: Add the equivalent in Chinese: '支持按天、周、月或自定义日期范围筛选统计数据。所有面板组件根据所选时间段实时更新。'
+**README.zh-CN.md** (Chinese):
+- Mirror all README.md changes in Chinese
+- 角色管理 section with CLI and Dashboard usage
 
-3) BEST_PRACTICES.md: Add guidance about using date filters for productivity analysis, e.g.: '使用日期筛选器分析生产力趋势：按天查看每日完成量，按月对比不同月份的效率，自定义范围聚焦特定项目周期。'
+**BEST_PRACTICES.md** (Chinese):
+- Add practical examples of creating custom agents
+- Show how to customize built-in agent prompts
+- Document the agent .md file format (YAML frontmatter + markdown body)
+- Add tips: when to customize vs create new, how to reset to defaults
 
 ### Verify
-Read all three files and confirm the date filter feature is documented in each
+cat README.md | head -5
 
 ### Done
-README.md, README.zh-CN.md, and BEST_PRACTICES.md all contain date filter documentation
+All three docs updated with custom role prompts feature documentation
+
+## task_8: Security review
+- **Assignee:** reviewer
+- **Dependencies:** task_1, task_2, task_3, task_5
+- **Files:** src/agents.ts, src/dashboard.ts, src/cli.ts, src/remote.ts
+
+### Action
+Review all new code for security issues:
+
+1. **Path traversal** — Verify agent name validation prevents `../` or absolute paths in saveAgent/deleteAgent. Check that file operations stay within the agents directory.
+2. **Input validation** — Verify all API endpoints validate input before processing. Check name regex enforcement.
+3. **XSS** — Verify dashboard HTML properly escapes agent data before rendering (name, description, systemPrompt). No innerHTML with unsanitized user input.
+4. **File system safety** — Verify atomic writes (tmp+rename pattern). Verify no race conditions in CRUD operations.
+5. **Authorization** — Verify DELETE cannot remove built-in agent source files.
+6. **Body size** — Verify collectBody's MAX_BODY limit applies to agent endpoints.
+
+Report findings via the report tool. Flag any issues that need fixing.
+
+### Verify
+npx tsc --noEmit
+
+### Done
+All new code reviewed for path traversal, XSS, input validation, and file safety issues

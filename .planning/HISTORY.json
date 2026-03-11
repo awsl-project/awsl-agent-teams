@@ -546,7 +546,65 @@
         "tester"
       ],
       "maxConcurrency": 2
+    },
+    {
+      "id": "h_20",
+      "date": "2026-03-11T03:24:08.321Z",
+      "project": "awsl-agent-teams",
+      "projectPath": "C:\\Users\\11421\\awsl-agent-teams",
+      "queueTaskId": "q_6",
+      "goal": "我的网页面板的数据统计要支持按天 按月 搜索和统计展示",
+      "status": "done",
+      "startedAt": "2026-03-11T03:01:55.985Z",
+      "completedAt": "2026-03-11T03:24:08.321Z",
+      "duration": 1332336,
+      "tasksCompleted": 4,
+      "tasksTotal": 4,
+      "summary": "✅ 4/4 tasks completed successfully.\n\n✅ task_1 (coder): Add a date filter bar in public/dashboard.html inside the #app div, right BEF... [public/dashboard.html]\n   → ## AWSL_RESULT\n\n### Deliverable: Date Filter UI Controls & CSS\n\n**File modified:** `public/dashboard.html`\n\n**Changes made:**\n\n1. **`:root` CSS variable** (line 17): Added `--bg2: #edeef2` — used for the filter bar background, consistent with the light theme palette.\n\n2. **`.date-filter` CSS block**\n\n✅ task_2 (coder): Add JavaScript logic for date filtering in public/dashboard.html:\n\n1) State v... [public/dashboard.html]\n   → All tests pass, TypeScript compiles clean.\n\n## AWSL_RESULT\n\n### Deliverable: Date Filter JavaScript Logic\n\n**File modified:** `public/dashboard.html`\n\n**Changes made:**\n\n1. **State variable** (line 1074): Added `var dateFilterMode = 'all';` alongside existing `filterProj`/`selectedClient` globals.\n\n✅ task_3 (reviewer): Review the date filter implementation in public/dashboard.html focusing on:\n1... [public/dashboard.html]\n   → ## AWSL_RESULT\n\n### Security & Code Review: Date Filter Implementation\n\n**Scope:** `public/dashboard.html` — date filter UI, CSS, JS logic, render wiring, and `tests/filterByDate.test.cjs`.\n\n---\n\n### Findings\n\n**1. [FAIL] Correctness — \"本月\" button shows ALL entries instead of current month**\n- **S\n\n✅ task_4 (coder): Update all three documentation files:\n\n1) README.md: Find the Dashboard secti... [README.md, README.zh-CN.md, BEST_PRACTICES.md]\n   → All three documentation files contain the date filter feature documentation:\n\n- **README.md:407** — English date filter description in the Dashboard features list\n- **README.zh-CN.md:407** — Chinese equivalent in the same location\n- **BEST_PRACTICES.md:1408-1411** — Usage guidance for productivity a",
+      "engine": "claude-code",
+      "inputTokens": 29458,
+      "outputTokens": 43880,
+      "costUsd": 4.70635925,
+      "waves": [
+        {
+          "wave": 1,
+          "taskIds": [
+            "task_1"
+          ],
+          "agents": [
+            "coder"
+          ],
+          "parallel": 1
+        },
+        {
+          "wave": 2,
+          "taskIds": [
+            "task_2"
+          ],
+          "agents": [
+            "coder"
+          ],
+          "parallel": 1
+        },
+        {
+          "wave": 3,
+          "taskIds": [
+            "task_3",
+            "task_4"
+          ],
+          "agents": [
+            "reviewer",
+            "coder"
+          ],
+          "parallel": 2
+        }
+      ],
+      "agents": [
+        "coder",
+        "reviewer"
+      ],
+      "maxConcurrency": 2
     }
   ],
-  "updatedAt": "2026-03-11T02:45:32.515Z"
+  "updatedAt": "2026-03-11T03:24:08.322Z"
 }

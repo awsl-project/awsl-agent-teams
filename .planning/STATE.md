@@ -7,6 +7,6 @@
 (none)
 
 ## Position
-- Goal: queue要支持拆任务 有时候我会说一大串 能帮我拆成一堆独立需求和队列任务
+- Goal: 我的网页面板的数据统计要支持按天 按月 搜索和统计展示
 - Tasks: 4/4 completed
 - Status: SUCCESS
