@@ -36,3 +36,4 @@ export { RemoteClient, type RemoteClientOptions } from "./remote.js";
 export { LogStream, getLogStream, type LogLine } from "./logstream.js";
 export { type SandboxPolicy, type BashPolicy, defaultPolicy, checkReadPath, checkWritePath, checkBashCommand } from "./sandbox.js";
 export { ProjectManager, type ProjectEntry, type ProjectRegistry, type ProjectStatus } from "./projects.js";
+export { generateSummary, formatSummary, computeTimeRange, type SessionSummary, type SummaryOptions, type TimeRange, type CommitInfo } from "./summary.js";

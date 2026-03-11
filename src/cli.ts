@@ -27,6 +27,7 @@ import { TaskQueue } from "./queue.js";
 import { startDashboard, isPortInUse } from "./dashboard.js";
 import { RemoteClient } from "./remote.js";
 import { ProjectManager } from "./projects.js";
+import { generateSummary, formatSummary } from "./summary.js";
 
 function usage() {
 	console.error(`
@@ -51,6 +52,11 @@ Commands:
   remote init <url>        Connect to remote dashboard (one command setup)
   remote stop              Disconnect
   remote status            Check connection
+  summary [options]           Summarize night session activity (default: 22:00→06:00)
+    --from <HH:MM>             Start time (default: 22:00)
+    --to <HH:MM>               End time (default: 06:00)
+    --date <YYYY-MM-DD>        Anchor date
+    --all-projects             Aggregate across all registered projects
   projects                    List all registered projects with status
   projects add [path] [--name N]  Register a project (default: cwd)
   projects remove <path|name>     Unregister a project
@@ -717,6 +723,34 @@ async function main() {
 
 		console.error("Commands: init <url>, stop, status");
 		process.exit(1);
+	}
+
+	// ── Summary command ─────────────────────────────────────
+	if (command === "summary") {
+		const { cwd } = parseCwdAndForce(args);
+
+		let from: string | undefined;
+		let to: string | undefined;
+		let date: string | undefined;
+		let allProjects = false;
+
+		for (let i = 1; i < args.length; i++) {
+			const a = args[i];
+			if (a === "--from" && i + 1 < args.length) { from = args[++i]; }
+			else if (a === "--to" && i + 1 < args.length) { to = args[++i]; }
+			else if (a === "--date" && i + 1 < args.length) { date = args[++i]; }
+			else if (a === "--all-projects") { allProjects = true; }
+			else if (a === "--cwd" && i + 1 < args.length) { i++; } // already parsed
+		}
+
+		try {
+			const summary = generateSummary({ from, to, date, allProjects, cwd });
+			console.log(formatSummary(summary));
+		} catch (e) {
+			log.warn("summary", e instanceof Error ? e.message : String(e));
+			process.exit(1);
+		}
+		process.exit(0);
 	}
 
 	// ── Projects command ────────────────────────────────────

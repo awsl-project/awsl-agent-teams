@@ -1,33 +1,41 @@
-# task_3: Update documentation
+# task_3: Create src/summary.test.ts with comprehensive tests using no
 
-Assignee: coder
+Assignee: tester
 Status: done
 
 ## Result
+No type errors in `summary.test.ts`.
+
 ## AWSL_RESULT
 
-Updated documentation for the Dashboard Projects management feature across all required files:
+### Deliverable: `src/summary.test.ts` — Comprehensive Tests (node:test)
 
-### Files modified:
-1. **README.md** (English)
-   - Added "Projects management" to dashboard features list
-   - Added 9 new `/api/projects/*` API endpoints documentation
-   - Added `awsl projects` CLI commands to Auxiliary Commands section
-   - Added `awsl projects` CLI commands to CLI Reference section
+**Status:** Complete — 20 tests pass, zero type errors.
 
-2. **README.zh-CN.md** (Chinese)
-   - Mirrored all changes from README.md in Chinese
-   - Added "项目管理" dashboard feature
-   - Added 9 new API endpoints
-   - Added project CLI commands to auxiliary and CLI reference sections
+### Test Structure
 
-3. **BEST_PRACTICES.md** (Chinese)
-   - Added "项目管理面板" section with detailed usage guide: project cards, selection, registration methods, auto-discovery, cross-project queue operations
-   - Added CLI commands reference
-   - Added `管理多项目` and `自动发现项目` to the command selection guide
+| Suite | Tests | Coverage |
+|-------|-------|----------|
+| `computeTimeRange` | 8 | before 6AM, after 10PM, daytime, explicit date, custom from/to, boundary 06:00, boundary 22:00, custom times with auto-detect |
+| `generateSummary` | 7 | filtering in/out of range, aggregation totals, agent breakdown, empty history, null/undefined optional fields, done/failed counts, project set |
+| `formatSummary` | 5 | empty (No activity), full data (header, counts, cost, tokens, agents, projects), timeline sort order, duration h/m formatting, token M/K formatting |
 
-4. **CLAUDE.md**
-   - Added `projects.ts` to Project Structure listing
+### Test Results
+```
+# tests 20
+# suites 3
+# pass 20
+# fail 0
+# cancelled 0
+# skipped 0
+# duration_ms 254ms
+```
 
-### Build verification:
-- `npx tsc --noEmit` — passed with no errors
+### Files Modified
+| File | Description |
+|------|-------------|
+| `src/summary.test.ts` | Rewritten with `node:test` (`describe`/`test`/`before`/`after`) + `node:assert/strict`, temp dir isolation with cleanup |
+
+### Verification
+- `npx tsx src/summary.test.ts` — 20/20 pass
+- `npx tsc --noEmit` — zero errors in test file (pre-existing `cli.ts` error unrelated)
