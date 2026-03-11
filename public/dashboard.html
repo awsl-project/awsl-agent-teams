@@ -898,6 +898,215 @@ a { color: var(--blue); text-decoration: none; }
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--ink4); border-radius: 3px; }
+
+/* ─── Agent Roles ──────────────── */
+
+.agents-mgmt-grid {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 4px 0;
+}
+
+.agent-mgmt-card {
+  flex-shrink: 0;
+  padding: 10px 14px;
+  background: var(--bg);
+  border-radius: 10px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  min-width: 150px;
+  max-width: 220px;
+  transition: all 0.15s;
+}
+
+.agent-mgmt-card:hover { border-color: var(--ink4); }
+
+.agent-mgmt-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.agent-mgmt-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-mgmt-meta {
+  font-size: 11px;
+  color: var(--ink3);
+  line-height: 1.6;
+}
+
+.role-badge {
+  display: inline-block;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  color: #fff;
+  font-weight: 500;
+}
+
+.source-badge {
+  display: inline-block;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.source-badge.builtin { background: var(--border); color: var(--ink3); }
+.source-badge.custom { background: var(--green-bg); color: var(--green); }
+.source-badge.override { background: #fef3c7; color: #b45309; }
+
+.agents-mgmt-actions {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
+}
+
+.agents-mgmt-actions button {
+  font-family: var(--font);
+  font-size: 11px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card);
+  color: var(--ink2);
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.15s;
+}
+
+.agents-mgmt-actions button:hover { border-color: var(--blue); color: var(--blue); }
+
+.agents-mgmt-empty {
+  padding: 16px 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--ink4);
+}
+
+/* ─── Agent Editor Modal ──────── */
+
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.35);
+  z-index: 400;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-box {
+  background: var(--card);
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+  min-width: 420px;
+  max-width: 560px;
+  width: 90vw;
+  max-height: 90vh;
+  overflow-y: auto;
+  font-family: var(--font);
+}
+
+.modal-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: 16px;
+}
+
+.modal-field {
+  margin-bottom: 12px;
+}
+
+.modal-field label {
+  display: block;
+  font-size: 11px;
+  color: var(--ink3);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+.modal-field input,
+.modal-field select {
+  font-family: var(--font);
+  font-size: 13px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  width: 100%;
+  background: var(--bg);
+  color: var(--ink);
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.modal-field input:focus,
+.modal-field select:focus,
+.modal-field textarea:focus { border-color: var(--blue); }
+
+.modal-field input[readonly] { background: var(--bg2); color: var(--ink3); cursor: not-allowed; }
+
+.modal-field textarea {
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  width: 100%;
+  min-height: 200px;
+  background: var(--bg);
+  color: var(--ink);
+  outline: none;
+  resize: vertical;
+  line-height: 1.5;
+  transition: border-color 0.15s;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+
+.modal-actions button {
+  font-family: var(--font);
+  font-size: 12px;
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--ink2);
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.15s;
+}
+
+.modal-actions button:hover { background: var(--bg); }
+.modal-actions button.primary { background: var(--blue); color: #fff; border-color: var(--blue); }
+.modal-actions button.primary:hover { background: #2563eb; border-color: #2563eb; }
+.modal-actions button.danger { color: var(--red); border-color: var(--red); }
+.modal-actions button.danger:hover { background: var(--red-bg); }
+
+@media (max-width: 480px) {
+  .modal-box { min-width: 0; padding: 16px; }
+  .agents-mgmt-grid { gap: 6px; }
+  .agent-mgmt-card { min-width: 120px; }
+}
 </style>
 </head>
 <body>
@@ -1062,6 +1271,75 @@ a { color: var(--blue); text-decoration: none; }
       <button onclick="clientCmd('system:info')">System Info</button>
       <button onclick="clientCmd('queue:start',{once:false})">Start Queue</button>
       <button onclick="selectClient(null)">&#8592; Back to Local</button>
+    </div>
+  </div>
+
+  <div class="card" id="agentRolesWrap">
+    <h2 style="display:flex;align-items:center;gap:8px;">
+      &#9881; 角色管理 <span id="agentRolesCount" style="font-weight:400;color:var(--ink3);font-size:11px"></span>
+      <button onclick="openAgentEditor()" class="proj-mgmt-btn" style="margin-left:auto;">+ New</button>
+      <button class="tl-collapse-btn" onclick="toggleAgentRoles()">Collapse</button>
+    </h2>
+    <div id="agentRolesContent">
+      <div class="agents-mgmt-grid" id="agentRolesList"></div>
+      <div class="agents-mgmt-empty" id="agentRolesEmpty" style="display:none">No agents found</div>
+    </div>
+  </div>
+
+  <div id="agentEditorModal" class="modal-overlay" style="display:none">
+    <div class="modal-box">
+      <div class="modal-title" id="agentEditorTitle">New Agent</div>
+      <div class="modal-field">
+        <label>Name</label>
+        <input type="text" id="aeNameInput" placeholder="my-agent" pattern="^[a-z][a-z0-9-]*$" maxlength="50">
+      </div>
+      <div class="modal-field">
+        <label>Role</label>
+        <select id="aeRoleSelect">
+          <option value="planner">planner</option>
+          <option value="architect">architect</option>
+          <option value="coder">coder</option>
+          <option value="reviewer">reviewer</option>
+          <option value="tester">tester</option>
+          <option value="custom">custom</option>
+        </select>
+      </div>
+      <div class="modal-field">
+        <label>Description</label>
+        <input type="text" id="aeDescInput" placeholder="Agent description...">
+      </div>
+      <div class="modal-field">
+        <label>Model (optional)</label>
+        <input type="text" id="aeModelInput" placeholder="e.g. sonnet">
+      </div>
+      <div class="modal-field">
+        <label>Tools (comma-separated, optional)</label>
+        <input type="text" id="aeToolsInput" placeholder="read, write, bash">
+      </div>
+      <div class="modal-field">
+        <label>Skills (comma-separated, optional)</label>
+        <input type="text" id="aeSkillsInput" placeholder="tdd, debugging">
+      </div>
+      <div class="modal-field">
+        <label>Thinking Level (optional)</label>
+        <select id="aeThinkingSelect">
+          <option value="">(default)</option>
+          <option value="low">low</option>
+          <option value="medium">medium</option>
+          <option value="high">high</option>
+        </select>
+      </div>
+      <div class="modal-field">
+        <label>System Prompt</label>
+        <textarea id="aePromptTextarea" placeholder="Enter system prompt..."></textarea>
+      </div>
+      <div class="modal-actions">
+        <button id="aeResetBtn" class="danger" style="display:none" onclick="resetAgentToDefault()">Reset to Default</button>
+        <button id="aeDeleteBtn" class="danger" style="display:none" onclick="deleteAgentFromEditor()">Delete</button>
+        <span style="flex:1"></span>
+        <button onclick="closeAgentEditor()">Cancel</button>
+        <button class="primary" onclick="saveAgentFromEditor()">Save</button>
+      </div>
     </div>
   </div>
 
@@ -1912,7 +2190,7 @@ function render() {
     qt = allQt;
   }
 
-  if (entries.length === 0 && qt.length === 0 && clients.length === 0) {
+  if (entries.length === 0 && qt.length === 0 && clients.length === 0 && projects.length === 0) {
     document.getElementById('app').style.display = 'none';
     document.getElementById('empty').style.display = 'block';
     return;
@@ -1961,10 +2239,19 @@ async function init() {
   } catch(e) {}
   await loadClients();
   await loadProjects();
+  await loadAgentRoles();
+  renderProjectCards();
+  renderClients();
+  renderAgentRoles();
   var ok = await load();
   document.getElementById('loading').style.display = 'none';
   if (ok) render();
-  setInterval(async function() { await loadClients(); await loadProjects(); if (selectedProject) await loadProjectData(selectedProject); if (await load()) render(); }, 30000);
+  // Even if load() fails (no history), show app if there are projects or clients
+  if (!ok && (projects.length > 0 || clients.length > 0)) {
+    document.getElementById('app').style.display = 'block';
+    document.getElementById('empty').style.display = 'none';
+  }
+  setInterval(async function() { await loadClients(); await loadProjects(); await loadAgentRoles(); renderProjectCards(); renderClients(); renderAgentRoles(); if (selectedProject) await loadProjectData(selectedProject); if (await load()) render(); }, 30000);
 }
 
 // ─── Trend chart (SVG with area fill) ─────────────────
@@ -2388,6 +2675,239 @@ async function clearHistory() {
     await fetch('/api/history/clear', { method: 'POST' });
   } catch(e) {}
   if (await load()) render();
+}
+
+// ─── Agent Roles Management ───────────────────────
+
+var agentsList = [];
+var agentEditorMode = null; // 'new' | 'edit'
+var agentEditorName = null; // name being edited
+var agentRolesCollapsed = false;
+
+var BUILTIN_NAMES = ['planner', 'architect', 'coder', 'reviewer', 'tester'];
+
+async function loadAgentRoles() {
+  try {
+    var res = await fetch('/api/agents');
+    if (res.ok) agentsList = await res.json();
+    else agentsList = [];
+  } catch(e) { agentsList = []; }
+}
+
+function getAgentSourceType(agent) {
+  var isBuiltin = BUILTIN_NAMES.indexOf(agent.name) >= 0;
+  if (agent.source === 'file' && isBuiltin) return 'override';
+  if (agent.source === 'file') return 'custom';
+  return 'builtin';
+}
+
+function renderAgentRoles() {
+  var el = document.getElementById('agentRolesList');
+  var empty = document.getElementById('agentRolesEmpty');
+  var countEl = document.getElementById('agentRolesCount');
+
+  if (agentsList.length === 0) {
+    el.innerHTML = '';
+    empty.style.display = 'block';
+    countEl.textContent = '';
+    return;
+  }
+
+  empty.style.display = 'none';
+  countEl.textContent = agentsList.length + ' agents';
+
+  var h = '';
+  for (var i = 0; i < agentsList.length; i++) {
+    var a = agentsList[i];
+    var srcType = getAgentSourceType(a);
+    var srcClass = srcType;
+    var srcLabel = srcType === 'override' ? 'override' : srcType === 'custom' ? 'custom' : 'built-in';
+    var roleColor = hc(a.role || 'custom');
+
+    h += '<div class="agent-mgmt-card" onclick="openAgentEditor(\'' + esc(a.name) + '\')">';
+    h += '<div class="agent-mgmt-header">';
+    h += '<span class="agent-mgmt-name">' + esc(a.name) + '</span>';
+    h += '</div>';
+    h += '<div class="agent-mgmt-meta">';
+    h += '<span class="role-badge" style="background:' + roleColor + '">' + esc(a.role || 'custom') + '</span> ';
+    h += '<span class="source-badge ' + srcClass + '">' + srcLabel + '</span>';
+    if (a.description) h += '<br>' + esc(trunc(a.description, 60));
+    h += '</div>';
+    h += '</div>';
+  }
+  el.innerHTML = h;
+}
+
+function toggleAgentRoles() {
+  agentRolesCollapsed = !agentRolesCollapsed;
+  document.getElementById('agentRolesContent').style.display = agentRolesCollapsed ? 'none' : 'block';
+}
+
+function openAgentEditor(name) {
+  var modal = document.getElementById('agentEditorModal');
+  var titleEl = document.getElementById('agentEditorTitle');
+  var nameInput = document.getElementById('aeNameInput');
+  var roleSelect = document.getElementById('aeRoleSelect');
+  var descInput = document.getElementById('aeDescInput');
+  var modelInput = document.getElementById('aeModelInput');
+  var toolsInput = document.getElementById('aeToolsInput');
+  var skillsInput = document.getElementById('aeSkillsInput');
+  var thinkingSelect = document.getElementById('aeThinkingSelect');
+  var promptTextarea = document.getElementById('aePromptTextarea');
+  var resetBtn = document.getElementById('aeResetBtn');
+  var deleteBtn = document.getElementById('aeDeleteBtn');
+
+  if (name) {
+    // Edit mode
+    var agent = agentsList.find(function(a) { return a.name === name; });
+    if (!agent) return;
+
+    agentEditorMode = 'edit';
+    agentEditorName = name;
+    titleEl.textContent = 'Edit Agent: ' + name;
+    nameInput.value = name;
+    nameInput.readOnly = true;
+    roleSelect.value = agent.role || 'custom';
+    descInput.value = agent.description || '';
+    modelInput.value = agent.model || '';
+    toolsInput.value = (agent.tools || []).join(', ');
+    skillsInput.value = (agent.skills || []).join(', ');
+    thinkingSelect.value = agent.thinkingLevel || '';
+    promptTextarea.value = agent.systemPrompt || '';
+
+    var srcType = getAgentSourceType(agent);
+    // Reset to default: only for builtins that have been overridden
+    resetBtn.style.display = (srcType === 'override') ? 'inline-block' : 'none';
+    // Delete: only for custom agents (not pure builtins)
+    deleteBtn.style.display = (srcType === 'custom' || srcType === 'override') ? 'inline-block' : 'none';
+  } else {
+    // New mode
+    agentEditorMode = 'new';
+    agentEditorName = null;
+    titleEl.textContent = 'New Agent';
+    nameInput.value = '';
+    nameInput.readOnly = false;
+    roleSelect.value = 'custom';
+    descInput.value = '';
+    modelInput.value = '';
+    toolsInput.value = '';
+    skillsInput.value = '';
+    thinkingSelect.value = '';
+    promptTextarea.value = '';
+    resetBtn.style.display = 'none';
+    deleteBtn.style.display = 'none';
+  }
+
+  modal.style.display = 'flex';
+}
+
+function closeAgentEditor() {
+  document.getElementById('agentEditorModal').style.display = 'none';
+  agentEditorMode = null;
+  agentEditorName = null;
+}
+
+// Close modal on overlay click
+document.getElementById('agentEditorModal').addEventListener('click', function(e) {
+  if (e.target === document.getElementById('agentEditorModal')) closeAgentEditor();
+});
+
+function parseCommaSeparated(val) {
+  if (!val || !val.trim()) return undefined;
+  var parts = val.split(',').map(function(s) { return s.trim(); }).filter(function(s) { return s.length > 0; });
+  return parts.length > 0 ? parts : undefined;
+}
+
+async function saveAgentFromEditor() {
+  var name = document.getElementById('aeNameInput').value.trim();
+  var role = document.getElementById('aeRoleSelect').value;
+  var description = document.getElementById('aeDescInput').value.trim();
+  var model = document.getElementById('aeModelInput').value.trim() || undefined;
+  var tools = parseCommaSeparated(document.getElementById('aeToolsInput').value);
+  var skills = parseCommaSeparated(document.getElementById('aeSkillsInput').value);
+  var thinkingLevel = document.getElementById('aeThinkingSelect').value || undefined;
+  var systemPrompt = document.getElementById('aePromptTextarea').value;
+
+  if (!name) { alert('Name is required'); return; }
+  if (!/^[a-z][a-z0-9-]*$/.test(name) || name.length > 50) {
+    alert('Name must match /^[a-z][a-z0-9-]*$/ and be at most 50 chars');
+    return;
+  }
+  if (!systemPrompt || !systemPrompt.trim()) {
+    alert('System Prompt is required');
+    return;
+  }
+
+  var payload = { name: name, role: role, description: description, systemPrompt: systemPrompt };
+  if (model) payload.model = model;
+  if (tools) payload.tools = tools;
+  if (skills) payload.skills = skills;
+  if (thinkingLevel) payload.thinkingLevel = thinkingLevel;
+
+  try {
+    var method = agentEditorMode === 'new' ? 'POST' : 'PUT';
+    var res = await fetch('/api/agents', {
+      method: method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+      var err = await res.json();
+      alert('Error: ' + (err.error || 'Unknown error'));
+      return;
+    }
+  } catch(e) {
+    alert('Failed: ' + e.message);
+    return;
+  }
+
+  closeAgentEditor();
+  await loadAgentRoles();
+  renderAgentRoles();
+}
+
+async function deleteAgentFromEditor() {
+  var name = agentEditorName;
+  if (!name) return;
+  if (!confirm('Delete agent "' + name + '"?')) return;
+
+  try {
+    var res = await fetch('/api/agents?name=' + encodeURIComponent(name), { method: 'DELETE' });
+    if (!res.ok) {
+      var err = await res.json();
+      alert('Error: ' + (err.error || 'Unknown error'));
+      return;
+    }
+  } catch(e) {
+    alert('Failed: ' + e.message);
+    return;
+  }
+
+  closeAgentEditor();
+  await loadAgentRoles();
+  renderAgentRoles();
+}
+
+async function resetAgentToDefault() {
+  var name = agentEditorName;
+  if (!name) return;
+  if (!confirm('Reset "' + name + '" to built-in default? This will delete the custom override.')) return;
+
+  try {
+    var res = await fetch('/api/agents?name=' + encodeURIComponent(name), { method: 'DELETE' });
+    if (!res.ok) {
+      var err = await res.json();
+      alert('Error: ' + (err.error || 'Unknown error'));
+      return;
+    }
+  } catch(e) {
+    alert('Failed: ' + e.message);
+    return;
+  }
+
+  closeAgentEditor();
+  await loadAgentRoles();
+  renderAgentRoles();
 }
 
 init();
