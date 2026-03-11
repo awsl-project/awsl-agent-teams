@@ -135,6 +135,7 @@ Rules:
 - Keep each task focused: ONE deliverable, max 2-3 files
 - No dependencies = can run in parallel (maximize parallelism!)
 - Multiple tasks CAN use the same agent — e.g. 3 coder tasks with no dependencies run in parallel as 3 separate agent instances
+- CRITICAL: parallel tasks (no dependency between them) MUST NOT share files — each task's "files" list must be disjoint to avoid write conflicts. If two tasks need the same file, add a dependency between them
 - Do NOT assign to "planner"
 - "verify" = how to check the task (test command, manual check, etc.)
 - "done" = definition of done — what must be true when complete
