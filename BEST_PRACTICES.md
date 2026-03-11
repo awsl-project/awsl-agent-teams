@@ -67,6 +67,9 @@ awsl run "goal" --engine claude-code
 查看指定日期的夜间工作    →  awsl summary --date 2026-03-10
 管理多项目                →  awsl projects
 自动发现项目              →  awsl projects scan ~/dev
+查看提示词模板            →  awsl agents templates
+编辑提示词（$EDITOR）     →  awsl agents prompt coder
+预览合成提示词            →  awsl agents preview coder
 ```
 
 ### 怎么选模式？
@@ -302,6 +305,9 @@ awsl agents create my-expert --role coder --prompt "你是 Rust 专家。只用 
 # 从文件读取 prompt（适合长提示词）
 awsl agents create my-expert --role coder --prompt-file ./prompts/rust-expert.md
 
+# 用内置模板作为起点
+awsl agents create my-devops --role coder --template devops
+
 # 完整参数
 awsl agents create api-dev \
   --role coder \
@@ -323,6 +329,29 @@ awsl agents edit coder --prompt "你是一位资深 Go 开发者。只用标准�
 awsl agents edit coder --thinking high --tools read,write,bash
 ```
 
+**提示词专用编辑命令（`agents prompt`）：**
+```bash
+# 在 $EDITOR 中打开提示词编辑（Windows 默认 notepad，Unix 默认 vi）
+awsl agents prompt coder
+
+# 打印当前提示词到 stdout
+awsl agents prompt coder --show
+
+# 内联设置提示词
+awsl agents prompt coder --set "你是 Go 专家。只用标准库。"
+
+# 从文件设置提示词
+awsl agents prompt coder --file ./prompts/go-expert.md
+```
+
+**预览合成提示词（`agents preview`）：**
+```bash
+# 查看 coder 最终接收到的完整提示词（基础 + Guardian 技能 + 团队上下文）
+awsl agents preview coder
+```
+
+预览会显示各段落的字符数，帮助你了解提示词的组成和长度。
+
 **覆盖内置智能体：**
 ```bash
 # 编辑内置 coder 的提示词 → 创建 agents/coder.md 覆盖文件
@@ -340,15 +369,47 @@ awsl agents delete my-expert
 # 注意：不能删除内置智能体（planner/architect/coder/reviewer/tester），只能 reset
 ```
 
+### 内置提示词模板
+
+AWSL 提供 7 个内置提示词模板，覆盖常见角色：
+
+| 模板 | 说明 |
+|------|------|
+| `coder` | 全栈 TypeScript 开发者 |
+| `reviewer` | 安全导向的代码审查者 |
+| `architect` | 系统架构设计师 |
+| `tester` | 测试设计与执行 |
+| `planner` | 任务分解与规划 |
+| `devops` | CI/CD、容器化、基础设施 |
+| `documenter` | 技术文档撰写 |
+
+```bash
+# 列出所有模板及描述
+awsl agents templates
+
+# 用模板创建智能体（模板预填充 prompt 和 role）
+awsl agents create my-tester --template tester
+
+# 显式 --prompt 覆盖模板内容
+awsl agents create my-tester --template tester --prompt "自定义提示词..."
+```
+
+**什么时候用模板：**
+- 不知道怎么写提示词 → 先用模板，再微调
+- 需要快速创建标准角色 → 一行命令搞定
+- 仪表盘上也可以通过下拉菜单选择模板应用
+
 ### 用仪表盘 UI 管理
 
 打开 `awsl dashboard`，找到 **角色管理** 卡片：
 
 1. **查看** — 所有智能体显示为卡片，含角色徽章和来源标识（`built-in` 灰色 / `custom` 绿色 / `override` 黄色）
 2. **创建** — 点击 `[+New]`，填写名称、角色、描述和系统提示词，保存
-3. **编辑** — 点击卡片打开编辑器，修改后保存
-4. **恢复默认** — 被覆盖的内置智能体显示 `[Reset to Default]` 按钮
-5. **删除** — 自定义智能体显示 `[Delete]` 按钮
+3. **模板** — 提示词文本框上方有模板下拉菜单，选择后点 "Apply" 一键填充提示词并设置角色/描述
+4. **编辑** — 点击卡片打开编辑器，修改后保存。长提示词可点 "Expand" 切换全屏编辑（等宽字体大文本框 + 实时字符计数）
+5. **预览** — 编辑模式点击 "Preview" 查看合成后的完整提示词（分页：合成结果 / 基础 / 技能 / 团队上下文）
+6. **恢复默认** — 被覆盖的内置智能体显示 `[Reset to Default]` 按钮
+7. **删除** — 自定义智能体显示 `[Delete]` 按钮
 
 ### 示例：前端项目团队
 

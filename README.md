@@ -234,6 +234,9 @@ awsl agents create <name> [flags] # Create custom agent
 awsl agents edit <name> [flags]   # Edit existing agent
 awsl agents delete <name>         # Delete custom agent
 awsl agents reset <name>          # Restore built-in default
+awsl agents templates             # List built-in prompt templates
+awsl agents prompt <name>         # Edit prompt ($EDITOR / --show / --set / --file)
+awsl agents preview <name>        # Preview composed prompt
 
 # Night session summary
 awsl summary                        # Summarize last night's session (22:00→06:00)
@@ -409,6 +412,9 @@ Features:
 - **Live log stream** — Real-time SSE-based log panel showing agent stdout/stderr as it happens
 - **Browser notifications** — Alerts on task failure and queue completion (requires permission)
 - **Agent roles management** — Visual CRUD editor for agent definitions. Create custom agents, override built-in prompts, or reset to defaults — all from the dashboard UI
+- **Prompt templates** — 7 built-in templates (coder, reviewer, architect, tester, planner, devops, documenter) loadable from a dropdown in the editor
+- **Fullscreen prompt editor** — Full-viewport overlay for editing long prompts with live character count
+- **Prompt preview** — Preview the full composed prompt (base + skills + team context) with tabbed section view
 - **Agent analysis** — Shows unique agent roles, average/peak parallelism, total waves, and per-run wave breakdown with agent badges
 - **Date filter** — Filter statistics by day, week, month, or custom date range. All dashboard widgets update in real-time based on the selected time period
 - **Pixel art aesthetic** — Press Start 2P font, retro animations
@@ -437,6 +443,8 @@ API endpoints:
 - `POST /api/agents` — create custom agent `{name, role, systemPrompt, ...}`
 - `PUT /api/agents` — update agent `{name, ...fields}`
 - `DELETE /api/agents?name=X` — delete custom agent file
+- `GET /api/agents/templates` — list all 7 built-in prompt templates
+- `POST /api/agents/preview` — compose full prompt preview `{name}` → `{composed, sections}`
 - `GET /api/discussions` — discussion entries from history
 - `GET /api/clients` — list connected remote clients
 - `POST /api/clients/command` — send command to a client `{clientId, action, payload?}`
@@ -498,7 +506,7 @@ curl -X POST http://server:3120/api/clients/command \
   -d '{"clientId":"my-laptop","action":"system:info"}'
 ```
 
-Supported relay actions: `queue:add`, `queue:remove`, `queue:clear`, `queue:list`, `queue:get`, `queue:set-time`, `queue:start`, `agents:list`, `agents:get`, `agents:save`, `agents:delete`, `system:info`.
+Supported relay actions: `queue:add`, `queue:remove`, `queue:clear`, `queue:list`, `queue:get`, `queue:set-time`, `queue:start`, `agents:list`, `agents:get`, `agents:save`, `agents:delete`, `agents:templates`, `agents:preview`, `system:info`.
 
 > For full deployment guide (systemd, PM2, Docker, Nginx reverse proxy, NAT traversal), see [DEPLOY.md](DEPLOY.md).
 
@@ -797,6 +805,7 @@ awsl agents create <name>      # Create a new custom agent
   --description <desc>         #   Short description
   --prompt <text>              #   System prompt (inline)
   --prompt-file <path>         #   System prompt from file
+  --template <name>            #   Pre-populate from a built-in template
   --tools <t1,t2>             #   Tools list
   --model <model>              #   Model override
   --skills <s1,s2>            #   Guardian skills
@@ -804,9 +813,32 @@ awsl agents create <name>      # Create a new custom agent
 awsl agents edit <name>        # Edit an existing agent (same flags as create)
 awsl agents delete <name>      # Delete a custom agent file
 awsl agents reset <name>       # Delete override, restore built-in default
+awsl agents templates          # List all 7 built-in prompt templates
+awsl agents prompt <name>      # Open prompt in $EDITOR for focused editing
+awsl agents prompt <name> --show   # Print current prompt to stdout
+awsl agents prompt <name> --set "..."  # Set prompt inline
+awsl agents prompt <name> --file <path>  # Set prompt from file
+awsl agents preview <name>     # Show full composed prompt (base + skills + team)
 ```
 
 **How overrides work:** Editing a built-in agent (e.g. `coder`) creates `agents/coder.md` which overrides the default. Use `agents reset coder` to delete the override and restore the original.
+
+### Prompt Templates
+
+AWSL ships with 7 built-in prompt templates for common roles: **coder**, **reviewer**, **architect**, **tester**, **planner**, **devops**, and **documenter**. Templates provide a starting point for writing effective agent prompts.
+
+```bash
+# List all templates
+awsl agents templates
+
+# Create an agent using a template as starting point
+awsl agents create my-devops --role coder --template devops
+
+# Preview the full composed prompt (base + skills + team context)
+awsl agents preview coder
+```
+
+The `--template` flag on `create`/`edit` pre-populates the system prompt and role from the template. Explicit `--prompt`/`--prompt-file` overrides the template.
 
 ### Managing Agents via Dashboard
 
@@ -814,6 +846,10 @@ The Dashboard includes an **Agent Roles** (角色管理) card with a visual edit
 
 - **Agent cards** — Each agent displayed as a card with name, role badge (color-coded), and source badge (`built-in` grey / `custom` green / `override` yellow)
 - **Editor modal** — Click any card or `[+New]` to open the full editor with fields for Name, Role, Description, Model, Tools, Skills, Thinking Level, and System Prompt (monospace textarea)
+- **Template selector** — Dropdown above the prompt textarea loads built-in templates. "Apply" fills the prompt and auto-sets role/description
+- **Fullscreen editor** — "Expand" button opens a full-viewport overlay with a monospace textarea for editing long prompts comfortably
+- **Character count** — Live character count displayed below the textarea in both normal and fullscreen modes
+- **Preview panel** — "Preview" button (edit mode) opens a fullscreen view of the composed prompt with tabbed sections: Composed / Base / Skills / Team
 - **Actions** — `[Save]` to create/update, `[Reset to Default]` for overridden built-ins, `[Delete]` for custom agents
 
 ### Agent CRUD API
@@ -824,8 +860,10 @@ The Dashboard includes an **Agent Roles** (角色管理) card with a visual edit
 | `POST` | `/api/agents` | Create new custom agent `{name, role, systemPrompt, ...}` |
 | `PUT` | `/api/agents` | Update existing agent `{name, ...fields}` |
 | `DELETE` | `/api/agents?name=X` | Delete custom agent file |
+| `GET` | `/api/agents/templates` | List all 7 built-in prompt templates `[{name, description, prompt}]` |
+| `POST` | `/api/agents/preview` | Compose full prompt preview `{name}` → `{composed, sections: {base, skills, team}}` |
 
-Remote clients also support agent management via relay commands: `agents:list`, `agents:get`, `agents:save`, `agents:delete`.
+Remote clients also support agent management via relay commands: `agents:list`, `agents:get`, `agents:save`, `agents:delete`, `agents:templates`, `agents:preview`.
 
 ## .planning/ Directory
 
@@ -980,10 +1018,13 @@ awsl unlock --force          # Force release any lock
 # Agents
 awsl agents                  # List all agents
 awsl agents show <name>      # Show full agent details including system prompt
-awsl agents create <name>    # Create custom agent (--role, --prompt, --tools, etc.)
+awsl agents create <name>    # Create custom agent (--role, --prompt, --template, --tools, etc.)
 awsl agents edit <name>      # Edit existing agent (same flags as create)
 awsl agents delete <name>    # Delete custom agent file
 awsl agents reset <name>     # Delete override, restore built-in default
+awsl agents templates        # List all 7 built-in prompt templates
+awsl agents prompt <name>    # Edit prompt in $EDITOR (--show, --set, --file)
+awsl agents preview <name>   # Show composed prompt (base + skills + team)
 
 # Task queue (sleep mode)
 awsl queue add "Build REST API" --quick      # Add task to queue

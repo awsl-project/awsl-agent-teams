@@ -234,6 +234,9 @@ awsl agents create <name> [flags] # 创建自定义智能体
 awsl agents edit <name> [flags]   # 编辑已有智能体
 awsl agents delete <name>         # 删除自定义智能体
 awsl agents reset <name>          # 恢复内置默认值
+awsl agents templates             # 列出内置提示词模板
+awsl agents prompt <name>         # 编辑提示词（$EDITOR / --show / --set / --file）
+awsl agents preview <name>        # 预览合成提示词
 
 # 夜间工作总结
 awsl summary                             # 总结昨晚的工作（22:00→06:00）
@@ -409,6 +412,9 @@ awsl dashboard stop         # 停止后台仪表盘进程
 - **实时日志流** — 基于 SSE 的实时日志面板，展示 agent 的 stdout/stderr
 - **浏览器通知** — 任务失败和队列完成时弹出提醒（需授权）
 - **角色管理** — 可视化 CRUD 编辑器，可创建自定义智能体、覆盖内置提示词、或恢复默认值 — 全部在仪表盘上操作
+- **提示词模板** — 7 个内置模板（coder、reviewer、architect、tester、planner、devops、documenter），编辑器下拉菜单一键加载
+- **全屏提示词编辑器** — 全视口覆盖层，编辑长提示词更舒适，实时字符计数
+- **提示词预览** — 预览合成后的完整提示词（基础 + 技能 + 团队上下文），分页显示
 - **Agent 分析** — 展示使用的 agent 角色、平均/峰值并行度、总波次数，每次运行可展开查看波次详情和 agent 徽章
 - **日期筛选** — 支持按天、周、月或自定义日期范围筛选统计数据。所有面板组件根据所选时间段实时更新
 - **像素艺术风格** — Press Start 2P 字体、复古动画
@@ -437,6 +443,8 @@ API 端点：
 - `POST /api/agents` — 创建自定义智能体 `{name, role, systemPrompt, ...}`
 - `PUT /api/agents` — 更新智能体 `{name, ...fields}`
 - `DELETE /api/agents?name=X` — 删除自定义智能体文件
+- `GET /api/agents/templates` — 列出全部 7 个内置提示词模板
+- `POST /api/agents/preview` — 合成完整提示词预览 `{name}` → `{composed, sections}`
 - `GET /api/discussions` — 历史中的讨论条目
 - `GET /api/clients` — 已连接的远程客户端列表
 - `POST /api/clients/command` — 向客户端发送命令 `{clientId, action, payload?}`
@@ -493,7 +501,7 @@ curl -X POST http://server:3120/api/clients/command \
   -d '{"clientId":"my-laptop","action":"queue:start","payload":{"once":true}}'
 ```
 
-支持的中继命令：`queue:add`、`queue:remove`、`queue:clear`、`queue:list`、`queue:get`、`queue:set-time`、`queue:start`、`agents:list`、`agents:get`、`agents:save`、`agents:delete`、`system:info`。
+支持的中继命令：`queue:add`、`queue:remove`、`queue:clear`、`queue:list`、`queue:get`、`queue:set-time`、`queue:start`、`agents:list`、`agents:get`、`agents:save`、`agents:delete`、`agents:templates`、`agents:preview`、`system:info`。
 
 > 完整部署指南（systemd、PM2、Docker、Nginx 反向代理、内网穿透等）见 [DEPLOY.md](DEPLOY.md)。
 
@@ -792,6 +800,7 @@ awsl agents create <name>      # 创建新的自定义智能体
   --description <desc>         #   简短描述
   --prompt <text>              #   系统提示词（内联）
   --prompt-file <path>         #   从文件读取系统提示词
+  --template <name>            #   从内置模板预填充
   --tools <t1,t2>             #   工具列表
   --model <model>              #   覆盖模型
   --skills <s1,s2>            #   Guardian 技能
@@ -799,9 +808,32 @@ awsl agents create <name>      # 创建新的自定义智能体
 awsl agents edit <name>        # 编辑已有智能体（与 create 相同的参数）
 awsl agents delete <name>      # 删除自定义智能体文件
 awsl agents reset <name>       # 删除覆盖文件，恢复内置默认值
+awsl agents templates          # 列出全部 7 个内置提示词模板
+awsl agents prompt <name>      # 在 $EDITOR 中编辑提示词
+awsl agents prompt <name> --show   # 打印当前提示词到 stdout
+awsl agents prompt <name> --set "..."  # 内联设置提示词
+awsl agents prompt <name> --file <path>  # 从文件设置提示词
+awsl agents preview <name>     # 查看合成后的完整提示词（基础 + 技能 + 团队上下文）
 ```
 
 **覆盖机制：** 编辑内置智能体（如 `coder`）会创建 `agents/coder.md` 来覆盖默认值。使用 `agents reset coder` 可删除覆盖文件，恢复原始设置。
+
+### 提示词模板
+
+AWSL 内置 7 个角色提示词模板：**coder**、**reviewer**、**architect**、**tester**、**planner**、**devops**、**documenter**。模板提供高质量的提示词起点。
+
+```bash
+# 列出所有模板
+awsl agents templates
+
+# 用模板创建智能体
+awsl agents create my-devops --role coder --template devops
+
+# 预览合成后的完整提示词（基础 + 技能 + 团队上下文）
+awsl agents preview coder
+```
+
+`--template` 参数在 `create`/`edit` 时预填充系统提示词和角色。显式指定 `--prompt`/`--prompt-file` 会覆盖模板。
 
 ### 通过仪表盘管理智能体
 
@@ -809,6 +841,10 @@ awsl agents reset <name>       # 删除覆盖文件，恢复内置默认值
 
 - **智能体卡片** — 每个智能体显示为一张卡片，含名称、角色徽章（彩色）和来源徽章（`built-in` 灰色 / `custom` 绿色 / `override` 黄色）
 - **编辑器弹窗** — 点击卡片或 `[+New]` 打开完整编辑器，包含名称、角色、描述、模型、工具、技能、思考级别和系统提示词（等宽字体文本框）字段
+- **模板选择器** — 提示词文本框上方的下拉菜单，加载内置模板。"Apply" 一键填充提示词并自动设置角色/描述
+- **全屏编辑器** — "Expand" 按钮打开全视口覆盖层，等宽字体大文本框，编辑长提示词更舒适
+- **字符计数** — 文本框下方实时显示字符数，普通和全屏模式都有
+- **预览面板** — "Preview" 按钮（编辑模式）展示合成后的完整提示词，分页显示：合成结果 / 基础 / 技能 / 团队
 - **操作** — `[Save]` 创建/更新，`[Reset to Default]` 恢复被覆盖的内置智能体，`[Delete]` 删除自定义智能体
 
 ### 智能体 CRUD API
@@ -819,8 +855,10 @@ awsl agents reset <name>       # 删除覆盖文件，恢复内置默认值
 | `POST` | `/api/agents` | 创建自定义智能体 `{name, role, systemPrompt, ...}` |
 | `PUT` | `/api/agents` | 更新智能体 `{name, ...fields}` |
 | `DELETE` | `/api/agents?name=X` | 删除自定义智能体文件 |
+| `GET` | `/api/agents/templates` | 列出全部 7 个内置提示词模板 `[{name, description, prompt}]` |
+| `POST` | `/api/agents/preview` | 合成完整提示词预览 `{name}` → `{composed, sections: {base, skills, team}}` |
 
-远程客户端也支持通过中继命令管理智能体：`agents:list`、`agents:get`、`agents:save`、`agents:delete`。
+远程客户端也支持通过中继命令管理智能体：`agents:list`、`agents:get`、`agents:save`、`agents:delete`、`agents:templates`、`agents:preview`。
 
 ## .planning/ 目录
 
@@ -975,10 +1013,13 @@ awsl unlock --force          # 强制释放任何锁
 # 智能体
 awsl agents                  # 列出所有智能体
 awsl agents show <name>      # 查看智能体完整详情，含系统提示词
-awsl agents create <name>    # 创建自定义智能体（--role, --prompt, --tools 等）
+awsl agents create <name>    # 创建自定义智能体（--role, --prompt, --template, --tools 等）
 awsl agents edit <name>      # 编辑已有智能体（与 create 相同参数）
 awsl agents delete <name>    # 删除自定义智能体文件
 awsl agents reset <name>     # 删除覆盖文件，恢复内置默认值
+awsl agents templates        # 列出全部 7 个内置提示词模板
+awsl agents prompt <name>    # 在 $EDITOR 中编辑提示词（--show, --set, --file）
+awsl agents preview <name>   # 查看合成后的提示词（基础 + 技能 + 团队）
 
 # 任务队列（睡前模式）
 awsl queue add "构建 REST API" --quick        # 添加任务
