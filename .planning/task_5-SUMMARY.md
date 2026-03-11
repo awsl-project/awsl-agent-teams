@@ -1,20 +1,30 @@
-# task_5: Add the following export line to `src/index.ts`:
-
-```typescr
+# task_5: Add agent management commands to the RemoteClient's executeC
 
 Assignee: coder
 Status: done
 
 ## Result
+Type-check clean, all 20 tests pass (GREEN).
+
 ## AWSL_RESULT
 
-### Task: Export discuss module types from `src/index.ts`
+### Task 5 Complete: Agent CRUD commands in `src/remote.ts`
 
-**Status:** Already complete — no changes needed.
+**4 command cases added to `executeCommand` switch:**
 
-The export line already exists at `src/index.ts:40`:
-```typescript
-export { discussTeam, type DiscussionRound, type DiscussionResult, type DiscussOptions } from "./discuss.js";
-```
+| Command | Description |
+|---------|-------------|
+| `agents:list` | Loads builtins + custom agents from `{cwd}/agents/`, returns `TeamAgentDef[]` |
+| `agents:get` | Finds agent by `payload.name`, returns agent or `null` |
+| `agents:save` | Calls `saveAgent(agentsDir, payload)`, returns saved `TeamAgentDef` |
+| `agents:delete` | Calls `deleteAgent(agentsDir, payload.name)`, returns `{ deleted: boolean }` |
 
-**Verification:** `npx tsc --noEmit` passes with zero errors.
+**Files modified:**
+- `src/remote.ts` — Added import of `loadAgents`, `saveAgent`, `deleteAgent`; added 4 switch cases
+
+**Files created:**
+- `src/remote-agents.test.ts` — 20 tests covering all 4 commands (list, get, save, delete) including edge cases
+
+**Verification:**
+- `npx tsc --noEmit` — clean, no errors
+- `npx tsx src/remote-agents.test.ts` — 20/20 passed
