@@ -14,6 +14,7 @@ import * as child_process from "node:child_process";
 import { loadHistory, getHistoryStats, clearHistory } from "./history.js";
 import { TaskQueue } from "./queue.js";
 import { ProjectManager } from "./projects.js";
+import { loadAgents, saveAgent, deleteAgent, getAgent, BUILTINS } from "./agents.js";
 import { log } from "./log.js";
 import { RelayServer } from "./relay.js";
 
@@ -66,7 +67,7 @@ export function startDashboard(cwd: string, port: number = 3120, host: string = 
 		const allowedOrigin = origin && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin) ? origin : undefined
 		if (allowedOrigin) {
 			res.setHeader("Access-Control-Allow-Origin", allowedOrigin)
-			res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+			res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 			res.setHeader("Access-Control-Allow-Headers", "Content-Type")
 		}
 
@@ -495,6 +496,120 @@ export function startDashboard(cwd: string, port: number = 3120, host: string = 
 			const stats = getHistoryStats(data);
 			res.writeHead(200, { "Content-Type": "application/json" });
 			res.end(JSON.stringify(stats));
+			return;
+		}
+
+		// ── Agent CRUD APIs ──────────────────────────────
+		const agentsDir = path.join(cwd, "agents");
+
+		if (url.pathname === "/api/agents" && req.method === "GET") {
+			const name = url.searchParams.get("name");
+			if (name) {
+				const agent = getAgent([agentsDir], name);
+				if (!agent) {
+					res.writeHead(404, { "Content-Type": "application/json" });
+					res.end(JSON.stringify({ error: `Agent "${name}" not found` }));
+					return;
+				}
+				res.writeHead(200, { "Content-Type": "application/json" });
+				res.end(JSON.stringify(agent));
+			} else {
+				const agents = loadAgents([agentsDir]);
+				res.writeHead(200, { "Content-Type": "application/json" });
+				res.end(JSON.stringify(agents));
+			}
+			return;
+		}
+
+		if (req.method === "POST" && url.pathname === "/api/agents") {
+			collectBody(req, res, (body) => {
+				try {
+					const parsed = JSON.parse(body);
+					if (!parsed.name || typeof parsed.name !== "string") {
+						res.writeHead(400, { "Content-Type": "application/json" });
+						res.end(JSON.stringify({ error: "name is required" }));
+						return;
+					}
+					if (!parsed.systemPrompt || typeof parsed.systemPrompt !== "string" || !parsed.systemPrompt.trim()) {
+						res.writeHead(400, { "Content-Type": "application/json" });
+						res.end(JSON.stringify({ error: "systemPrompt is required and must be non-empty" }));
+						return;
+					}
+					const nameRe = /^[a-z][a-z0-9-]*$/;
+					if (!nameRe.test(parsed.name) || parsed.name.length > 50) {
+						res.writeHead(400, { "Content-Type": "application/json" });
+						res.end(JSON.stringify({ error: `Invalid agent name "${parsed.name}": must match /^[a-z][a-z0-9-]*$/ and be at most 50 chars` }));
+						return;
+					}
+					// Check for duplicates in custom agents dir
+					fs.mkdirSync(agentsDir, { recursive: true });
+					if (fs.existsSync(path.join(agentsDir, `${parsed.name}.md`))) {
+						res.writeHead(409, { "Content-Type": "application/json" });
+						res.end(JSON.stringify({ error: `Agent "${parsed.name}" already exists` }));
+						return;
+					}
+					const saved = saveAgent(agentsDir, parsed);
+					res.writeHead(201, { "Content-Type": "application/json" });
+					res.end(JSON.stringify(saved));
+				} catch {
+					res.writeHead(400, { "Content-Type": "application/json" });
+					res.end(JSON.stringify({ error: "Invalid JSON body" }));
+				}
+			});
+			return;
+		}
+
+		if (req.method === "PUT" && url.pathname === "/api/agents") {
+			collectBody(req, res, (body) => {
+				try {
+					const parsed = JSON.parse(body);
+					if (!parsed.name || typeof parsed.name !== "string") {
+						res.writeHead(400, { "Content-Type": "application/json" });
+						res.end(JSON.stringify({ error: "name is required" }));
+						return;
+					}
+					// Agent must exist (in builtins or files)
+					const existing = getAgent([agentsDir], parsed.name);
+					if (!existing) {
+						res.writeHead(404, { "Content-Type": "application/json" });
+						res.end(JSON.stringify({ error: `Agent "${parsed.name}" not found` }));
+						return;
+					}
+					fs.mkdirSync(agentsDir, { recursive: true });
+					const saved = saveAgent(agentsDir, parsed);
+					res.writeHead(200, { "Content-Type": "application/json" });
+					res.end(JSON.stringify(saved));
+				} catch {
+					res.writeHead(400, { "Content-Type": "application/json" });
+					res.end(JSON.stringify({ error: "Invalid JSON body" }));
+				}
+			});
+			return;
+		}
+
+		if (req.method === "DELETE" && url.pathname === "/api/agents") {
+			const name = url.searchParams.get("name");
+			if (!name) {
+				res.writeHead(400, { "Content-Type": "application/json" });
+				res.end(JSON.stringify({ error: "name query parameter required" }));
+				return;
+			}
+			// Cannot delete if only exists as builtin
+			const isBuiltin = BUILTINS.some(b => b.name === name);
+			const customExists = fs.existsSync(path.join(agentsDir, `${name}.md`));
+			if (isBuiltin && !customExists) {
+				res.writeHead(400, { "Content-Type": "application/json" });
+				res.end(JSON.stringify({ error: `Cannot delete built-in agent "${name}"` }));
+				return;
+			}
+			if (!customExists) {
+				res.writeHead(404, { "Content-Type": "application/json" });
+				res.end(JSON.stringify({ error: `Agent "${name}" not found in custom agents` }));
+				return;
+			}
+			const deleted = deleteAgent(agentsDir, name);
+			res.writeHead(200, { "Content-Type": "application/json" });
+			res.end(JSON.stringify({ deleted }));
 			return;
 		}
 
