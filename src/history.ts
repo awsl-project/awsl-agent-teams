@@ -7,6 +7,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { log } from "./log.js";
+import { atomicWriteFileSync } from "./fs-utils.js";
 
 // ─── Interfaces ──────────────────────────────────────────────
 
@@ -111,7 +112,7 @@ export function appendHistory(cwd: string, entry: Omit<HistoryEntry, "id">): voi
 	const filePath = historyPath(cwd);
 	const dir = path.dirname(filePath);
 	fs.mkdirSync(dir, { recursive: true });
-	fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf-8");
+	atomicWriteFileSync(filePath, JSON.stringify(data, null, 2));
 
 	log.debug("history", `Appended ${id}: ${entry.status} — ${entry.goal}`);
 }

@@ -9,6 +9,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
 import { log } from "./log.js";
+import { atomicWriteFileSync } from "./fs-utils.js";
 
 // ─── Data Models ─────────────────────────────────────────────
 
@@ -92,21 +93,9 @@ export class ProjectManager {
 	 */
 	static save(registry: ProjectRegistry): void {
 		const regPath = ProjectManager.registryPath();
-		const dir = path.dirname(regPath);
-		fs.mkdirSync(dir, { recursive: true });
-
 		registry.updatedAt = new Date().toISOString();
 		const content = JSON.stringify(registry, null, 2);
-		const tmpPath = regPath + `.tmp.${process.pid}`;
-
-		try {
-			fs.writeFileSync(tmpPath, content, "utf-8");
-			fs.renameSync(tmpPath, regPath);
-		} catch (e) {
-			// Cleanup temp file on failure
-			try { fs.unlinkSync(tmpPath); } catch { /* ignore */ }
-			throw e;
-		}
+		atomicWriteFileSync(regPath, content);
 	}
 
 	/**

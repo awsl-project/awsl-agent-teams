@@ -17,6 +17,7 @@ import { RunContext } from "./context.js";
 import { log } from "./log.js";
 import { appendHistory } from "./history.js";
 import { atomicCommit } from "./planning.js";
+import { atomicWriteFileSync, withFileLock, withFileLockAsync } from "./fs-utils.js";
 import { scheduleQueueRun, cancelScheduledRun } from "./scheduler.js";
 
 // ─── Git Push Helper ────────────────────────────────────────
@@ -79,36 +80,46 @@ export interface QueueData {
 export class TaskQueue {
 	private queuePath: string;
 	private cwd: string;
+	private onStatusChange?: () => void;
 
-	constructor(cwd: string) {
+	constructor(cwd: string, options?: { onStatusChange?: () => void }) {
 		this.cwd = cwd;
 		this.queuePath = path.join(cwd, ".planning", "QUEUE.json");
+		this.onStatusChange = options?.onStatusChange;
+	}
+
+	/** Path to the file-based mutex lock for queue operations. */
+	private get lockPath(): string {
+		return path.join(path.dirname(this.queuePath), ".queue.lock");
 	}
 
 	/**
 	 * Add a new task to the queue.
 	 */
 	add(goal: string, options?: QueueTask["options"], extra?: { engine?: Engine; dependsOn?: string[]; runAt?: string; mode?: "build" | "discuss" }): QueueTask {
-		const data = this.load();
-		const id = `q_${this.nextId(data)}`;
-		const task: QueueTask = {
-			id,
-			goal,
-			options: options ?? {},
-			status: "pending",
-			scheduledAt: new Date().toISOString(),
-		};
-		if (extra?.engine) task.engine = extra.engine;
-		if (extra?.dependsOn) task.dependsOn = extra.dependsOn;
-		if (extra?.runAt) task.runAt = extra.runAt;
-		if (extra?.mode) task.mode = extra.mode;
-		data.tasks.push(task);
-		this.save(data);
+		const task = withFileLock(this.lockPath, () => {
+			const data = this.load();
+			const id = `q_${this.nextId(data)}`;
+			const t: QueueTask = {
+				id,
+				goal,
+				options: options ?? {},
+				status: "pending",
+				scheduledAt: new Date().toISOString(),
+			};
+			if (extra?.engine) t.engine = extra.engine;
+			if (extra?.dependsOn) t.dependsOn = extra.dependsOn;
+			if (extra?.runAt) t.runAt = extra.runAt;
+			if (extra?.mode) t.mode = extra.mode;
+			data.tasks.push(t);
+			this.saveInternal(data);
+			return t;
+		});
 
-		// Register system scheduled task if runAt is set
+		// Register system scheduled task if runAt is set (outside lock)
 		if (extra?.runAt) {
 			try {
-				scheduleQueueRun(id, new Date(extra.runAt), this.cwd);
+				scheduleQueueRun(task.id, new Date(extra.runAt), this.cwd);
 			} catch (e: any) {
 				log.warn("queue", `Failed to register system scheduler: ${e.message}`);
 			}
@@ -121,19 +132,22 @@ export class TaskQueue {
 	 * Remove a task by ID.
 	 */
 	remove(id: string): boolean {
-		const data = this.load();
-		const idx = data.tasks.findIndex(t => t.id === id);
-		if (idx === -1) return false;
-		const task = data.tasks[idx];
-		data.tasks.splice(idx, 1);
-		this.save(data);
+		const result = withFileLock(this.lockPath, () => {
+			const data = this.load();
+			const idx = data.tasks.findIndex(t => t.id === id);
+			if (idx === -1) return { removed: false, hadRunAt: false };
+			const task = data.tasks[idx];
+			data.tasks.splice(idx, 1);
+			this.saveInternal(data);
+			return { removed: true, hadRunAt: !!task.runAt };
+		});
 
-		// Cancel system scheduled task if it had one
-		if (task.runAt) {
+		// Cancel system scheduled task if it had one (outside lock)
+		if (result.hadRunAt) {
 			try { cancelScheduledRun(id); } catch { /* best effort */ }
 		}
 
-		return true;
+		return result.removed;
 	}
 
 	/**
@@ -147,13 +161,15 @@ export class TaskQueue {
 	 * Clear the entire queue by deleting QUEUE.json.
 	 */
 	clear(): void {
-		try {
-			if (fs.existsSync(this.queuePath)) {
-				fs.unlinkSync(this.queuePath);
+		withFileLock(this.lockPath, () => {
+			try {
+				if (fs.existsSync(this.queuePath)) {
+					fs.unlinkSync(this.queuePath);
+				}
+			} catch {
+				/* ignore */
 			}
-		} catch {
-			/* ignore */
-		}
+		});
 	}
 
 	/**
@@ -167,26 +183,28 @@ export class TaskQueue {
 	 * Update the runAt time for a pending task. Pass null to clear.
 	 */
 	setRunAt(id: string, runAt: string | null): boolean {
-		const data = this.load();
-		const task = data.tasks.find(t => t.id === id);
-		if (!task || task.status !== "pending") return false;
+		return withFileLock(this.lockPath, () => {
+			const data = this.load();
+			const task = data.tasks.find(t => t.id === id);
+			if (!task || task.status !== "pending") return false;
 
-		// Cancel existing scheduled job
-		try { cancelScheduledRun(id); } catch { /* best effort */ }
+			// Cancel existing scheduled job
+			try { cancelScheduledRun(id); } catch { /* best effort */ }
 
-		if (runAt) {
-			task.runAt = runAt;
-			// Register new scheduled job
-			try {
-				scheduleQueueRun(id, new Date(runAt), this.cwd);
-			} catch (e: any) {
-				log.warn("queue", `Failed to update scheduler: ${e.message}`);
+			if (runAt) {
+				task.runAt = runAt;
+				// Register new scheduled job
+				try {
+					scheduleQueueRun(id, new Date(runAt), this.cwd);
+				} catch (e: any) {
+					log.warn("queue", `Failed to update scheduler: ${e.message}`);
+				}
+			} else {
+				delete task.runAt;
 			}
-		} else {
-			delete task.runAt;
-		}
-		this.save(data);
-		return true;
+			this.saveInternal(data);
+			return true;
+		});
 	}
 
 	/**
@@ -203,14 +221,17 @@ export class TaskQueue {
 			log.warn("queue", `Received ${signal}, shutting down gracefully...`);
 			// Reset any running tasks back to pending
 			try {
-				const data = this.load();
-				for (const t of data.tasks) {
-					if (t.status === "running") {
-						t.status = "pending";
-						t.startedAt = undefined;
+				withFileLock(this.lockPath, () => {
+					const data = this.load();
+					for (const t of data.tasks) {
+						if (t.status === "running") {
+							t.status = "pending";
+							t.startedAt = undefined;
+						}
 					}
-				}
-				this.save(data);
+					this.saveInternal(data);
+				});
+				this.onStatusChange?.();
 				log.info("queue", "Reset running tasks to pending");
 			} catch { /* best effort */ }
 		};
@@ -218,7 +239,8 @@ export class TaskQueue {
 		process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
 
 		// Recover from crash: any task left "running" from a prior session is stale
-		{
+		let didRecover = false;
+		await withFileLockAsync(this.lockPath, async () => {
 			const recoverData = this.load();
 			let recovered = 0;
 			for (const t of recoverData.tasks) {
@@ -229,10 +251,12 @@ export class TaskQueue {
 				}
 			}
 			if (recovered > 0) {
-				this.save(recoverData);
+				this.saveInternal(recoverData);
+				didRecover = true;
 				log.info("queue", `Recovered ${recovered} stale running task(s) to pending`);
 			}
-		}
+		});
+		if (didRecover) this.onStatusChange?.();
 
 		while (!shuttingDown) {
 			const data = this.load();
@@ -323,22 +347,28 @@ export class TaskQueue {
 				const blocked = pendingTasks.map(t => `${t.id} (deps: ${t.dependsOn?.join(",") ?? "none"})`);
 				log.warn("queue", `Dependency deadlock: ${blocked.length} task(s) blocked:\n  ${blocked.join("\n  ")}`);
 				for (const t of pendingTasks) {
-					const freshData = this.load();
-					const freshTask = freshData.tasks.find(ft => ft.id === t.id);
-					if (freshTask && freshTask.status === "pending") {
-						freshTask.status = "failed";
-						freshTask.completedAt = new Date().toISOString();
-						freshTask.error = "Dependency deadlock: required dependency failed or missing";
-						this.save(freshData);
-					}
+					await withFileLockAsync(this.lockPath, async () => {
+						const freshData = this.load();
+						const freshTask = freshData.tasks.find(ft => ft.id === t.id);
+						if (freshTask && freshTask.status === "pending") {
+							freshTask.status = "failed";
+							freshTask.completedAt = new Date().toISOString();
+							freshTask.error = "Dependency deadlock: required dependency failed or missing";
+							this.saveInternal(freshData);
+						}
+					});
+					this.onStatusChange?.();
 				}
 				break;
 			}
 
 			// Mark as running
-			nextTask.status = "running";
-			nextTask.startedAt = new Date().toISOString();
-			this.save(data);
+			await withFileLockAsync(this.lockPath, async () => {
+				nextTask.status = "running";
+				nextTask.startedAt = new Date().toISOString();
+				this.saveInternal(data);
+			});
+			this.onStatusChange?.();
 
 			log.section(`Queue: Executing ${nextTask.id}`);
 			log.info("queue", `Goal: ${nextTask.goal}`);
@@ -346,10 +376,13 @@ export class TaskQueue {
 			const ctx = RunContext.tryAcquire(this.cwd, { description: `queue:${nextTask.id}` });
 			if (!ctx) {
 				log.warn("queue", `Cannot acquire lock for ${nextTask.id}, skipping`);
-				const revertData = this.load();
-				const revertTask = revertData.tasks.find(t => t.id === nextTask.id);
-				if (revertTask) { revertTask.status = "pending"; revertTask.startedAt = undefined; }
-				this.save(revertData);
+				await withFileLockAsync(this.lockPath, async () => {
+					const revertData = this.load();
+					const revertTask = revertData.tasks.find(t => t.id === nextTask.id);
+					if (revertTask) { revertTask.status = "pending"; revertTask.startedAt = undefined; }
+					this.saveInternal(revertData);
+				});
+				this.onStatusChange?.();
 				break;
 			}
 			try {
@@ -381,32 +414,38 @@ export class TaskQueue {
 						timeoutPromise,
 					]);
 
-					const freshData = this.load();
-					const freshTask = freshData.tasks.find(t => t.id === nextTask.id);
-					if (freshTask) {
-						freshTask.status = "done";
-						freshTask.completedAt = new Date().toISOString();
-						freshTask.result = {
-							success: true,
-							summary: discussResult.answer.slice(0, 500),
-						};
-						this.save(freshData);
+					const discussFreshTask = await withFileLockAsync(this.lockPath, async () => {
+						const freshData = this.load();
+						const ft = freshData.tasks.find(t => t.id === nextTask.id);
+						if (ft) {
+							ft.status = "done";
+							ft.completedAt = new Date().toISOString();
+							ft.result = {
+								success: true,
+								summary: discussResult.answer.slice(0, 500),
+							};
+							this.saveInternal(freshData);
+						}
+						return ft;
+					});
+					this.onStatusChange?.();
 
+					if (discussFreshTask) {
 						try {
 							appendHistory(this.cwd, {
 								date: new Date().toISOString(),
 								project: path.basename(this.cwd),
 								projectPath: this.cwd,
-								queueTaskId: freshTask.id,
-								goal: freshTask.goal,
+								queueTaskId: discussFreshTask.id,
+								goal: discussFreshTask.goal,
 								status: "done",
-								startedAt: freshTask.startedAt!,
-								completedAt: freshTask.completedAt!,
-								duration: Date.parse(freshTask.completedAt!) - Date.parse(freshTask.startedAt!),
+								startedAt: discussFreshTask.startedAt!,
+								completedAt: discussFreshTask.completedAt!,
+								duration: Date.parse(discussFreshTask.completedAt!) - Date.parse(discussFreshTask.startedAt!),
 								tasksCompleted: discussResult.agents.length,
 								tasksTotal: discussResult.agents.length,
 								summary: discussResult.answer.slice(0, 500),
-								engine: detectEngine(freshTask.engine) as string,
+								engine: detectEngine(discussFreshTask.engine) as string,
 								inputTokens: discussResult.inputTokens,
 								outputTokens: discussResult.outputTokens,
 								costUsd: discussResult.costUsd,
@@ -446,20 +485,26 @@ export class TaskQueue {
 					]);
 
 					// Reload data in case it changed during execution
-					const freshData = this.load();
-					const freshTask = freshData.tasks.find(t => t.id === nextTask.id);
-					if (freshTask) {
-						freshTask.status = teamResult.success ? "done" : "failed";
-						freshTask.completedAt = new Date().toISOString();
-						freshTask.result = {
-							success: teamResult.success,
-							summary: teamResult.summary,
-						};
-						if (!teamResult.success) {
-							freshTask.error = teamResult.summary;
+					const buildFreshTask = await withFileLockAsync(this.lockPath, async () => {
+						const freshData = this.load();
+						const ft = freshData.tasks.find(t => t.id === nextTask.id);
+						if (ft) {
+							ft.status = teamResult.success ? "done" : "failed";
+							ft.completedAt = new Date().toISOString();
+							ft.result = {
+								success: teamResult.success,
+								summary: teamResult.summary,
+							};
+							if (!teamResult.success) {
+								ft.error = teamResult.summary;
+							}
+							this.saveInternal(freshData);
 						}
-						this.save(freshData);
+						return ft;
+					});
+					this.onStatusChange?.();
 
+					if (buildFreshTask) {
 						// Record history entry
 						try {
 							const tasksCompletedMatch = teamResult.summary.match(/(\d+)\/\d+ tasks/);
@@ -468,16 +513,16 @@ export class TaskQueue {
 								date: new Date().toISOString(),
 								project: path.basename(this.cwd),
 								projectPath: this.cwd,
-								queueTaskId: freshTask.id,
-								goal: freshTask.goal,
-								status: freshTask.status as "done" | "failed",
-								startedAt: freshTask.startedAt!,
-								completedAt: freshTask.completedAt!,
-								duration: Date.parse(freshTask.completedAt!) - Date.parse(freshTask.startedAt!),
+								queueTaskId: buildFreshTask.id,
+								goal: buildFreshTask.goal,
+								status: buildFreshTask.status as "done" | "failed",
+								startedAt: buildFreshTask.startedAt!,
+								completedAt: buildFreshTask.completedAt!,
+								duration: Date.parse(buildFreshTask.completedAt!) - Date.parse(buildFreshTask.startedAt!),
 								tasksCompleted: tasksCompletedMatch ? parseInt(tasksCompletedMatch[1], 10) : 0,
 								tasksTotal: tasksTotalMatch ? parseInt(tasksTotalMatch[1], 10) : 0,
-								summary: freshTask.result?.summary ?? "",
-								engine: detectEngine(freshTask.engine) as string,
+								summary: buildFreshTask.result?.summary ?? "",
+								engine: detectEngine(buildFreshTask.engine) as string,
 								inputTokens: teamResult.inputTokens ?? 0,
 								outputTokens: teamResult.outputTokens ?? 0,
 								costUsd: teamResult.costUsd ?? 0,
@@ -504,30 +549,36 @@ export class TaskQueue {
 				}
 			} catch (err: any) {
 				// Mark as failed on error
-				const freshData = this.load();
-				const freshTask = freshData.tasks.find(t => t.id === nextTask.id);
-				if (freshTask) {
-					freshTask.status = "failed";
-					freshTask.completedAt = new Date().toISOString();
-					freshTask.error = err.message ?? String(err);
-					this.save(freshData);
+				const errFreshTask = await withFileLockAsync(this.lockPath, async () => {
+					const freshData = this.load();
+					const ft = freshData.tasks.find(t => t.id === nextTask.id);
+					if (ft) {
+						ft.status = "failed";
+						ft.completedAt = new Date().toISOString();
+						ft.error = err.message ?? String(err);
+						this.saveInternal(freshData);
+					}
+					return ft;
+				});
+				this.onStatusChange?.();
 
+				if (errFreshTask) {
 					// Record history entry for failure
 					try {
 						appendHistory(this.cwd, {
 							date: new Date().toISOString(),
 							project: path.basename(this.cwd),
 							projectPath: this.cwd,
-							queueTaskId: freshTask.id,
-							goal: freshTask.goal,
+							queueTaskId: errFreshTask.id,
+							goal: errFreshTask.goal,
 							status: "failed",
-							startedAt: freshTask.startedAt!,
-							completedAt: freshTask.completedAt!,
-							duration: Date.parse(freshTask.completedAt!) - Date.parse(freshTask.startedAt!),
+							startedAt: errFreshTask.startedAt!,
+							completedAt: errFreshTask.completedAt!,
+							duration: Date.parse(errFreshTask.completedAt!) - Date.parse(errFreshTask.startedAt!),
 							tasksCompleted: 0,
 							tasksTotal: 0,
-							summary: freshTask.error ?? "",
-							engine: detectEngine(freshTask.engine) as string,
+							summary: errFreshTask.error ?? "",
+							engine: detectEngine(errFreshTask.engine) as string,
 							inputTokens: 0,
 							outputTokens: 0,
 							costUsd: 0,
@@ -747,7 +798,14 @@ ${description}`;
 		try {
 			if (fs.existsSync(this.queuePath)) {
 				const content = fs.readFileSync(this.queuePath, "utf-8");
-				const parsed = JSON.parse(content);
+				let parsed: any;
+				try {
+					parsed = JSON.parse(content);
+				} catch (parseErr) {
+					log.warn("queue", `QUEUE.json parse failed, resetting to empty: ${parseErr}`);
+					const now = new Date().toISOString();
+					return { tasks: [], createdAt: now, updatedAt: now };
+				}
 				if (parsed && Array.isArray(parsed.tasks)) {
 					return parsed as QueueData;
 				}
@@ -760,10 +818,18 @@ ${description}`;
 		return { tasks: [], createdAt: now, updatedAt: now };
 	}
 
-	private save(data: QueueData): void {
+	/** Save without acquiring the file lock (caller must already hold it). */
+	private saveInternal(data: QueueData): void {
 		const dir = path.dirname(this.queuePath);
 		fs.mkdirSync(dir, { recursive: true });
 		data.updatedAt = new Date().toISOString();
-		fs.writeFileSync(this.queuePath, JSON.stringify(data, null, 2), "utf-8");
+		atomicWriteFileSync(this.queuePath, JSON.stringify(data, null, 2));
+	}
+
+	/** Save with file-lock protection (public entry point). */
+	private save(data: QueueData): void {
+		withFileLock(this.lockPath, () => {
+			this.saveInternal(data);
+		});
 	}
 }

@@ -9,6 +9,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { execSync } from "node:child_process";
 import { log } from "./log.js";
+import { atomicWriteFileSync } from "./fs-utils.js";
 
 export interface VerifyItem {
 	taskId: string;
@@ -58,8 +59,7 @@ function loadVerifyCache(cwd: string): VerifyCache {
 function saveVerifyCache(cwd: string, cache: VerifyCache): void {
 	try {
 		const cachePath = path.join(cwd, ".planning", CACHE_FILE);
-		fs.mkdirSync(path.dirname(cachePath), { recursive: true });
-		fs.writeFileSync(cachePath, JSON.stringify(cache, null, 2));
+		atomicWriteFileSync(cachePath, JSON.stringify(cache, null, 2));
 	} catch { /* ignore write errors */ }
 }
 
@@ -323,8 +323,7 @@ export async function runFullVerification(cwd: string): Promise<VerifyResult> {
 	// Write report
 	const report = formatReport(items, generalChecks, summary);
 	const verifyPath = path.join(cwd, ".planning", "VERIFICATION.md");
-	fs.mkdirSync(path.dirname(verifyPath), { recursive: true });
-	fs.writeFileSync(verifyPath, report);
+	atomicWriteFileSync(verifyPath, report);
 	log.info("verify", "Report saved to .planning/VERIFICATION.md");
 
 	return { passed, items, generalChecks, summary };
@@ -449,8 +448,7 @@ export function runStaticReview(cwd: string): ReviewResult {
 	// Write report
 	const report = formatReviewReport(findings, summary);
 	const reviewPath = path.join(cwd, ".planning", "REVIEW.md");
-	fs.mkdirSync(path.dirname(reviewPath), { recursive: true });
-	fs.writeFileSync(reviewPath, report);
+	atomicWriteFileSync(reviewPath, report);
 	log.info("review", "Report saved to .planning/REVIEW.md");
 
 	return { passed, findings, summary };

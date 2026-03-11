@@ -198,6 +198,11 @@ Phase 4:  Re-plan       on task failure → retry 2x → replan with different a
 | **Task queue (sleep mode)** | Queue multiple goals → `awsl queue start` → unattended sequential execution with auto rate-limit recovery |
 | **Flexible plan parsing** | Planner output parsed as JSON, XML, or markdown — robust against format variations from different models |
 | **Verify providers** | Parallel execution with per-provider timeouts (tsc 120s, tests 180s, eslint 60s) and 5-minute result caching |
+| **Atomic file writes** | All state files (QUEUE.json, CHECKPOINT.json, HISTORY.json, VERIFICATION.md) written via temp-file + rename pattern, preventing corruption on crash |
+| **Queue file locking** | File-based mutex prevents concurrent read/write conflicts between dashboard API and queue executor |
+| **Real-time status push** | Task completion triggers immediate WebSocket status push instead of waiting for 30s polling interval |
+| **Reconnect state sync** | Full state snapshot pushed to dashboard immediately after WebSocket reconnection |
+| **Delta status sync** | After initial full sync, only changed queue data and new history entries are transmitted, reducing bandwidth |
 
 ### Example Output
 
