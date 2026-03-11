@@ -14,7 +14,8 @@ import * as child_process from "node:child_process";
 import { loadHistory, getHistoryStats, clearHistory } from "./history.js";
 import { TaskQueue } from "./queue.js";
 import { ProjectManager } from "./projects.js";
-import { loadAgents, saveAgent, deleteAgent, getAgent, BUILTINS } from "./agents.js";
+import { loadAgents, saveAgent, deleteAgent, getAgent, BUILTINS, getPromptTemplates, composePromptPreview } from "./agents.js";
+import { SkillRegistry } from "./skills.js";
 import { log } from "./log.js";
 import { RelayServer } from "./relay.js";
 
@@ -499,6 +500,43 @@ export function startDashboard(cwd: string, port: number = 3120, host: string = 
 			return;
 		}
 
+		// ── Agent Templates & Preview APIs ───────────────
+		if (url.pathname === "/api/agents/templates" && req.method === "GET") {
+			res.writeHead(200, { "Content-Type": "application/json" });
+			res.end(JSON.stringify(getPromptTemplates()));
+			return;
+		}
+
+		if (req.method === "POST" && url.pathname === "/api/agents/preview") {
+			collectBody(req, res, (body) => {
+				try {
+					const { name } = JSON.parse(body);
+					if (!name || typeof name !== "string") {
+						res.writeHead(400, { "Content-Type": "application/json" });
+						res.end(JSON.stringify({ error: "name is required" }));
+						return;
+					}
+					const agentsDir = path.join(cwd, "agents");
+					const agent = getAgent([agentsDir], name);
+					if (!agent) {
+						res.writeHead(404, { "Content-Type": "application/json" });
+						res.end(JSON.stringify({ error: `Agent "${name}" not found` }));
+						return;
+					}
+					const allAgents = loadAgents([agentsDir]);
+					const registry = new SkillRegistry();
+					const skillInstructions = registry.buildInstructions(agent.role, agent.skills);
+					const preview = composePromptPreview(agent, allAgents, skillInstructions);
+					res.writeHead(200, { "Content-Type": "application/json" });
+					res.end(JSON.stringify(preview));
+				} catch {
+					res.writeHead(400, { "Content-Type": "application/json" });
+					res.end(JSON.stringify({ error: "Invalid JSON body" }));
+				}
+			});
+			return;
+		}
+
 		// ── Agent CRUD APIs ──────────────────────────────
 		const agentsDir = path.join(cwd, "agents");
 
@@ -636,7 +674,7 @@ export function startDashboard(cwd: string, port: number = 3120, host: string = 
 
 	server.listen(port, host, () => {
 		log.info("dashboard", `Dashboard running at http://${host}:${port}`);
-		log.info("dashboard", `API: /api/history, /api/stats, /api/queue, /api/queue/add|remove|clear|start, /api/history/clear, /api/projects/*`);
+		log.info("dashboard", `API: /api/history, /api/stats, /api/queue, /api/queue/add|remove|clear|start, /api/history/clear, /api/agents/*, /api/projects/*`);
 		log.info("dashboard", `Relay: /ws/relay (WebSocket), /api/clients, /api/clients/command`);
 	});
 
