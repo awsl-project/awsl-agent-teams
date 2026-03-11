@@ -1,27 +1,28 @@
-# task_4: Add an 'Agent Roles' (角色管理) collapsible card section to publ
+# task_4: Dashboard UI agent editor
 
 Assignee: coder
 Status: done
 
 ## Result
-All 25 tests pass. Type-check clean.
+Everything looks correct and well-formed.
 
 ## AWSL_RESULT
 
-### Task 4 Complete: Agent Roles (角色管理) Dashboard UI
+### Task 4: Dashboard UI Agent Editor — Complete
 
-**Added to `public/dashboard.html`:**
+Enhanced the agent editor in `public/dashboard.html` with 4 new features:
 
-| Component | Description |
-|-----------|-------------|
-| **Agent Roles Card** | Collapsible `角色管理` section with `[+New]` and `[Collapse]` buttons. Displays agent cards in a flex grid. Each card shows: name, role badge (color-coded), source badge (`built-in` grey / `custom` green / `override` yellow), and truncated description. Cards are clickable to open editor. |
-| **Agent Editor Modal** | Overlay modal with fields: Name (readonly when editing), Role (dropdown), Description, Model, Tools (comma-separated), Skills (comma-separated), Thinking Level (dropdown), System Prompt (monospace textarea, 200px min height). Action buttons: `[Save]`, `[Reset to Default]` (only for overridden builtins), `[Delete]` (only for custom/override agents), `[Cancel]`. |
-| **JavaScript CRUD** | `loadAgentRoles()` — GET /api/agents, `openAgentEditor(name?)` — open modal pre-filled or blank, `saveAgentFromEditor()` — POST (new) or PUT (edit), `deleteAgentFromEditor()` — DELETE with confirmation, `resetAgentToDefault()` — DELETE override to restore builtin default. |
-| **Auto-refresh** | `loadAgentRoles()` + `renderAgentRoles()` called on init and in 30s refresh interval. |
+| Feature | Description |
+|---------|-------------|
+| **Template Selector** | Dropdown above textarea loads 7 built-in templates from `/api/agents/templates`. "Apply" button fills prompt + auto-sets role/description |
+| **Fullscreen Editor** | "Expand" button opens full-viewport overlay with monospace textarea. "Done" saves back, "Cancel" discards. Escape key closes. |
+| **Character Count** | Live character count shown below textarea in both normal and fullscreen modes |
+| **Preview Panel** | "Preview" button (edit mode only) opens fullscreen editor + loads composed prompt from `/api/agents/preview`. Tabbed view: Composed / Base / Skills / Team |
 
-**CSS added:** ~160 lines matching existing dashboard style (card-based layout, var() colors, responsive breakpoints).
+### Files Modified
+- **`public/dashboard.html`** — Added ~220 lines CSS (fullscreen overlay, template bar, char count, preview pane) + ~30 lines HTML (template selector, expand button, char count, fullscreen overlay with preview pane) + ~140 lines JS (loadTemplates, populateTemplateSelect, applyTemplate, updateCharCount, openFullscreenEditor, closeFullscreenEditor, saveFullscreenEditor, showAgentPreview, loadPreview, switchPreviewTab)
 
-**Verification:**
-- `npx tsc --noEmit` — clean, no errors
-- `tests/agents.test.ts` — **25/25 passed**
-- All UI follows existing patterns (card layout, badge styling, modal overlay, responsive `@media` rules)
+### Test Results
+- **19/19 dashboard-agents tests pass** (unchanged)
+- **57/57 agents tests pass** (unchanged)
+- TypeScript build: clean
