@@ -488,7 +488,65 @@
         "coder"
       ],
       "maxConcurrency": 1
+    },
+    {
+      "id": "h_19",
+      "date": "2026-03-11T02:45:32.515Z",
+      "project": "awsl-agent-teams",
+      "projectPath": "C:\\Users\\11421\\awsl-agent-teams",
+      "queueTaskId": "q_5",
+      "goal": "queue要支持拆任务 有时候我会说一大串 能帮我拆成一堆独立需求和队列任务",
+      "status": "done",
+      "startedAt": "2026-03-11T02:27:35.647Z",
+      "completedAt": "2026-03-11T02:45:32.514Z",
+      "duration": 1076867,
+      "tasksCompleted": 4,
+      "tasksTotal": 4,
+      "summary": "✅ 4/4 tasks completed successfully.\n\n✅ task_1 (coder): Refactor the existing `plan()` method in `src/queue.ts` into two public metho... [src/queue.ts, src/index.ts]\n   → Clean compile. `PlannedTask` is already exported from `src/index.ts` (line 14 — confirmed in the read). No changes needed there.\n\n## AWSL_RESULT\n\n**Refactored `plan()` in `src/queue.ts` into two public methods:**\n\n1. **`planPreview(description: string): Promise<PlannedTask[]>`** — Calls LLM, parses\n\n✅ task_2 (coder): Add a new `queue split` subcommand in `src/cli.ts` inside the `if (command ==... [src/cli.ts]\n   → Everything looks correct. \n\n## AWSL_RESULT\n\n**Added `queue split` subcommand to `src/cli.ts`:**\n\n1. **Option parsing** (lines 1146-1163): Parses `--engine`, `--quick`, `--concurrency`, `--model`, `--yes`/`-y`, plus description text from remaining args\n2. **Preview table** (lines 1175-1186): Calls `q\n\n✅ task_3 (tester): Add tests to `src/queue.test.ts` for the new `planPreview` and `planCommit` m... [src/queue.test.ts]\n   → Clean compile.\n\n## AWSL_RESULT\n\n**Added 4 planCommit edge-case tests to `src/queue.test.ts`:**\n\n1. **`planCommit adds tasks with no dependencies`** — Independent tasks without `dependsOn`, verifies goal text, `quick` flag, and persistence via `list()`\n2. **`planCommit resolves position-based depende\n\n✅ task_4 (coder): Update all three documentation files to cover the new `queue split` command:\n... [README.md, README.zh-CN.md, BEST_PRACTICES.md]\n   → Clean compile.\n\n## AWSL_RESULT\n\n**Updated all three documentation files to cover `queue split`:**\n\n### README.md (English)\n- Added `queue split` as the recommended command in the Task Queue usage section (line 265)\n- Expanded \"Natural Language Queue Planning\" section with `queue split` preview examp",
+      "engine": "claude-code",
+      "inputTokens": 31865,
+      "outputTokens": 42699,
+      "costUsd": 4.63895375,
+      "waves": [
+        {
+          "wave": 1,
+          "taskIds": [
+            "task_1"
+          ],
+          "agents": [
+            "coder"
+          ],
+          "parallel": 1
+        },
+        {
+          "wave": 2,
+          "taskIds": [
+            "task_2",
+            "task_3"
+          ],
+          "agents": [
+            "coder",
+            "tester"
+          ],
+          "parallel": 2
+        },
+        {
+          "wave": 3,
+          "taskIds": [
+            "task_4"
+          ],
+          "agents": [
+            "coder"
+          ],
+          "parallel": 1
+        }
+      ],
+      "agents": [
+        "coder",
+        "tester"
+      ],
+      "maxConcurrency": 2
     }
   ],
-  "updatedAt": "2026-03-11T02:27:35.616Z"
+  "updatedAt": "2026-03-11T02:45:32.515Z"
 }

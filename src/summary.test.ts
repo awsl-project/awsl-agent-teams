@@ -358,6 +358,7 @@ describe("formatSummary", () => {
 			totalOutputTokens: 0,
 			agentBreakdown: {},
 			projects: [],
+			discussions: [],
 		};
 
 		const output = formatSummary(summary);
@@ -422,6 +423,7 @@ describe("formatSummary", () => {
 			totalOutputTokens: 40000,
 			agentBreakdown: { coder: 2, reviewer: 1 },
 			projects: ["my-app"],
+			discussions: [],
 		};
 
 		const output = formatSummary(summary);
@@ -488,6 +490,7 @@ describe("formatSummary", () => {
 			totalOutputTokens: 0,
 			agentBreakdown: {},
 			projects: ["test"],
+			discussions: [],
 		};
 
 		const output = formatSummary(summary);
@@ -521,6 +524,7 @@ describe("formatSummary", () => {
 			totalOutputTokens: 0,
 			agentBreakdown: {},
 			projects: [],
+			discussions: [],
 		};
 
 		const output = formatSummary(summary);
@@ -547,6 +551,7 @@ describe("formatSummary", () => {
 			totalOutputTokens: 800,    // 800 (raw number)
 			agentBreakdown: {},
 			projects: [],
+			discussions: [],
 		};
 
 		const output = formatSummary(summary);

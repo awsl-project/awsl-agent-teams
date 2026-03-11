@@ -7,6 +7,6 @@
 (none)
 
 ## Position
-- Goal: clear history的 按钮底色是黑色太不合理了 要帮我修
-- Tasks: 1/1 completed
+- Goal: queue要支持拆任务 有时候我会说一大串 能帮我拆成一堆独立需求和队列任务
+- Tasks: 4/4 completed
 - Status: SUCCESS
