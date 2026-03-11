@@ -1,53 +1,43 @@
-# task_1: Create src/summary.ts implementing the night session summary
+# task_1: Create a new file `src/discuss.ts` implementing the multi-ag
 
 Assignee: coder
 Status: done
 
 ## Result
+
+
+All done. Here's the summary:
+
 ## AWSL_RESULT
 
-### Deliverable: `src/summary.ts` — Night Session Summary Module
+### Task: Create `src/discuss.ts` core module
 
-**Status:** Complete — compiles with zero errors, all 9 tests pass.
+**Status:** Complete
 
-### Files Created
+**Files created:**
+- `src/discuss.ts` — Multi-agent discussion orchestration module
+- `src/discuss.test.ts` — Tests for validation edge cases and type contracts
 
-| File | Description |
-|------|-------------|
-| `src/summary.ts` | Core module: types, `computeTimeRange()`, `generateSummary()`, `formatSummary()` |
-| `src/summary.test.ts` | 9 unit tests covering time range logic, filtering, aggregation, and formatting |
+**Files modified:**
+- `src/index.ts` — Added public exports for `discussTeam`, `DiscussionRound`, `DiscussionResult`, `DiscussOptions`
 
-### Exported Types
-- `TimeRange` — `{ from: Date; to: Date }`
-- `CommitInfo` — `{ hash, message, date, author }`
-- `SessionSummary` — Full summary with tasks, git, tokens, cost, agent breakdown, projects
-- `SummaryOptions` — `{ from?, to?, date?, allProjects?, cwd? }`
+**Implementation details:**
+- Exports `discussTeam()` function with the specified signature
+- Interfaces: `DiscussionRound`, `DiscussionResult`, `DiscussOptions`
+- **Round 1:** Parallel perspectives via `runParallel()` — all agents analyze independently
+- **Rounds 2-N:** Debate rounds where agents see prior perspectives and respond
+- **Synthesis:** First agent synthesizes all perspectives into a coherent answer
+- **Persistence:** Writes `.planning/DISCUSSION-{timestamp}.md` with full transcript
+- **Edge cases:** Rejects questions < 10 chars, requires >= 2 agents, caps rounds at 3
+- Cost estimation at $3/M input + $15/M output (Sonnet rates)
+- Uses `maxTurns: 15` for discussion agent calls
+- Fresh `SharedMemory` per discussion session
 
-### Exported Functions
-1. **`computeTimeRange(options, nowOverride?)`** — Cross-midnight auto-detection:
-   - `--date` given → `dateT22:00 → date+1T06:00`
-   - now < 06:00 → yesterday 22:00 → today 06:00
-   - now >= 22:00 → today 22:00 → tomorrow 06:00
-   - daytime → last night 22:00 → today 06:00
-
-2. **`generateSummary(options)`** — Loads HISTORY.json (or all projects), filters by time range, collects git commits, aggregates metrics.
-
-3. **`formatSummary(summary)`** — Pretty CLI output with box-drawing chars, stats, agent breakdown, timeline, projects list. Handles empty case.
-
-### Test Results
+**Test results:**
 ```
-✓ testTimeRangeWithDate
-✓ testTimeRangeCustomFromTo
-✓ testTimeRangeAutoDetectBeforeSixAM
-✓ testTimeRangeAutoDetectAfterTenPM
-✓ testTimeRangeAutoDetectDaytime
-✓ testGenerateSummaryFiltersEntries
-✓ testGenerateSummaryEmptyHistory
-✓ testFormatSummaryEmpty
-✓ testFormatSummaryWithData
-
-9 passed, 0 failed
+# tests 5
+# pass 5
+# fail 0
 ```
 
-### Verification
-- `npx tsc --noEmit` — zero errors
+**Verification:** `npx tsc --noEmit` passes with zero errors.
