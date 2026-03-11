@@ -1,28 +1,28 @@
-# task_4: Add documentation for the awsl summary command to all three 
+# task_4: Modify `src/summary.ts` to display discussion results in the
 
 Assignee: coder
 Status: done
 
 ## Result
-Sections 0-19, all sequential with no gaps or duplicates.
+Clean compile, all 6 tests pass.
 
 ## AWSL_RESULT
 
-### Deliverable: Documentation for `awsl summary` in all three doc files
+### Task: Add discussion support to `src/summary.ts`
 
-**Status:** Complete — all three files updated, 37 mentions of "summary" across docs, type-check clean.
+**Status:** Complete
 
-### Files Modified
+**Files modified:**
+- `src/summary.ts` — Added `discussions` array to `SessionSummary` interface, extraction logic in `generateSummary()`, and rendering section in `formatSummary()`
+- `src/summary.test.ts` — Added `discussions: []` to all 5 existing `SessionSummary` literals for backward compatibility
 
-| File | Changes |
-|------|---------|
-| `README.md` | Added `awsl summary` to Auxiliary Commands, new "Night Session Summary" section with options table + example output, added to CLI Reference |
-| `README.zh-CN.md` | Mirrored all changes in Chinese: 辅助命令 section, new "夜间工作总结" section, CLI 参考 section |
-| `BEST_PRACTICES.md` | Added `awsl summary` to command cheatsheet (§1), new §16 "夜间工作总结" with usage, data sources, time detection table, recommended workflow, tips. Renumbered §17-19 |
+**Files created:**
+- `src/summary-discuss.test.ts` — 6 tests covering: type contract, extraction from discuss-mode entries, skipping build entries, rendering with question/answer preview, long answer truncation (150 chars), empty discussions omission
 
-### Verification
+**Implementation details:**
+- `SessionSummary.discussions` — array of `{ question, answer, agents, duration, costUsd }`
+- `generateSummary()` filters `mode === "discuss" && answer` entries and maps them
+- `formatSummary()` renders a "Discussions:" section after Timeline/before Projects with Q/A preview (truncated to 150 chars), agent count, duration, and cost
+- Empty discussions array produces no section in output
 
-```
-grep -c summary README.md README.zh-CN.md BEST_PRACTICES.md → 37 matches
-npx tsc --noEmit → zero errors
-```
+**Verification:** `npx tsc --noEmit` — clean. 6/6 tests pass.
