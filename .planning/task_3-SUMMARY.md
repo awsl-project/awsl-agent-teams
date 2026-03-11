@@ -1,41 +1,41 @@
-# task_3: Create src/summary.test.ts with comprehensive tests using no
+# task_3: Modify `src/queue.ts` to support discussion mode:
 
-Assignee: tester
+1. **Add 
+
+Assignee: coder
 Status: done
 
 ## Result
-No type errors in `summary.test.ts`.
+All tests pass. Here's the summary:
 
 ## AWSL_RESULT
 
-### Deliverable: `src/summary.test.ts` — Comprehensive Tests (node:test)
+### Task: Modify `src/queue.ts` to support discussion mode
 
-**Status:** Complete — 20 tests pass, zero type errors.
+**Status:** Complete
 
-### Test Structure
+**Files modified:**
+- `src/queue.ts` — Added discussion mode support to the task queue
 
-| Suite | Tests | Coverage |
-|-------|-------|----------|
-| `computeTimeRange` | 8 | before 6AM, after 10PM, daytime, explicit date, custom from/to, boundary 06:00, boundary 22:00, custom times with auto-detect |
-| `generateSummary` | 7 | filtering in/out of range, aggregation totals, agent breakdown, empty history, null/undefined optional fields, done/failed counts, project set |
-| `formatSummary` | 5 | empty (No activity), full data (header, counts, cost, tokens, agents, projects), timeline sort order, duration h/m formatting, token M/K formatting |
+**Files created:**
+- `src/queue.test.ts` — 5 tests for the new mode/discussRounds fields
 
-### Test Results
+**Changes made:**
+
+1. **Import:** Added `import { discussTeam } from "./discuss.js"`
+2. **QueueTask interface:** Added `mode?: "build" | "discuss"` field and `discussRounds?: number` to options
+3. **`add()` method:** Extended `extra` parameter to accept `mode`, sets it on the task when provided
+4. **`start()` method:** Branches on `nextTask.mode === "discuss"`:
+   - **Discussion path:** Calls `discussTeam()` with timeout, records history with `mode: "discuss"` and `answer` fields, skips autoCommit (no code changes)
+   - **Build path:** Existing `executeTeam()` flow wrapped in `else` block, unchanged behavior
+   - Shared timeout promise extracted before the if/else
+5. **Error handling:** Existing catch block covers both modes
+
+**Test results:**
 ```
-# tests 20
-# suites 3
-# pass 20
+# tests 5 (queue) + 5 (discuss) = 10
+# pass 10
 # fail 0
-# cancelled 0
-# skipped 0
-# duration_ms 254ms
 ```
 
-### Files Modified
-| File | Description |
-|------|-------------|
-| `src/summary.test.ts` | Rewritten with `node:test` (`describe`/`test`/`before`/`after`) + `node:assert/strict`, temp dir isolation with cleanup |
-
-### Verification
-- `npx tsx src/summary.test.ts` — 20/20 pass
-- `npx tsc --noEmit` — zero errors in test file (pre-existing `cli.ts` error unrelated)
+**Verification:** `npx tsc --noEmit` passes with zero errors.
