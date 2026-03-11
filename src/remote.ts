@@ -18,6 +18,7 @@ import * as path from "node:path";
 import { TaskQueue } from "./queue.js";
 import { type Engine, detectEngine } from "./runner.js";
 import { loadHistory } from "./history.js";
+import { loadAgents, saveAgent, deleteAgent } from "./agents.js";
 import { log } from "./log.js";
 
 export interface RemoteClientOptions {
@@ -221,6 +222,32 @@ export class RemoteClient {
 						cwd: this.options.cwd,
 					};
 					break;
+
+				case "agents:list": {
+					const agentsDir = path.join(this.options.cwd, "agents");
+					result = loadAgents([agentsDir]);
+					break;
+				}
+
+				case "agents:get": {
+					const agentsDir = path.join(this.options.cwd, "agents");
+					const agents = loadAgents([agentsDir]);
+					result = agents.find(a => a.name === (payload as any).name) ?? null;
+					break;
+				}
+
+				case "agents:save": {
+					const agentsDir = path.join(this.options.cwd, "agents");
+					result = saveAgent(agentsDir, payload as any);
+					break;
+				}
+
+				case "agents:delete": {
+					const agentsDir = path.join(this.options.cwd, "agents");
+					const deleted = deleteAgent(agentsDir, (payload as any).name);
+					result = { deleted };
+					break;
+				}
 
 				default:
 					throw new Error(`Unknown action: ${action}`);
