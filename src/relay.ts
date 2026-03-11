@@ -246,7 +246,20 @@ export class RelayServer {
 				const cid = getId();
 				if (cid && this.clients.has(cid)) {
 					const client = this.clients.get(cid)!;
-					client.status = msg.data as any;
+					const data = msg.data as any;
+					if (data?.delta) {
+						// Delta update: merge into existing status
+						if (!client.status) client.status = {} as any;
+						if (data.queue) (client.status as any).queue = data.queue;
+						if (data.historyAppend && Array.isArray(data.historyAppend)) {
+							const existing = (client.status as any).history ?? [];
+							(client.status as any).history = existing.concat(data.historyAppend);
+						}
+						if (data.system) (client.status as any).system = data.system;
+					} else {
+						// Full sync: replace entire status
+						client.status = data;
+					}
 					client.lastSeen = new Date().toISOString();
 				}
 				break;
