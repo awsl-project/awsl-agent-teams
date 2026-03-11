@@ -1,4 +1,4 @@
-# task_3: Enhance the existing `agents` CLI command in src/cli.ts with
+# task_3: CLI agents subcommands
 
 Assignee: coder
 Status: done
@@ -6,28 +6,33 @@ Status: done
 ## Result
 ## AWSL_RESULT
 
-### Task 3 Complete: Agents CLI Subcommands in `src/cli.ts`
+### Task 3: CLI Agents Subcommands — Complete
 
-**Implemented 6 subcommands:**
+Added 3 new subcommands and 1 new flag to the `agents` CLI command in `src/cli.ts`:
 
 | Subcommand | Description |
 |------------|-------------|
-| `awsl agents` | List all agents (existing behavior preserved) |
-| `awsl agents show <name>` | Show full details including systemPrompt via `getAgent()` |
-| `awsl agents create <name>` | Create new agent with flags: `--role`, `--description`, `--prompt`, `--prompt-file`, `--tools`, `--model`, `--skills`, `--thinking`. Calls `saveAgent()` |
-| `awsl agents edit <name>` | Update existing agent, merges with current values. Same flags as create |
-| `awsl agents delete <name>` | Delete custom agent file. Rejects builtin-only agents |
-| `awsl agents reset <name>` | Delete override file for builtin agent, restoring defaults. Only works for BUILTINS names |
+| `awsl agents templates` | Lists all 7 built-in prompt templates with descriptions |
+| `awsl agents prompt <name>` | Focused prompt editing — opens `$EDITOR` (fallback: `notepad`/`vi`) |
+| `awsl agents prompt <name> --show` | Print current prompt to stdout |
+| `awsl agents prompt <name> --set "..."` | Set prompt inline |
+| `awsl agents prompt <name> --file <path>` | Set prompt from file |
+| `awsl agents preview <name>` | Shows full composed prompt (base + skills + team context) with section char counts |
+| `--template <name>` flag on create/edit | Pre-populates `systemPrompt` and `role` from template registry |
 
-**Helper added:** `parseAgentFlags()` — parses `--role`, `--description`, `--prompt`, `--prompt-file`, `--tools`, `--model`, `--skills`, `--thinking` flags from CLI args.
+**Implementation details:**
+- `$EDITOR` support uses `spawnSync` with `shell: true` for cross-platform compatibility
+- Template flag applies only if `--prompt`/`--prompt-file` not explicitly given (explicit overrides template)
+- Preview uses `SkillRegistry.buildInstructions()` to resolve skills for accurate preview
+- `usage()` documentation updated with all new commands
 
-**Files modified:**
-- `src/cli.ts` — Updated import, added `parseAgentFlags()`, refactored agents command block with 6 subcommands, updated `usage()` documentation
+### Files Modified
+- **`src/cli.ts`** — Added imports for `PROMPT_TEMPLATES`, `getPromptTemplates`, `composePromptPreview`, `SkillRegistry`; added `--template` to `parseAgentFlags()`; added `templates`, `prompt`, `preview` subcommands; updated `usage()` and error message
 
-**Files created:**
-- `tests/cli-agents.test.ts` — 13 tests covering all subcommands and edge cases
+### Files Modified (Tests)
+- **`tests/cli-agents.test.ts`** — Added 12 new tests (templates listing, prompt --show/--set/--file, prompt not-found, editor no-changes, preview, preview not-found, create with template, invalid template, edit with template)
 
-**Verification:**
+### Test Results
 - `npx tsc --noEmit` — clean, no errors
-- `npx tsx tests/cli-agents.test.ts` — 13/13 passed
-- `npx tsx src/agents.test.ts` — 17/17 passed (no regressions)
+- `tests/cli-agents.test.ts` — 25/25 passed (13 existing + 12 new)
+- `src/agents.test.ts` — 24/24 passed (no regressions)
