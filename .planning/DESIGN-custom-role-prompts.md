@@ -1,277 +1,299 @@
-# Design: Custom Role Prompts (Dashboard + CLI)
+# Design: Enhanced Custom Role Prompts (自定义角色提示词增强)
 
-## Socratic Brainstorming
-
-### 1. Explore — What is the user actually trying to achieve?
-
-The user wants to **customize agent role prompts** (the system instructions that define how each agent behaves) from **two surfaces**:
-- **Dashboard (web panel)**: Visual editor for creating/editing agent definitions
-- **Local terminal (CLI)**: Commands for managing agent definitions
-
-Currently, agents can be customized only by manually creating `.md` files in `./agents/`. There's no UI, no API, and the CLI only has a read-only `agents` list command.
-
-### 2. Explore — Constraints
-
-- Current agent system uses file-based `.md` definitions with YAML frontmatter
-- Dashboard communicates via raw HTTP (no framework, `http.createServer`)
-- Remote clients communicate via WebSocket relay (`relay.ts`)
-- TypeScript strict mode, ES module imports with `.js` extensions
-- Must update README.md, README.zh-CN.md, BEST_PRACTICES.md per CLAUDE.md rules
-
-### 3. Explore — Three Alternatives
-
-| Approach | Description | Pros | Cons |
-|----------|-------------|------|------|
-| **A: Agent CRUD API + File Storage** | REST endpoints + dashboard editor + CLI commands. Reads/writes `./agents/*.md` files. | Full-featured, leverages existing format, proper separation | Most work |
-| **B: Prompt Override Layer** | Keep existing loading, add `.planning/prompt-overrides.json` merge layer | Lighter, non-destructive | Override merging is fragile, confusing mental model |
-| **C: JSON Config Store** | Store agent definitions in `.planning/agents.json` instead of `.md` files | Easier API parsing | Breaks existing convention, loses markdown readability |
-
-### 4. Challenge — Assumptions & Risks
-
-- **Assumption**: Users want to customize both built-in agents AND create new ones → **Valid** (the feature request is about customizing "role prompts", implying both)
-- **Risk**: Editing built-in agents could break orchestration → **Mitigated**: overrides create files in `./agents/`, originals stay in code
-- **Risk**: Concurrent edits from multiple dashboard sessions → **Low risk**: file writes are atomic (write-tmp-then-rename)
-- **Risk**: Malformed YAML from user input → **Mitigated**: validate before saving, return clear errors
-- **Risk**: Agent name conflicts with special characters → **Mitigated**: sanitize name to `[a-z0-9-]` pattern
-
-### 5. Decision
-
-**Approach A: Agent CRUD API + File Storage**
-
-Rationale:
-- Builds on the existing `.md` file format — no migration, no new storage layer
-- Proper REST API works for dashboard, CLI, and future integrations
-- Built-in agents stay read-only in code; "customizing" a built-in creates an override file in `./agents/`
-- The `.md` format is human-readable and git-trackable
-- Simplest conceptual model: what you see in `./agents/` is what you get
+## Status: APPROVED
+## Author: architect
+## Date: 2026-03-11
 
 ---
 
-## Architecture
+## Problem Statement
 
-### Data Model
+The basic agent CRUD (create/edit/delete) already works in both the dashboard and CLI.
+However, the **prompt editing experience** has significant gaps:
 
-No changes to `TeamAgentDef` interface. The existing structure already has everything needed:
+1. **Dashboard textarea too small** (200px min-height) for multi-paragraph system prompts
+2. **No prompt templates** — users don't know what a good prompt looks like
+3. **CLI editing is awkward** — must pass entire prompt as `--prompt "..."` or via `--prompt-file`
+4. **No prompt preview** — can't see the final composed prompt (base + guardian skills + team context)
+5. **No shortcut** for "just edit the prompt" without touching other agent fields
+6. **No character count** or feedback on prompt size
+
+---
+
+## Design Overview
+
+```
+┌─────────────────────────────────────────────────┐
+│              Prompt Templates Registry            │
+│  (PROMPT_TEMPLATES in src/agents.ts)             │
+│  coder | reviewer | architect | tester |         │
+│  planner | devops | documenter                   │
+└──────────┬──────────────────┬────────────────────┘
+           │                  │
+    ┌──────▼──────┐   ┌──────▼──────┐
+    │  Dashboard  │   │    CLI      │
+    │  ─────────  │   │  ─────────  │
+    │  Fullscreen │   │  $EDITOR    │
+    │  editor     │   │  support    │
+    │  Template   │   │  --template │
+    │  picker     │   │  `prompt`   │
+    │  Preview    │   │  subcommand │
+    │  Char count │   │  `preview`  │
+    └──────┬──────┘   └──────┬──────┘
+           │                  │
+    ┌──────▼──────────────────▼──────┐
+    │         /api/agents            │
+    │  (existing CRUD)               │
+    │  + GET /api/agents/templates   │
+    │  + GET /api/agents/preview     │
+    └────────────────────────────────┘
+```
+
+---
+
+## Detailed Design
+
+### 1. Prompt Templates Registry (`src/agents.ts`)
+
+Add `PROMPT_TEMPLATES` constant and `getPromptTemplates()` function.
 
 ```typescript
-// src/agents.ts (existing — no changes needed)
-interface TeamAgentDef {
-  name: string;          // unique identifier, also filename
-  role: string;          // architect, coder, reviewer, tester, planner, custom
-  description: string;   // human-readable purpose
-  model?: string;        // optional model override
-  tools?: string[];      // allowed tools
-  skills?: string[];     // explicit skill names
-  thinkingLevel?: string; // low, medium, high
-  systemPrompt: string;  // THE ROLE PROMPT — this is what users customize
-  source: "file" | "builtin";
+export const PROMPT_TEMPLATES: Record<string, { description: string; prompt: string }> = {
+  coder: {
+    description: "Full-stack developer with TDD focus",
+    prompt: "You are a senior software engineer.\n\n..."
+  },
+  reviewer: {
+    description: "Security-focused code reviewer",
+    prompt: "You are a code reviewer focused on security and quality.\n\n..."
+  },
+  architect: {
+    description: "System architecture designer",
+    prompt: "You are a senior software architect.\n\n..."
+  },
+  tester: {
+    description: "QA engineer with edge-case focus",
+    prompt: "You are a QA engineer.\n\n..."
+  },
+  planner: {
+    description: "Task decomposition specialist",
+    prompt: "You decompose complex goals into concrete, verifiable subtasks.\n\n..."
+  },
+  devops: {
+    description: "CI/CD and infrastructure specialist",
+    prompt: "You are a DevOps engineer.\n\n..."
+  },
+  documenter: {
+    description: "Technical documentation writer",
+    prompt: "You are a technical writer.\n\n..."
+  }
+};
+
+export function getPromptTemplates(): Array<{ name: string; description: string; prompt: string }> {
+  return Object.entries(PROMPT_TEMPLATES).map(([name, t]) => ({ name, ...t }));
 }
 ```
 
-### New Functions in `src/agents.ts`
+**Decision**: Templates are hardcoded constants, not files. Simpler, no I/O, version-controlled.
+
+### 2. Prompt Composition Preview (`src/agents.ts`)
+
+New function to compose the full agent prompt preview:
 
 ```typescript
-/** Serialize a TeamAgentDef to frontmatter + markdown body */
-export function serializeAgent(agent: TeamAgentDef): string;
-
-/** Save agent to a directory as {name}.md */
-export function saveAgent(dir: string, agent: Partial<TeamAgentDef> & { name: string }): void;
-
-/** Delete agent file from directory */
-export function deleteAgent(dir: string, name: string): boolean;
-
-/** Get a single agent by name from loaded agents */
-export function getAgent(dirs: string[], name: string): TeamAgentDef | undefined;
+export function composePromptPreview(
+  agent: TeamAgentDef,
+  allAgents: TeamAgentDef[],
+  skillInstructions: string
+): { composed: string; sections: { base: string; skills: string; team: string } } {
+  const teamRoster = allAgents
+    .filter(a => a.name !== agent.name)
+    .map(a => `- **${a.name}** (${a.role}): ${a.description}`)
+    .join("\n");
+  return {
+    composed: `# Agent: ${agent.name} (${agent.role})\n\n${agent.systemPrompt}` +
+      (skillInstructions ? `\n\n${skillInstructions}` : '') +
+      `\n\n## Team Context\n${teamRoster}\n\n## Shared Memory\n(populated at runtime)`,
+    sections: {
+      base: agent.systemPrompt,
+      skills: skillInstructions || '(none)',
+      team: teamRoster,
+    }
+  };
+}
 ```
 
-### API Endpoints (in `src/dashboard.ts`)
-
-All endpoints operate on `./agents/` relative to the dashboard's `cwd`.
-
-| Method | Path | Description | Request Body | Response |
-|--------|------|-------------|-------------|----------|
-| `GET` | `/api/agents` | List all agents | — | `TeamAgentDef[]` |
-| `GET` | `/api/agents?name=X` | Get single agent | — | `TeamAgentDef` |
-| `POST` | `/api/agents` | Create new agent | `{ name, role, description, systemPrompt, model?, tools?, skills?, thinkingLevel? }` | `TeamAgentDef` |
-| `PUT` | `/api/agents` | Update agent | `{ name, ...fields }` | `TeamAgentDef` |
-| `DELETE` | `/api/agents?name=X` | Delete custom agent | — | `{ deleted: boolean }` |
-
-**Validation rules:**
-- `name`: required, must match `/^[a-z][a-z0-9-]*$/`, max 50 chars
-- `role`: required, must be one of `planner|architect|coder|reviewer|tester|custom` or any string
-- `systemPrompt`: required, non-empty string
-- Cannot DELETE a built-in agent (only its override file)
-- Cannot create an agent with name that matches built-in unless it's explicitly an override
-
-### CLI Commands (in `src/cli.ts`)
+### 3. New API Endpoints (`src/dashboard.ts`)
 
 ```
-awsl agents                     # List all agents (existing, enhanced output)
-awsl agents show <name>         # Show full agent definition with prompt
-awsl agents create <name>       # Create new agent interactively or with flags
-  --role <role>                 # Role (default: custom)
-  --description <desc>          # Short description
-  --prompt <text>               # System prompt (inline)
-  --prompt-file <path>          # System prompt from file
-  --tools <t1,t2>              # Tools list
-  --model <model>               # Model override
-awsl agents edit <name>         # Edit agent prompt (opens $EDITOR or accepts flags)
-  --prompt <text>               # New system prompt
-  --prompt-file <path>          # New system prompt from file
-  --role <role>                 # Update role
-  --description <desc>          # Update description
-awsl agents delete <name>       # Delete custom agent file
-awsl agents reset <name>        # Delete override, restore built-in default
+GET /api/agents/templates
+  → Returns: Array<{ name, description, prompt }>
+
+GET /api/agents/preview?name=<name>
+  → Returns: { composed, sections: { base, skills, team } }
 ```
 
-### Dashboard UI (in `public/dashboard.html`)
+The preview endpoint calls `composePromptPreview()` with the agent's skill instructions
+resolved via `SkillRegistry.buildInstructions(agent.role, agent.skills)`.
 
-Add a new collapsible card section **"Agent Roles"** (角色管理) in the dashboard:
+### 4. Dashboard Enhancements (`public/dashboard.html`)
 
-#### Layout
-```
-┌─────────────────────────────────────────────────────────┐
-│ 🤖 Agent Roles (角色管理)                        [+New] │
-├─────────────────────────────────────────────────────────┤
-│ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐   │
-│ │ planner  │ │architect │ │  coder   │ │ reviewer │   │
-│ │ built-in │ │ built-in │ │ custom ✎│ │ custom ✎│   │
-│ └──────────┘ └──────────┘ └──────────┘ └──────────┘   │
-│ ┌──────────┐ ┌──────────┐                              │
-│ │  tester  │ │my-agent  │                              │
-│ │ built-in │ │ custom ✎│                              │
-│ └──────────┘ └──────────┘                              │
-└─────────────────────────────────────────────────────────┘
-```
+#### 4a. Fullscreen Prompt Editor
 
-#### Agent Editor Modal
-When clicking an agent card or [+New]:
+New overlay that covers the entire viewport:
 
-```
-┌─────────────────────────────────────────────────────────┐
-│ Edit Agent: coder                              [×Close] │
-├─────────────────────────────────────────────────────────┤
-│ Name:        [coder          ]  (readonly if editing)   │
-│ Role:        [coder     ▾]                              │
-│ Description: [Full-stack TypeScript developer        ]  │
-│ Model:       [                ] (optional)              │
-│ Tools:       [read,write,edit,bash              ]       │
-│ Skills:      [                ] (optional)              │
-│ Thinking:    [medium    ▾]                              │
-│                                                         │
-│ System Prompt (角色提示词):                              │
-│ ┌─────────────────────────────────────────────────────┐ │
-│ │ You are a senior full-stack TypeScript developer.   │ │
-│ │                                                     │ │
-│ │ ## Guidelines                                       │ │
-│ │ - Write complete, runnable code...                  │ │
-│ │ - Use strict TypeScript...                          │ │
-│ │                                                     │ │
-│ │                                                     │ │
-│ └─────────────────────────────────────────────────────┘ │
-│                                                         │
-│ [Save]  [Reset to Default]  [Delete]                    │
-└─────────────────────────────────────────────────────────┘
+```html
+<div id="promptFullscreen" class="prompt-fullscreen" style="display:none">
+  <div class="prompt-fs-header">
+    <span class="prompt-fs-title">System Prompt</span>
+    <span class="prompt-fs-count" id="pfCharCount">0 chars</span>
+    <button onclick="closePromptFullscreen()" class="prompt-fs-close">Done</button>
+  </div>
+  <textarea id="pfTextarea" class="prompt-fs-textarea"></textarea>
+</div>
 ```
 
-#### UI Behavior
-- **Built-in agents**: Clicking opens editor pre-filled with built-in values. Saving creates `./agents/{name}.md` (override). Shows "Reset to Default" button.
-- **Custom agents**: Full CRUD. Shows "Delete" button.
-- **Card badges**: "built-in" (grey), "custom" (green), "override" (yellow — custom file overriding a built-in)
-- **System prompt textarea**: Large, monospaced font, supports markdown preview toggle
-- **Validation**: Real-time name validation, prevent save with empty prompt
-
-### Relay Integration
-
-For remote clients, add new relay command types:
-
-```typescript
-// New commands supported by RemoteClient
-"agents:list"   → returns TeamAgentDef[]
-"agents:get"    → { name: string } → TeamAgentDef | null
-"agents:save"   → { name, role, description, systemPrompt, ... } → TeamAgentDef
-"agents:delete" → { name: string } → { deleted: boolean }
+CSS:
+```css
+.prompt-fullscreen {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: var(--bg); z-index: 500;
+  display: flex; flex-direction: column;
+}
+.prompt-fs-textarea {
+  flex: 1; font-family: monospace; font-size: 13px;
+  line-height: 1.6; padding: 20px; border: none;
+  resize: none; background: var(--bg); color: var(--ink); outline: none;
+}
 ```
 
-The dashboard sends these via `POST /api/clients/command` to manage agents on remote machines.
+Add "⛶" (expand) button next to the System Prompt label in the modal.
+The fullscreen textarea syncs bidirectionally with `aePromptTextarea`.
+
+#### 4b. Template Picker
+
+Add a `<select>` dropdown in the modal that loads templates from `/api/agents/templates`.
+Selecting a template fills in the textarea (with confirmation if current content is non-empty).
+
+```html
+<select id="aeTemplateSelect" onchange="applyTemplate()">
+  <option value="">— Use template —</option>
+  <!-- dynamically populated -->
+</select>
+```
+
+#### 4c. Character Count
+
+Real-time character count display next to the System Prompt label.
+Updates on every `input` event on the textarea.
+
+#### 4d. Preview Button
+
+Add "Preview" button in modal actions bar.
+Fetches `/api/agents/preview?name=X` and shows the composed prompt in a
+read-only fullscreen overlay (reusing the fullscreen editor structure but readonly).
+
+### 5. CLI Enhancements (`src/cli.ts`)
+
+#### 5a. `awsl agents prompt <name>` — Focused prompt editing
+
+```
+awsl agents prompt <name>              # Opens prompt in $EDITOR
+awsl agents prompt <name> --show       # Print current prompt to stdout
+awsl agents prompt <name> --set "..."  # Set prompt inline
+awsl agents prompt <name> --file path  # Set prompt from file
+```
+
+Implementation: Writes current prompt to temp file, opens `$EDITOR` (or `notepad` on Windows),
+reads back, saves if changed.
+
+#### 5b. `awsl agents preview <name>` — Show composed prompt
+
+Prints the full composed prompt (base + guardian skills + team context) to stdout
+with section headers and character counts.
+
+#### 5c. `--template` flag for create/edit
+
+```
+awsl agents create my-coder --template coder
+awsl agents create my-reviewer --template reviewer --description "My reviewer"
+```
+
+Pre-populates `systemPrompt` (and `role` if not specified) from the template registry.
+
+#### 5d. `$EDITOR` support in `agents edit`
+
+When `awsl agents edit <name>` is called without `--prompt` or `--prompt-file`,
+open the current prompt in `$EDITOR` for interactive editing.
+
+### 6. Remote Client (`src/remote.ts`)
+
+Add command handlers:
+- `agents:templates` → returns `getPromptTemplates()`
+- `agents:preview` → returns `composePromptPreview()` result
+
+### 7. Exports (`src/index.ts`)
+
+Re-export: `PROMPT_TEMPLATES`, `getPromptTemplates`, `composePromptPreview`
 
 ---
 
-## Implementation Plan
-
-### Files to Modify
+## File Changes Summary
 
 | File | Changes |
 |------|---------|
-| `src/agents.ts` | Add `serializeAgent()`, `saveAgent()`, `deleteAgent()`, `getAgent()` |
-| `src/dashboard.ts` | Add `/api/agents` CRUD endpoints |
-| `src/cli.ts` | Add `agents show/create/edit/delete/reset` subcommands, update `usage()` |
-| `public/dashboard.html` | Add Agent Roles card, editor modal, API integration JS |
-| `src/remote.ts` | Handle `agents:*` relay commands |
-| `src/index.ts` | Re-export new functions from agents.ts |
-| `README.md` | Document new feature |
-| `README.zh-CN.md` | Mirror documentation |
-| `BEST_PRACTICES.md` | Add usage examples |
-
-### Task Breakdown
-
-#### Wave 1 (parallel — no dependencies)
-
-**task_1**: `agents.ts` — Add `serializeAgent`, `saveAgent`, `deleteAgent`, `getAgent`
-- Assignee: coder
-- Files: `src/agents.ts`, `src/index.ts`
-
-**task_2**: `dashboard.ts` — Add `/api/agents` CRUD endpoints
-- Assignee: coder
-- Files: `src/dashboard.ts`
-- Depends on: task_1
-
-**task_3**: `cli.ts` — Add `agents show/create/edit/delete/reset` subcommands
-- Assignee: coder
-- Files: `src/cli.ts`
-- Depends on: task_1
-
-#### Wave 2 (parallel — depends on wave 1)
-
-**task_4**: `dashboard.html` — Add Agent Roles card + editor modal + JS integration
-- Assignee: coder
-- Files: `public/dashboard.html`
-- Depends on: task_2
-
-**task_5**: `remote.ts` — Handle `agents:*` relay commands
-- Assignee: coder
-- Files: `src/remote.ts`
-- Depends on: task_1
-
-#### Wave 3 (parallel — depends on wave 2)
-
-**task_6**: Documentation — Update README.md, README.zh-CN.md, BEST_PRACTICES.md
-- Assignee: coder
-- Files: `README.md`, `README.zh-CN.md`, `BEST_PRACTICES.md`
-- Depends on: task_4, task_5
-
-**task_7**: Review all changes
-- Assignee: reviewer
-- Depends on: task_1, task_2, task_3, task_4, task_5
-
-#### Wave 4
-
-**task_8**: Tests
-- Assignee: tester
-- Files: `tests/agents.test.ts`
-- Depends on: task_7
+| `src/agents.ts` | + `PROMPT_TEMPLATES`, + `getPromptTemplates()`, + `composePromptPreview()` |
+| `src/dashboard.ts` | + `GET /api/agents/templates`, + `GET /api/agents/preview?name=` |
+| `src/cli.ts` | + `agents prompt` subcommand, + `agents preview`, + `--template` flag, + `$EDITOR` |
+| `src/remote.ts` | + `agents:templates`, + `agents:preview` commands |
+| `src/index.ts` | + re-export new functions |
+| `public/dashboard.html` | + fullscreen editor, + template picker, + preview button, + char count |
+| `README.md` | + document prompt customization enhancements |
+| `README.zh-CN.md` | + mirror documentation |
+| `BEST_PRACTICES.md` | + prompt writing tips, template usage examples |
 
 ---
 
-## Key Decisions Log
+## Task Breakdown
+
+### Wave 1 (parallel — no dependencies)
+
+| ID | Task | Assignee | Files |
+|----|------|----------|-------|
+| task_1 | Add PROMPT_TEMPLATES, getPromptTemplates(), composePromptPreview() to agents.ts + re-export from index.ts | coder | src/agents.ts, src/index.ts |
+| task_2 | Add fullscreen prompt editor overlay + char count + expand button to dashboard.html | coder | public/dashboard.html |
+
+### Wave 2 (depends on task_1)
+
+| ID | Task | Assignee | Files |
+|----|------|----------|-------|
+| task_3 | Add /api/agents/templates and /api/agents/preview endpoints to dashboard.ts | coder | src/dashboard.ts |
+| task_4 | Add CLI: agents prompt, agents preview, --template flag, $EDITOR support | coder | src/cli.ts |
+| task_5 | Add agents:templates and agents:preview to remote client | coder | src/remote.ts |
+
+### Wave 3 (depends on task_2 + task_3)
+
+| ID | Task | Assignee | Files |
+|----|------|----------|-------|
+| task_6 | Wire dashboard template picker + preview button to new API endpoints | coder | public/dashboard.html |
+
+### Wave 4 (depends on all above)
+
+| ID | Task | Assignee | Files |
+|----|------|----------|-------|
+| task_7 | Update README.md, README.zh-CN.md, BEST_PRACTICES.md | coder | README.md, README.zh-CN.md, BEST_PRACTICES.md |
+
+---
+
+## Key Decisions & Rationale
 
 | # | Decision | Rationale |
 |---|----------|-----------|
-| 1 | Use existing `.md` file format | No migration, git-trackable, human-readable |
-| 2 | CRUD via REST API in dashboard.ts | Standard pattern, consistent with existing `/api/queue/*` endpoints |
-| 3 | CLI subcommands under `agents` | Natural extension of existing `agents` command |
-| 4 | Built-ins are read-only, overrides create files | Prevents corruption, clear mental model |
-| 5 | Agent name validation: `[a-z][a-z0-9-]*` | Safe for filenames, URL paths, YAML keys |
-| 6 | System prompt is the markdown body (not a separate field) | Consistent with existing `.md` format |
-| 7 | Dashboard uses modal editor (not inline) | More space for prompt editing, cleaner UX |
-| 8 | Relay support for remote agent management | Enables centralized control from dashboard |
+| 1 | Templates as hardcoded constants, not files | Simpler, no I/O, version-controlled with codebase |
+| 2 | Fullscreen editor via fixed overlay, not new page | Preserves SPA architecture, no routing needed |
+| 3 | `$EDITOR` with `notepad` fallback on Windows | Most reliable cross-platform interactive editing |
+| 4 | Preview shows all composed sections | Debugging agent behavior requires seeing the full prompt |
+| 5 | `agents prompt` as dedicated subcommand | Most common operation deserves a shortcut |
+| 6 | 7 built-in templates covering common roles | Good coverage without overwhelming choice |
+| 7 | Templates only set prompt text, not tools/model/skills | Keep templates focused; other fields are orthogonal |
+| 8 | Bidirectional sync between modal textarea and fullscreen | No data loss when switching between compact/fullscreen editing |

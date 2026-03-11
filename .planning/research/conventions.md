@@ -1,19 +1,17 @@
-The conventions doc already exists and is up to date. Here's the summary:
+The conventions file at `memory/conventions.md` already exists and is comprehensive (143 lines). It covers all requested areas:
 
 ## AWSL_RESULT
 
-### Conventions Analysis — Summary
+**Conventions documented** at `memory/conventions.md` — already up-to-date. Key patterns:
 
-The existing `memory/conventions.md` is already comprehensive and accurate. Key findings:
+| Area | Convention |
+|------|-----------|
+| **Naming** | camelCase vars/fns, PascalCase types/classes, UPPER_SNAKE constants, no enums (string unions) |
+| **Style** | Strict TS, ES modules with `.js` extensions, `node:` prefix, named exports only, barrel `index.ts` |
+| **Error handling** | Fail-soft (return defaults), bare `catch {}` when unused, `catch (e: any)` for messages, never throw in agent tools |
+| **Async** | async/await (no `.then`), sync fs, `Promise.all` for parallel, `Promise.allSettled` for non-fail-fast |
+| **Logging** | `log.info/warn/debug(source, msg)` — never `console.log` in production |
+| **State** | File-as-state in `.planning/`, JSON for data, Markdown for plans, `SharedMemory` KV for inter-agent |
+| **Testing** | `node:test` + `node:assert/strict`, `*.test.ts` in `src/`, temp dirs with cleanup, no mocking framework |
 
-**Naming**: camelCase functions, PascalCase types/interfaces, UPPER_SNAKE constants, `create` prefix for factories, `_camelCase` for private cache vars, no enums (string literal unions).
-
-**Style**: Strict TS, ES2022, Node16 modules, `.js` import extensions, tabs, double quotes, `node:` prefix for builtins, `import type` for types, section dividers with box-drawing chars.
-
-**Error Handling**: Fail-soft everywhere — return defaults (`null`, `[]`, `false`) not throw. Bare `catch {}` for cleanup. Agent tools never throw — return error text. Atomic file creation with `{ flag: "wx" }`. Child process wrappers always resolve (never reject).
-
-**Testing**: `node:test` + `node:assert/strict`, co-located `*.test.ts` files, `fs.mkdtempSync` for temp dirs with `finally` cleanup, no mocking framework, inline helper factories.
-
-**Architecture**: Factory functions > classes, file-as-state in `.planning/`, dual engine (claude-code subprocess / builtin in-process), topo-sort wave execution, checkpoint/resume, structured return objects over booleans.
-
-No changes needed — the document at `memory/conventions.md` is current.
+No updates needed — the file accurately reflects current codebase patterns across all 35+ source files.

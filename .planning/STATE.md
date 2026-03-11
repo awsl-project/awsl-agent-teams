@@ -7,6 +7,6 @@
 (none)
 
 ## Position
-- Goal: 我的网页面板的数据统计要支持按天 按月 搜索和统计展示
-- Tasks: 4/4 completed
+- Goal: 面板和本地终端都要加可以自定义角色提示词的功能
+- Tasks: 8/8 completed
 - Status: SUCCESS

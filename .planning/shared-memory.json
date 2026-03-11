@@ -1,37 +1,54 @@
 {
   "design": {
-    "title": "Dashboard Date Filter & Statistics — by day, by month, custom range",
-    "designDoc": ".planning/design.md",
-    "summary": "Add client-side date filtering to dashboard. Pill-style button bar (All/Today/7d/30d/Month/Custom) with month picker and date range inputs. filterByDate() applied before stats() so all widgets (stats cards, heatmap, trend chart, agent analysis, timeline) respect the selected period. ~120 lines in dashboard.html only. No backend changes.",
-    "approach": "client-side-only",
-    "modifiedFiles": ["public/dashboard.html"],
-    "noBackendChanges": true,
-    "filterModes": ["all", "today", "7d", "30d", "month", "custom"],
-    "newState": {
-      "dateFilter": "{ mode: 'all' | 'today' | '7d' | '30d' | 'month' | 'custom', value?: string, from?: string, to?: string }"
+    "title": "Enhanced Custom Role Prompts (自定义角色提示词增强)",
+    "designDoc": ".planning/DESIGN-custom-role-prompts.md",
+    "summary": "Enhance the existing agent prompt editing experience on both dashboard and CLI. Add: (1) prompt templates registry with 7 built-in role templates, (2) fullscreen prompt editor overlay in dashboard, (3) template picker dropdown, (4) prompt preview showing composed prompt with skills/team context, (5) character count, (6) CLI $EDITOR support for interactive editing, (7) `agents prompt` shortcut subcommand, (8) `agents preview` subcommand, (9) `--template` flag for create/edit.",
+    "approach": "enhance-existing-crud",
+    "modifiedFiles": [
+      "src/agents.ts",
+      "src/dashboard.ts",
+      "src/cli.ts",
+      "src/remote.ts",
+      "src/index.ts",
+      "public/dashboard.html",
+      "README.md",
+      "README.zh-CN.md",
+      "BEST_PRACTICES.md"
+    ],
+    "newExports": {
+      "PROMPT_TEMPLATES": "Record<string, { description: string; prompt: string }> — 7 built-in role templates",
+      "getPromptTemplates()": "Returns template list as array",
+      "composePromptPreview()": "Composes full agent prompt (base + skills + team context)"
     },
-    "newFunctions": {
-      "filterByDate(entries, df)": "Filters entries by date range based on dateFilter state, uses existing localDate() for timezone handling",
-      "updateFilterLabel(df, count)": "Shows human-readable label with run count when filter is active"
+    "newApiEndpoints": {
+      "GET /api/agents/templates": "Returns list of prompt templates",
+      "GET /api/agents/preview?name=X": "Returns composed prompt preview for an agent"
     },
-    "integrationPoint": "render() — insert filterByDate() call between entry collection and stats() call (line ~1770)",
-    "uiPlacement": "Between header and stats cards",
+    "newCliCommands": {
+      "agents prompt <name>": "Focused prompt editing (opens $EDITOR or --show/--set/--file)",
+      "agents preview <name>": "Show full composed prompt with section breakdown",
+      "--template <name>": "Flag for create/edit to pre-populate from template"
+    },
+    "dashboardUiChanges": [
+      "Fullscreen prompt editor overlay (fixed, z-index 500)",
+      "Expand button (⛶) next to System Prompt label",
+      "Template picker <select> dropdown",
+      "Preview button in modal actions",
+      "Real-time character count"
+    ],
+    "waves": {
+      "wave_1": ["task_1: PROMPT_TEMPLATES + getPromptTemplates + composePromptPreview in agents.ts", "task_2: Fullscreen editor + char count in dashboard.html"],
+      "wave_2": ["task_3: /api/agents/templates + /api/agents/preview in dashboard.ts", "task_4: CLI agents prompt + preview + --template + $EDITOR", "task_5: agents:templates + agents:preview in remote.ts"],
+      "wave_3": ["task_6: Wire dashboard template picker + preview to API"],
+      "wave_4": ["task_7: Update README.md, README.zh-CN.md, BEST_PRACTICES.md"]
+    },
     "keyDecisions": {
-      "client_side_only": "Data volume is tiny (task executions). Entries already fully loaded. Zero backend risk.",
-      "all_widgets_filtered": "Date filter applied before stats() so stats cards, heatmap, trend, agents, timeline all see filtered data.",
-      "composes_with_project_filter": "Date filter at render() level, project filter inside renderTimeline(). Both compose correctly.",
-      "dirty_check_update": "Add dateFilter state to render key so filter changes trigger re-render.",
-      "no_persistence": "Filter resets to 'all' on page reload — simple, no localStorage needed."
-    },
-    "implementationOrder": [
-      "1. CSS: Add .date-filter styles (~25 lines)",
-      "2. HTML: Add filter bar between header and stats cards (~15 lines)",
-      "3. JS: Add dateFilter state variable + filterByDate() function",
-      "4. JS: Add button click handlers + input change handlers",
-      "5. JS: Integrate into render() — call filterByDate before stats()",
-      "6. JS: Update dirty-check key to include dateFilter state",
-      "7. JS: Add updateFilterLabel() for human-readable period display",
-      "8. Test: Verify all filter modes work, compose with project filter"
-    ]
+      "templates_as_constants": "Hardcoded in agents.ts, not files — simpler, version-controlled",
+      "fullscreen_as_overlay": "Fixed overlay, not new page — preserves SPA architecture",
+      "editor_fallback_windows": "$EDITOR → VISUAL → notepad on Windows",
+      "preview_shows_all_sections": "Base + skills + team context for debugging",
+      "templates_only_set_prompt": "Templates don't set tools/model/skills — orthogonal concerns",
+      "bidirectional_textarea_sync": "Modal textarea ↔ fullscreen textarea stay in sync"
+    }
   }
 }

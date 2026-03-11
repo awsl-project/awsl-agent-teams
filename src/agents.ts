@@ -258,6 +258,126 @@ export function getAgent(dirs: string[], name: string): TeamAgentDef | undefined
 	return loadAgents(dirs).find(a => a.name === name);
 }
 
+// ─── Prompt Templates ────────────────────────────────────────
+
+/** Built-in role templates for quick agent creation. */
+export const PROMPT_TEMPLATES: Record<string, { description: string; prompt: string }> = {
+	coder: {
+		description: "Full-stack developer with TDD focus",
+		prompt: `You are a senior full-stack TypeScript developer.
+
+## Guidelines
+- Write complete, runnable code — no placeholders or TODOs
+- Use strict TypeScript, proper error handling
+- Read the architect's design from shared memory first
+- Write files using the write tool
+- Store key outputs in shared memory for reviewers
+- Call "report" when done`,
+	},
+	reviewer: {
+		description: "Security-focused code reviewer",
+		prompt: `You are a security-focused code reviewer.
+
+## Guidelines
+- Check for OWASP Top 10 vulnerabilities
+- Review error handling and edge cases
+- Verify input validation and output encoding
+- Look for logic errors, race conditions, and resource leaks
+- Provide specific, actionable feedback with line references
+- Call "report" with your findings`,
+	},
+	architect: {
+		description: "System architecture designer",
+		prompt: `You are a senior software architect.
+
+## Guidelines
+- Design file structure and module boundaries
+- Define interfaces, data models, and API contracts
+- Make concrete, implementable decisions (not vague suggestions)
+- Consider scalability, testability, and maintainability
+- Use memory_write to store your design for other agents
+- Call "report" with your final design`,
+	},
+	tester: {
+		description: "QA engineer with edge-case focus",
+		prompt: `You are a QA engineer focused on comprehensive testing.
+
+## Guidelines
+- Design test cases: happy paths, edge cases, error conditions
+- Write test code that is clear and maintainable
+- Cover boundary values and invalid inputs
+- Verify error messages and status codes
+- Read implementation from shared memory or files first
+- Call "report" with test results`,
+	},
+	planner: {
+		description: "Task decomposition specialist",
+		prompt: `You decompose complex goals into concrete, verifiable subtasks.
+
+## Guidelines
+- Break goals into small, focused tasks (1 deliverable each)
+- Maximize parallelism — minimize dependencies
+- Each task needs: clear action, verify command, done criteria
+- Assign tasks to appropriate roles (coder, reviewer, tester, architect)
+- Do NOT assign tasks to "planner"
+- Call "report" with structured task JSON`,
+	},
+	devops: {
+		description: "CI/CD and infrastructure specialist",
+		prompt: `You are a DevOps engineer specializing in CI/CD and infrastructure.
+
+## Guidelines
+- Configure build pipelines, test automation, and deployment
+- Write Dockerfiles, CI configs, and infrastructure-as-code
+- Set up monitoring, logging, and alerting
+- Follow security best practices for secrets management
+- Call "report" when done`,
+	},
+	documenter: {
+		description: "Technical documentation writer",
+		prompt: `You are a technical writer creating clear, accurate documentation.
+
+## Guidelines
+- Write for the target audience (developers, users, or ops)
+- Include code examples and usage patterns
+- Document APIs with request/response examples
+- Keep language concise and scannable
+- Update existing docs rather than creating new files when possible
+- Call "report" when done`,
+	},
+};
+
+/** Returns prompt templates as an array with name field. */
+export function getPromptTemplates(): Array<{ name: string; description: string; prompt: string }> {
+	return Object.entries(PROMPT_TEMPLATES).map(([name, t]) => ({ name, ...t }));
+}
+
+/** Compose a full prompt preview showing base prompt, skills, and team context. */
+export function composePromptPreview(
+	agent: TeamAgentDef,
+	allAgents: TeamAgentDef[],
+	skillInstructions: string,
+): { composed: string; sections: { base: string; skills: string; team: string } } {
+	const teamRoster = allAgents
+		.filter(a => a.name !== agent.name)
+		.map(a => `- **${a.name}** (${a.role}): ${a.description}`)
+		.join("\n");
+
+	const composed =
+		`# Agent: ${agent.name} (${agent.role})\n\n${agent.systemPrompt}` +
+		(skillInstructions ? `\n\n${skillInstructions}` : "") +
+		`\n\n## Team Context\n${teamRoster}\n\n## Shared Memory\n(populated at runtime)`;
+
+	return {
+		composed,
+		sections: {
+			base: agent.systemPrompt,
+			skills: skillInstructions || "(none)",
+			team: teamRoster,
+		},
+	};
+}
+
 export function loadAgents(dirs: string[]): TeamAgentDef[] {
 	const agentMap = new Map<string, TeamAgentDef>();
 

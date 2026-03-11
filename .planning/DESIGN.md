@@ -1,49 +1,37 @@
 ## AWSL_RESULT
 
-### Design: Custom Role Prompts (Dashboard + CLI)
+### Design: Enhanced Custom Role Prompts (自定义角色提示词增强)
 
-**Design document saved to:** `.planning/DESIGN-custom-role-prompts.md`
+**核心发现**: Agent CRUD 基础设施已经存在（dashboard 的角色管理 + CLI 的 `awsl agents` 命令）。用户需要的是**提示词编辑体验的增强**。
 
----
+### 设计要点
 
-### Socratic Analysis Summary
+**3 个核心问题 → 3 个解决方案**:
 
-**核心需求**: 用户希望通过 Dashboard 和 CLI 两个入口自定义 Agent 的角色提示词（system prompt），而不是手动编辑 `.md` 文件。
+| 问题 | 解决方案 |
+|------|---------|
+| Dashboard 文本框太小，编辑长提示词体验差 | 全屏编辑器 overlay + 字符计数 |
+| 用户不知道怎么写好的提示词 | 7 个内置角色模板 (coder/reviewer/architect/tester/planner/devops/documenter) |
+| CLI 编辑提示词不方便，看不到最终效果 | `$EDITOR` 交互编辑 + `agents prompt` 快捷命令 + `agents preview` 预览合成提示词 |
 
-**评估了 3 种方案**:
-| 方案 | 选择 | 原因 |
-|------|------|------|
-| A: Agent CRUD API + 文件存储 | **✓ 采用** | 复用已有 `.md` 格式，标准 REST API，可 git 追踪 |
-| B: Prompt Override 覆盖层 | ✗ | 合并逻辑复杂，心智模型混乱 |
-| C: JSON 配置存储 | ✗ | 打破现有约定，丢失 markdown 可读性 |
+### 文件变更
 
----
+| 文件 | 变更 |
+|------|------|
+| `src/agents.ts` | + `PROMPT_TEMPLATES`, `getPromptTemplates()`, `composePromptPreview()` |
+| `src/dashboard.ts` | + `GET /api/agents/templates`, `GET /api/agents/preview` |
+| `src/cli.ts` | + `agents prompt`, `agents preview`, `--template` flag, `$EDITOR` support |
+| `src/remote.ts` | + `agents:templates`, `agents:preview` commands |
+| `public/dashboard.html` | + 全屏编辑器、模板选择器、预览按钮、字符计数 |
+| 文档 x3 | README.md, README.zh-CN.md, BEST_PRACTICES.md |
 
-### Key Architecture Decisions
+### 4 波执行计划 (7 个任务)
 
-1. **复用 `.md` 文件格式** — 无需迁移，git 可追踪，人类可读
-2. **内置 Agent 只读，自定义通过 `./agents/{name}.md` 覆盖** — 防止破坏，清晰心智模型
-3. **REST API 在 dashboard.ts** — `GET/POST/PUT/DELETE /api/agents`
-4. **CLI 子命令** — `agents show/create/edit/delete/reset`
-5. **Dashboard 模态编辑器** — 大文本区域编辑提示词，支持所有字段
-6. **Relay 支持** — `agents:list/get/save/delete` 命令，远程管理
+- **Wave 1**: 模板注册表 + 全屏编辑器 UI (并行)
+- **Wave 2**: API 端点 + CLI 命令 + 远程客户端 (并行)
+- **Wave 3**: Dashboard 接线 (模板选择器 + 预览按钮连接 API)
+- **Wave 4**: 文档更新
 
-### Files to Modify (8 files)
-
-| Wave | File | Changes |
-|------|------|---------|
-| 1 | `src/agents.ts` | Add `serializeAgent()`, `saveAgent()`, `deleteAgent()`, `getAgent()` |
-| 1→2 | `src/dashboard.ts` | Add `/api/agents` CRUD endpoints |
-| 1→2 | `src/cli.ts` | Add `agents show/create/edit/delete/reset` subcommands |
-| 2 | `public/dashboard.html` | Add Agent Roles card + editor modal |
-| 2 | `src/remote.ts` | Handle `agents:*` relay commands |
-| 3 | `README.md`, `README.zh-CN.md`, `BEST_PRACTICES.md` | Documentation |
-
-### Task Graph (8 tasks, 4 waves)
-
-```
-Wave 1: task_1 (agents.ts CRUD functions)
-Wave 2: task_2 (API endpoints) + task_3 (CLI commands) + task_5 (relay)  [parallel]
-Wave 3: task_4 (dashboard UI) + task_6 (docs) + task_7 (review)         [parallel]
-Wave 4: task_8 (tests)
-```
+### 产出文件
+- `.planning/DESIGN-custom-role-prompts.md` — 完整设计文档
+- `.planning/shared-memory.json` — 共享内存（供其他 agent 读取）
