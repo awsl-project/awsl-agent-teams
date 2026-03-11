@@ -1,64 +1,27 @@
 # Execution Plan
 
-## task_1: Agent CRUD functions in agents.ts
+## task_1: Create hello1.txt
 - **Assignee:** coder
-- **Files:** src/agents.ts, src/index.ts
+- **Files:** test/hello1.txt
 
 ### Action
-Agent CRUD functions in agents.ts
+Create the file test/hello1.txt with the exact content 'hello from agent 1' (no quotes). Create the test/ directory first if it doesn't exist.
 
-## task_2: Dashboard API endpoints for agents
+### Verify
+cat test/hello1.txt
+
+### Done
+test/hello1.txt exists and contains exactly 'hello from agent 1'
+
+## task_2: Create hello2.txt
 - **Assignee:** coder
-- **Dependencies:** task_1
-- **Files:** src/dashboard.ts
+- **Files:** test/hello2.txt
 
 ### Action
-Dashboard API endpoints for agents
+Create the file test/hello2.txt with the exact content 'hello from agent 2' (no quotes). Create the test/ directory first if it doesn't exist.
 
-## task_3: CLI agents subcommands
-- **Assignee:** coder
-- **Dependencies:** task_1
-- **Files:** src/cli.ts
+### Verify
+cat test/hello2.txt
 
-### Action
-CLI agents subcommands
-
-## task_4: Dashboard UI agent editor
-- **Assignee:** coder
-- **Dependencies:** task_2
-- **Files:** public/dashboard.html
-
-### Action
-Dashboard UI agent editor
-
-## task_5: Remote relay agent commands
-- **Assignee:** coder
-- **Dependencies:** task_1
-- **Files:** src/remote.ts
-
-### Action
-Remote relay agent commands
-
-## task_6: Unit tests for agent CRUD
-- **Assignee:** tester
-- **Dependencies:** task_1
-- **Files:** tests/agents.test.ts
-
-### Action
-Unit tests for agent CRUD
-
-## task_7: Documentation update
-- **Assignee:** coder
-- **Dependencies:** task_2, task_3, task_4, task_5
-- **Files:** README.md, README.zh-CN.md, BEST_PRACTICES.md
-
-### Action
-Documentation update
-
-## task_8: Security review
-- **Assignee:** reviewer
-- **Dependencies:** task_1, task_2, task_3, task_5
-- **Files:** src/agents.ts, src/dashboard.ts, src/cli.ts, src/remote.ts
-
-### Action
-Security review
+### Done
+test/hello2.txt exists and contains exactly 'hello from agent 2'

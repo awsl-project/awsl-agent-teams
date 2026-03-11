@@ -37,9 +37,10 @@
         "quick": false
       },
       "status": "pending",
-      "scheduledAt": "2026-03-11T14:11:16.947Z"
+      "scheduledAt": "2026-03-11T14:11:16.947Z",
+      "runAt": "2026-03-10T20:59:00.000Z"
     }
   ],
   "createdAt": "2026-03-11T12:46:18.688Z",
-  "updatedAt": "2026-03-11T14:11:16.947Z"
+  "updatedAt": "2026-03-11T14:59:53.830Z"
 }
