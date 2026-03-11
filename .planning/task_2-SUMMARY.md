@@ -1,40 +1,28 @@
-# task_2: Add JavaScript logic for date filtering in public/dashboard.
+# task_2: Add agent CRUD API endpoints to the dashboard HTTP server in
 
 Assignee: coder
 Status: done
 
 ## Result
-All tests pass, TypeScript compiles clean.
-
 ## AWSL_RESULT
 
-### Deliverable: Date Filter JavaScript Logic
+### Task 2 Complete: Agent CRUD API endpoints in `src/dashboard.ts`
 
-**File modified:** `public/dashboard.html`
+**4 endpoints added before the 404 handler:**
 
-**Changes made:**
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/agents` | Returns all agents (builtins + custom from `agents/` dir). With `?name=X`, returns single agent or 404 |
+| `POST /api/agents` | Creates new custom agent. Validates name pattern, requires non-empty systemPrompt, rejects duplicates (409) |
+| `PUT /api/agents` | Updates existing agent (builtin or custom). Must exist (404 if not). Merges via `saveAgent()` |
+| `DELETE /api/agents?name=X` | Deletes custom agent file. Cannot delete builtin-only agents (400). Returns `{ deleted: boolean }` |
 
-1. **State variable** (line 1074): Added `var dateFilterMode = 'all';` alongside existing `filterProj`/`selectedClient` globals.
+**Files modified:**
+- `src/dashboard.ts` — Added import of agent CRUD functions + BUILTINS, added PUT to CORS methods, added 4 route handlers (~95 lines)
 
-2. **`setDateFilter(mode)` function** (lines 1127–1135):
-   - Sets `dateFilterMode` to the chosen mode
-   - Removes `active` class from all `.date-filter` buttons, adds it to the matching one
-   - Resets `render._lastKey = null` to force re-render
-   - Calls `render()`
+**Files created:**
+- `src/dashboard-agents.test.ts` — 15 tests covering all endpoints, validation, edge cases
 
-3. **`filterByDate(entries)` function** (lines 1137–1173):
-   - `'all'`: returns entries unchanged
-   - `'today'`: filters to entries where `localDate(e.date||e.startedAt) === today`
-   - `'week'`: computes Monday of current week, filters `monday <= date <= today`
-   - `'month'`: reads `dfMonthInput.value` (YYYY-MM), matches `substring(0,7)`; empty value returns all
-   - `'custom'`: reads `dfStartInput.value` / `dfEndInput.value`, filters range (skips empty bounds)
-
-4. **Input event handlers** (lines 1175–1177):
-   - `dfMonthInput.onchange` → `setDateFilter('month')`
-   - `dfStartInput.onchange` / `dfEndInput.onchange` → `setDateFilter('custom')`
-
-5. **Render wiring** (line 1884): `entries = filterByDate(entries);` inserted before `stats(entries)`
-
-6. **Dirty-check key** (line 1878): Appended `dateFilterMode`, `dfMonthInput.value`, `dfStartInput.value`, `dfEndInput.value` to the cache key so filter changes trigger re-render.
-
-**Test file:** `tests/filterByDate.test.cjs` — 8 tests covering all filter modes (all, today, week, month, custom with start/end/both/neither). All pass.
+**Verification:**
+- `npx tsc --noEmit` — clean, no errors
+- `npx tsx src/dashboard-agents.test.ts` — **15/15 passed**

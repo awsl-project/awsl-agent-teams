@@ -15,7 +15,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { createInterface } from "node:readline";
-import { loadAgents } from "./agents.js";
+import { loadAgents, saveAgent, deleteAgent, getAgent, serializeAgent, BUILTINS } from "./agents.js";
 import { executeTeam } from "./orchestrator.js";
 import { type Engine, detectEngine } from "./runner.js";
 import { validatePlan } from "./validate.js";
@@ -47,6 +47,19 @@ Commands:
   unlock [--force]         Release lock (--force to override others' locks)
   run <goal>               Full pipeline (terminal, needs API key)
   agents                   List available agents
+  agents show <name>       Show full details for an agent (including systemPrompt)
+  agents create <name>     Create a new custom agent
+    --role <role>            Role (default: custom)
+    --description <text>     Agent description
+    --prompt <text>          Inline system prompt
+    --prompt-file <path>     Read system prompt from file
+    --tools <a,b,c>          Comma-separated tools
+    --model <model>          Model override
+    --skills <a,b,c>         Comma-separated skills
+    --thinking <level>       Thinking level
+  agents edit <name>       Update an existing custom agent (same flags as create)
+  agents delete <name>     Delete a custom agent file
+  agents reset <name>      Reset a builtin agent to defaults (removes override file)
   dashboard [--port N]     Open the sleep mode pixel dashboard (default: 3120)
   dashboard --bg           Start dashboard in background (detached)
   dashboard stop           Stop background dashboard
@@ -116,6 +129,33 @@ function parseCwdAndForce(args: string[]): { cwd: string; force: boolean } {
 		}
 	}
 	return { cwd, force };
+}
+
+import type { TeamAgentDef } from "./agents.js";
+
+function parseAgentFlags(flagArgs: string[]): Partial<Omit<TeamAgentDef, "name" | "source">> {
+	const result: Partial<Omit<TeamAgentDef, "name" | "source">> = {};
+	for (let i = 0; i < flagArgs.length; i++) {
+		const arg = flagArgs[i];
+		const next = () => {
+			if (i + 1 >= flagArgs.length) { console.error(`Missing value for ${arg}`); process.exit(1); }
+			return flagArgs[++i];
+		};
+		if (arg === "--role") result.role = next();
+		else if (arg === "--description") result.description = next();
+		else if (arg === "--prompt") result.systemPrompt = next();
+		else if (arg === "--prompt-file") {
+			const filePath = path.resolve(next());
+			if (!fs.existsSync(filePath)) { console.error(`Prompt file not found: ${filePath}`); process.exit(1); }
+			result.systemPrompt = fs.readFileSync(filePath, "utf-8");
+		}
+		else if (arg === "--tools") result.tools = next().split(",").map(s => s.trim()).filter(Boolean);
+		else if (arg === "--model") result.model = next();
+		else if (arg === "--skills") result.skills = next().split(",").map(s => s.trim()).filter(Boolean);
+		else if (arg === "--thinking") result.thinkingLevel = next();
+		else if (arg === "--cwd") { i++; } // skip --cwd, handled by parseCwdAndForce
+	}
+	return result;
 }
 
 /**
@@ -358,8 +398,102 @@ async function main() {
 
 	// ── Agents command ──────────────────────────────────────
 	if (command === "agents") {
-		const cwd = process.cwd();
-		const agentsDirs = [path.join(cwd, "agents")];
+		const { cwd } = parseCwdAndForce(args);
+		const agentsDir = path.join(cwd, "agents");
+		const agentsDirs = [agentsDir];
+		const sub = args[1];
+
+		if (sub === "show") {
+			const name = args[2];
+			if (!name) { console.error("Usage: awsl agents show <name>"); process.exit(1); }
+			const agent = getAgent(agentsDirs, name);
+			if (!agent) { console.error(`Agent "${name}" not found.`); process.exit(1); }
+			console.log(`Name:        ${agent.name}`);
+			console.log(`Role:        ${agent.role}`);
+			console.log(`Description: ${agent.description}`);
+			console.log(`Source:      ${agent.source}`);
+			if (agent.model) console.log(`Model:       ${agent.model}`);
+			if (agent.tools) console.log(`Tools:       ${agent.tools.join(", ")}`);
+			if (agent.skills) console.log(`Skills:      ${agent.skills.join(", ")}`);
+			if (agent.thinkingLevel) console.log(`Thinking:    ${agent.thinkingLevel}`);
+			console.log(`\n--- System Prompt ---\n${agent.systemPrompt}`);
+			process.exit(0);
+		}
+
+		if (sub === "create") {
+			const name = args[2];
+			if (!name) { console.error("Usage: awsl agents create <name> [--role ...] [--prompt ...]"); process.exit(1); }
+			const flags = parseAgentFlags(args.slice(3));
+			try {
+				const saved = saveAgent(agentsDir, { name, ...flags });
+				console.log(`Created agent "${saved.name}" (${saved.role}) in ${agentsDir}`);
+			} catch (err: unknown) {
+				console.error(err instanceof Error ? err.message : String(err));
+				process.exit(1);
+			}
+			process.exit(0);
+		}
+
+		if (sub === "edit") {
+			const name = args[2];
+			if (!name) { console.error("Usage: awsl agents edit <name> [--role ...] [--prompt ...]"); process.exit(1); }
+			const existing = getAgent(agentsDirs, name);
+			if (!existing || (existing.source === "builtin" && !fs.existsSync(path.join(agentsDir, `${name}.md`)))) {
+				if (!existing) { console.error(`Agent "${name}" not found.`); process.exit(1); }
+			}
+			const flags = parseAgentFlags(args.slice(3));
+			try {
+				const saved = saveAgent(agentsDir, { name, ...flags });
+				console.log(`Updated agent "${saved.name}" (${saved.role})`);
+			} catch (err: unknown) {
+				console.error(err instanceof Error ? err.message : String(err));
+				process.exit(1);
+			}
+			process.exit(0);
+		}
+
+		if (sub === "delete") {
+			const name = args[2];
+			if (!name) { console.error("Usage: awsl agents delete <name>"); process.exit(1); }
+			const filePath = path.join(agentsDir, `${name}.md`);
+			if (!fs.existsSync(filePath)) {
+				const isBuiltin = BUILTINS.some(b => b.name === name);
+				if (isBuiltin) {
+					console.error(`Agent "${name}" is a builtin with no custom override file. Use "agents reset" for builtins.`);
+				} else {
+					console.error(`Agent "${name}" has no custom file to delete.`);
+				}
+				process.exit(1);
+			}
+			deleteAgent(agentsDir, name);
+			console.log(`Deleted agent "${name}" from ${agentsDir}`);
+			process.exit(0);
+		}
+
+		if (sub === "reset") {
+			const name = args[2];
+			if (!name) { console.error("Usage: awsl agents reset <name>"); process.exit(1); }
+			const isBuiltin = BUILTINS.some(b => b.name === name);
+			if (!isBuiltin) {
+				console.error(`"${name}" is not a builtin agent. Reset only works for builtins: ${BUILTINS.map(b => b.name).join(", ")}`);
+				process.exit(1);
+			}
+			const filePath = path.join(agentsDir, `${name}.md`);
+			if (!fs.existsSync(filePath)) {
+				console.log(`Agent "${name}" has no override file — already using builtin defaults.`);
+				process.exit(0);
+			}
+			deleteAgent(agentsDir, name);
+			console.log(`Reset agent "${name}" to builtin defaults (removed override file).`);
+			process.exit(0);
+		}
+
+		// Default: list all agents
+		if (sub && !sub.startsWith("--")) {
+			console.error(`Unknown subcommand: ${sub}. Use: show, create, edit, delete, reset`);
+			process.exit(1);
+		}
+
 		const agents = loadAgents(agentsDirs);
 		console.log("Available agents:\n");
 		for (const a of agents) {
