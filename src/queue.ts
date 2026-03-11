@@ -352,8 +352,9 @@ export class TaskQueue {
 					resumeFromCheckpoint: true,
 				};
 
-				// Execute team
-				const teamResult = await executeTeam(
+				// Execute team (with task-level timeout: 2 hours)
+				const TASK_TIMEOUT_MS = 2 * 60 * 60 * 1000;
+				const teamResultPromise = executeTeam(
 					nextTask.goal,
 					agents,
 					this.cwd,
@@ -361,6 +362,10 @@ export class TaskQueue {
 					concurrency,
 					execOptions,
 				);
+				const timeoutPromise = new Promise<never>((_, reject) =>
+					setTimeout(() => reject(new Error(`Task ${nextTask.id} timed out after ${TASK_TIMEOUT_MS / 60000} minutes`)), TASK_TIMEOUT_MS)
+				);
+				const teamResult = await Promise.race([teamResultPromise, timeoutPromise]);
 
 				// Reload data in case it changed during execution
 				const freshData = this.load();

@@ -30,7 +30,7 @@ export type Engine = "claude-code" | "builtin";
 
 export interface RunResult {
 	agent: string;
-	status: "done" | "failed" | "blocked" | "no_report" | "rate_limited";
+	status: "done" | "failed" | "blocked" | "no_report" | "rate_limited" | "timeout";
 	result: string;
 	turns: number;
 	error?: string;
@@ -151,6 +151,9 @@ ${memSummary === "(empty)" ? "No shared data yet." : memSummary}
 
 	log.info(agentDef.name, `Starting... (engine: claude-code)`);
 
+	// Agent-level timeout: 30 minutes per agent (prevents hung bash commands from blocking queue)
+	const AGENT_TIMEOUT_MS = 30 * 60 * 1000;
+
 	return new Promise<RunResult>((resolve) => {
 		const cleanEnv = { ...process.env };
 		delete cleanEnv.CLAUDECODE;
@@ -161,6 +164,13 @@ ${memSummary === "(empty)" ? "No shared data yet." : memSummary}
 			env: cleanEnv,
 			// No shell: true — avoid cmd.exe mangling multiline arguments
 		});
+
+		// Kill agent if it exceeds timeout
+		const agentTimer = setTimeout(() => {
+			log.warn(agentDef.name, `Timeout after ${AGENT_TIMEOUT_MS / 60000}min — killing agent`);
+			child.kill("SIGTERM");
+			setTimeout(() => { try { child.kill("SIGKILL"); } catch { /* already dead */ } }, 5000);
+		}, AGENT_TIMEOUT_MS);
 
 		// Send prompt via stdin to avoid cmd.exe mangling multiline args
 		child.stdin.write(task);
@@ -192,6 +202,26 @@ ${memSummary === "(empty)" ? "No shared data yet." : memSummary}
 		});
 
 		child.on("close", (code) => {
+			clearTimeout(agentTimer);
+
+			// Treat timeout kill as an error
+			if (code === null || (code !== 0 && !stdout.trim())) {
+				const isTimeout = code === null;
+				if (isTimeout) {
+					resolve({
+						agent: agentDef.name,
+						status: "timeout",
+						result: "",
+						turns: 0,
+						error: `Agent timed out after ${AGENT_TIMEOUT_MS / 60000} minutes`,
+						inputTokens: 0,
+						outputTokens: 0,
+						costUsd: 0,
+					});
+					return;
+				}
+			}
+
 			// Check for rate limiting before parsing response
 			if (code !== 0 && isRateLimitError(stderr + stdout)) {
 				log.warn(agentDef.name, `Rate limited (exit: ${code})`);
