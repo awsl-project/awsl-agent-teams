@@ -71,6 +71,8 @@ CC Hybrid Mode (no API key needed):
 
 Queue Commands (sleep mode):
   queue add <goal> [opts]  Add a task to the queue (--at <time> --auto-push)
+    --discuss              Enable discussion mode (multi-agent reasoning)
+    --rounds <N>           Number of debate rounds (default: 1, max: 3)
   queue plan <text> [opts] Parse natural language into multiple queue tasks
   queue list               List queue tasks and status
   queue show <id>          Show detailed info for a queue task
@@ -78,6 +80,7 @@ Queue Commands (sleep mode):
   queue start [opts]       Start executing the queue (foreground)
   queue start --once       One-shot: process runnable tasks and exit (used by scheduler)
   queue clear              Clear all queue tasks
+  discuss <question>       Convenience alias for queue add --discuss
 
 Options:
   --cwd <path>             Working directory (default: .)
@@ -857,6 +860,51 @@ async function main() {
 		process.exit(1);
 	}
 
+	// ── Discuss command (convenience alias) ────────────────
+	if (command === "discuss") {
+		const { cwd } = parseCwdAndForce(args);
+		const goalParts: string[] = [];
+
+		let rounds = 1;
+		let runAt: string | undefined;
+
+		for (let i = 1; i < args.length; i++) {
+			const a = args[i];
+			if (a === "--rounds" && i + 1 < args.length) { rounds = parseInt(args[++i], 10) || 1; }
+			else if (a === "--at" && i + 1 < args.length) { runAt = args[++i]; }
+			else if (a === "--cwd" && i + 1 < args.length) { i++; }
+			else if (a === "--force") { /* skip */ }
+			else if (!a.startsWith("--")) { goalParts.push(a); }
+		}
+
+		const question = goalParts.join(" ").trim();
+
+		// Parse --at time string into ISO
+		let resolvedRunAt: string | undefined;
+		if (runAt) {
+			const parsed = parseTimeString(runAt);
+			if (!parsed) {
+				console.error(`Invalid time format: "${runAt}". Use HH:MM, YYYY-MM-DD HH:MM, or +Nm/+Nh.`);
+				process.exit(1);
+			}
+			resolvedRunAt = parsed;
+		}
+
+		if (!question || question.length < 10) {
+			console.error("Usage: awsl discuss <question> [--rounds N] [--at <time>]");
+			console.error("Question must be at least 10 characters.");
+			process.exit(1);
+		}
+
+		const queue = new TaskQueue(cwd);
+		const task = queue.add(question, { discussRounds: rounds }, { mode: "discuss", runAt: resolvedRunAt });
+		console.log(`Added discussion: ${task.id} — "${question}"`);
+		if (rounds > 1) console.log(`  Debate rounds: ${rounds}`);
+		if (resolvedRunAt) console.log(`  Scheduled: ${resolvedRunAt}`);
+		console.log(`  Mode: discuss`);
+		process.exit(0);
+	}
+
 	// ── Queue command (sleep mode) ─────────────────────────
 	if (command === "queue") {
 		const subCmd = args[1];
@@ -868,6 +916,8 @@ async function main() {
 			let engine: Engine | undefined;
 			let quick = false;
 			let autoPush = false;
+			let discuss = false;
+			let discussRounds = 1;
 			let concurrency: number | undefined;
 			let model: string | undefined;
 			let dependsOn: string[] | undefined;
@@ -880,6 +930,8 @@ async function main() {
 				if (a === "--engine" && i + 1 < args.length) { engine = args[++i] as Engine; }
 				else if (a === "--quick") { quick = true; }
 				else if (a === "--auto-push") { autoPush = true; }
+				else if (a === "--discuss") { discuss = true; }
+				else if (a === "--rounds" && i + 1 < args.length) { discussRounds = parseInt(args[++i], 10) || 1; }
 				else if (a === "--concurrency" && i + 1 < args.length) { concurrency = parseInt(args[++i], 10); }
 				else if (a === "--model" && i + 1 < args.length) { model = args[++i]; }
 				else if (a === "--depends-on" && i + 1 < args.length) { dependsOn = args[++i].split(",").map(s => s.trim()); }
@@ -916,11 +968,13 @@ async function main() {
 				quick,
 				agentsDirs,
 				autoPush,
-			}, { engine, dependsOn, runAt: resolvedRunAt });
+				discussRounds: discuss ? discussRounds : undefined,
+			}, { engine, dependsOn, runAt: resolvedRunAt, mode: discuss ? "discuss" : undefined });
 
 			console.log(`Added: ${task.id} — "${goal}"`);
 			if (dependsOn) console.log(`  Depends on: ${dependsOn.join(", ")}`);
 			if (quick) console.log(`  Mode: quick`);
+			if (discuss) console.log(`  Mode: discuss (${discussRounds} round${discussRounds > 1 ? "s" : ""})`);
 			if (autoPush) console.log(`  Auto-push: enabled`);
 			if (engine) console.log(`  Engine: ${engine}`);
 			if (resolvedRunAt) console.log(`  Run at: ${new Date(resolvedRunAt).toLocaleString()}`);
