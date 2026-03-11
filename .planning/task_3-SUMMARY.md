@@ -1,41 +1,23 @@
-# task_3: Modify `src/queue.ts` to support discussion mode:
+# task_3: Add tests to `src/queue.test.ts` for the new `planPreview` a
 
-1. **Add 
-
-Assignee: coder
+Assignee: tester
 Status: done
 
 ## Result
-All tests pass. Here's the summary:
+Clean compile.
 
 ## AWSL_RESULT
 
-### Task: Modify `src/queue.ts` to support discussion mode
+**Added 4 planCommit edge-case tests to `src/queue.test.ts`:**
 
-**Status:** Complete
+1. **`planCommit adds tasks with no dependencies`** — Independent tasks without `dependsOn`, verifies goal text, `quick` flag, and persistence via `list()`
+2. **`planCommit resolves position-based dependencies`** — Combined test: empty deps → `undefined`, position ref `"1"` → resolved to actual ID, `"all"` → kept as `"all"`
+3. **`planCommit applies defaults`** — Verifies `model` and `concurrency` defaults are applied to tasks
+4. **`planCommit with empty array returns empty`** — Empty `PlannedTask[]` returns empty result without errors
+
+**Verification:**
+- `npx tsx --test src/queue.test.ts` — 14/14 pass (5 original + 5 coder + 4 new)
+- `npx tsc --noEmit` — clean, no errors
 
 **Files modified:**
-- `src/queue.ts` — Added discussion mode support to the task queue
-
-**Files created:**
-- `src/queue.test.ts` — 5 tests for the new mode/discussRounds fields
-
-**Changes made:**
-
-1. **Import:** Added `import { discussTeam } from "./discuss.js"`
-2. **QueueTask interface:** Added `mode?: "build" | "discuss"` field and `discussRounds?: number` to options
-3. **`add()` method:** Extended `extra` parameter to accept `mode`, sets it on the task when provided
-4. **`start()` method:** Branches on `nextTask.mode === "discuss"`:
-   - **Discussion path:** Calls `discussTeam()` with timeout, records history with `mode: "discuss"` and `answer` fields, skips autoCommit (no code changes)
-   - **Build path:** Existing `executeTeam()` flow wrapped in `else` block, unchanged behavior
-   - Shared timeout promise extracted before the if/else
-5. **Error handling:** Existing catch block covers both modes
-
-**Test results:**
-```
-# tests 5 (queue) + 5 (discuss) = 10
-# pass 10
-# fail 0
-```
-
-**Verification:** `npx tsc --noEmit` passes with zero errors.
+- `src/queue.test.ts` — Added 4 test cases (lines 174–232)

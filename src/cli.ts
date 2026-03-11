@@ -14,6 +14,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { createInterface } from "node:readline";
 import { loadAgents } from "./agents.js";
 import { executeTeam } from "./orchestrator.js";
 import { type Engine, detectEngine } from "./runner.js";
@@ -74,6 +75,8 @@ Queue Commands (sleep mode):
     --discuss              Enable discussion mode (multi-agent reasoning)
     --rounds <N>           Number of debate rounds (default: 1, max: 3)
   queue plan <text> [opts] Parse natural language into multiple queue tasks
+  queue split <text> [opts] Preview task splitting before adding to queue
+    --yes                  Skip confirmation, add immediately
   queue list               List queue tasks and status
   queue show <id>          Show detailed info for a queue task
   queue remove <id>        Remove a task from queue
@@ -1139,8 +1142,79 @@ async function main() {
 			queue.clear();
 			console.log("Queue cleared.");
 		}
+		else if (subCmd === "split") {
+			// Parse options (same as plan + --yes)
+			let engine: Engine | undefined;
+			let quick = false;
+			let concurrency: number | undefined;
+			let model: string | undefined;
+			let yes = false;
+			const descParts: string[] = [];
+
+			for (let i = 2; i < args.length; i++) {
+				const a = args[i];
+				if (a === "--engine" && i + 1 < args.length) { engine = args[++i] as Engine; }
+				else if (a === "--quick") { quick = true; }
+				else if (a === "--concurrency" && i + 1 < args.length) { concurrency = parseInt(args[++i], 10); }
+				else if (a === "--model" && i + 1 < args.length) { model = args[++i]; }
+				else if (a === "--yes" || a === "-y") { yes = true; }
+				else if (a === "--cwd" && i + 1 < args.length) { i++; }
+				else if (a === "--force") { /* skip */ }
+				else if (!a.startsWith("--")) { descParts.push(a); }
+			}
+
+			const description = descParts.join(" ").trim();
+			if (!description) {
+				console.error('Usage: awsl queue split "先构建认证，然后加支付，最后写测试" [--yes] [--engine claude-code]');
+				process.exit(1);
+			}
+
+			console.log("Parsing tasks from natural language...\n");
+			const planned = await queue.planPreview(description);
+
+			// Print preview table
+			console.log(`拆分预览: ${planned.length} 个任务\n`);
+			console.log("  #   Deps       Goal");
+			console.log("  " + "\u2500".repeat(50));
+			for (let i = 0; i < planned.length; i++) {
+				const p = planned[i];
+				const num = String(i + 1).padEnd(3);
+				const deps = p.dependsOn?.length ? p.dependsOn.join(",") : "(none)";
+				const goal = p.goal.length > 40 ? p.goal.slice(0, 37) + "..." : p.goal;
+				console.log(`  ${num} ${deps.padEnd(10)} ${goal}`);
+			}
+			console.log();
+
+			// Confirmation prompt (unless --yes)
+			if (!yes) {
+				const answer = await new Promise<string>((resolve) => {
+					const rl = createInterface({ input: process.stdin, output: process.stdout });
+					rl.question("确认添加到队列? (y/N) ", (ans) => {
+						rl.close();
+						resolve(ans.trim());
+					});
+				});
+				if (answer !== "y" && answer !== "Y") {
+					console.log("已取消");
+					process.exit(0);
+				}
+			}
+
+			// Commit to queue
+			const added = queue.planCommit(planned, { engine, quick, concurrency, model });
+
+			console.log(`\nPlanned ${added.length} task(s):\n`);
+			console.log("  ID       Deps       Goal");
+			console.log("  " + "-".repeat(60));
+			for (const t of added) {
+				const deps = t.dependsOn?.length ? t.dependsOn.join(",") : "(none)";
+				const goal = t.goal.length > 40 ? t.goal.slice(0, 37) + "..." : t.goal;
+				console.log(`  ${t.id.padEnd(8)} ${deps.padEnd(10)} ${goal}`);
+			}
+			console.log(`\nRun 'awsl queue list' to review, then 'awsl queue start' to execute.`);
+		}
 		else {
-			console.error("Unknown queue command. Use: add, plan, list, show, remove, start, clear");
+			console.error("Unknown queue command. Use: add, plan, split, list, show, remove, start, clear");
 			process.exit(1);
 		}
 		process.exit(0);
