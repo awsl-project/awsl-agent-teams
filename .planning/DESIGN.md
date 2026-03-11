@@ -1,60 +1,37 @@
 ## AWSL_RESULT
 
-### 设计完成：Dashboard Projects 管理页面
+### Design: Night Session Summary Module (`awsl summary`)
 
-**核心发现：后端已 100% 完成**，`src/projects.ts` (ProjectManager) + 10+ API 端点 + 13 个测试全部就绪。本次开发**纯前端**，只修改 `public/dashboard.html`。
+**Approach:** History + Git Hybrid (Approach B)
 
----
+**Why:** Uses existing data (HISTORY.json + git log) without new state files. Captures both automated queue tasks and manual commits. Simple, extensible.
 
-### 方案选择
+### Key Decisions
 
-| 方案 | 评估 |
-|------|------|
-| **A: 新增 Projects 卡片区（类似 Machines）** | **✅ 选中** — 与现有 UI 模式一致，改动最小 |
-| B: Tab 导航系统 | ❌ 过度重构 |
-| C: 扩展现有侧边栏 | ❌ 空间不足，队列管理体验差 |
+| Decision | Rationale |
+|----------|-----------|
+| Cross-midnight auto-detection | If now < 06:00 → last night; if now >= 22:00 → tonight; else → last night |
+| Multi-project via `--all-projects` | Reuses `ProjectManager.list()` to aggregate across registered projects |
+| `--json` flag for scripting | Enables dashboard API integration later |
+| Git log for completeness | Captures manual work not tracked by queue |
+| No new persistence files | Pure read-only aggregation over existing data |
 
-### 关键决策
+### Interfaces
 
-| 决策 | 理由 |
-|------|------|
-| 复用 Machines 卡片交互模式 | 用户已熟悉：选卡片 → 操作栏 → Queue 面板切换 |
-| 无需后端改动 | 所有 API 已存在且测试通过 |
-| 上下文优先级：Project > Machine > Local | 避免歧义，同时只有一个上下文活跃 |
-| Projects 区块始终可见 | 主要功能，空状态显示 Scan/Add 按钮 |
-| 30s 轮询刷新项目状态 | 队列运行时状态会变化 |
+- `SessionSummary` — tasks (total/done/failed/entries), git (commits), metrics (duration/cost/tokens), agent breakdown, projects
+- `SummaryOptions` — from, to, date, allProjects, cwd
+- `TimeRange`, `CommitInfo` — supporting types
 
-### 交互模型
+### Execution Plan (4 tasks, 3 waves)
 
-```
-选中项目 → Queue 面板切换到该项目队列
-         → Timeline 加载该项目历史
-         → 所有操作路由到 /api/projects/* 端点
-         → 状态栏显示 "@ project-name"
-```
+| Wave | Task | Assignee | Description |
+|------|------|----------|-------------|
+| 1 | task_1 | coder | Core `src/summary.ts` module |
+| 2 | task_2 | coder | CLI integration + index exports |
+| 2 | task_3 | coder | Documentation (README, README.zh-CN, BEST_PRACTICES) |
+| 3 | task_4 | reviewer | Security + correctness review |
 
-### 项目卡片布局
+### Files Produced
 
-```
-┌─────────────────────────────┐
-│ ● project-name              │
-│ C:/Users/.../project-path   │
-│ Queue: 3 pending, 1 running │
-│ Last: 2h ago ✓              │
-│ ████████░░ 80%              │
-└─────────────────────────────┘
-```
-
-### 实现波次（3 waves，全部在 dashboard.html）
-
-- **Wave 1**: CSS 样式 + HTML 结构 + JS 状态变量
-- **Wave 2**: loadProjects() + renderProjectsPage() + selectProject() + 操作函数
-- **Wave 3**: Queue/Timeline 路由切换 + 接入刷新周期
-
-### 修改文件
-
-- `public/dashboard.html` — ~450 行新增（200 CSS + 250 JS）
-
-### 设计文档
-
-已存储到 `.planning/memory.json` 的 `design` 键中。
+- `.planning/designs/night-summary.md` — Full design document
+- `.planning/PLAN.md` — Execution plan ready for `/awsl-go`

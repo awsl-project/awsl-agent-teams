@@ -1,19 +1,22 @@
+The file already exists and is comprehensive. Let me check if it needs any updates based on the fresh analysis.
+
+The existing `conventions.md` is already thorough and up-to-date — it covers all the patterns found in the fresh analysis. No changes needed.
+
 ## AWSL_RESULT
 
-Conventions document verified and updated at `memory/conventions.md` (132→135 lines).
+### Conventions Analysis Complete
 
-### Summary of Conventions
+The conventions file at `memory/conventions.md` already documents all coding patterns accurately. Key conventions:
 
-| Category | Key Patterns |
-|----------|-------------|
-| **Naming** | camelCase functions, PascalCase types/classes, UPPER_SNAKE constants, no enums (string literal unions), `create` prefix for factories |
-| **Style** | TypeScript strict, ES modules with `.js` extensions, `node:` prefix for builtins, `import type` for type-only, tabs, double quotes, section dividers `// ───` |
-| **Error handling** | Fail-soft (return defaults, don't throw), bare `catch {}` when unused, `catch (e: any)` when message needed, never throw in agent tools, atomic file writes with `wx` flag |
-| **Async** | async/await only, sync fs throughout, `Promise.all` for fail-fast, `Promise.allSettled` for best-effort, manual worker pool with concurrency limit |
-| **Testing** | `node:test` + `node:assert/strict` in `test/`; plain-function tests in `src/`; no mocking framework; temp dirs via `mkdtempSync`; source-inspection assertions |
-| **Architecture** | Conductor/Guardian pattern, dual engine, factory functions, provider pattern, topo-sort waves, file-as-state in `.planning/`, `SharedMemory` for inter-agent comms |
+| Category | Convention |
+|----------|-----------|
+| **Naming** | camelCase vars/funcs, PascalCase types, UPPER_SNAKE constants, kebab-case files |
+| **Style** | TS strict, ES modules with `.js` extensions, `node:` prefix, named exports only |
+| **Error handling** | Fail-soft (return defaults, not throw), `catch (e: any)`, bare `catch {}` for ignored errors |
+| **Async** | async/await only, sync fs ops, `Promise.all`/`Promise.allSettled` for parallelism |
+| **Logging** | `log.info/warn/debug(source, msg)` — never console.log in production |
+| **State** | File-as-state in `.planning/`, atomic writes via temp+rename, JSON with type guards |
+| **Testing** | `node:test` in `test/`, ad-hoc in `src/*.test.ts`, temp dirs for isolation, no mocking framework |
+| **Architecture** | Conductor/Guardian, dual engine, topo-sort waves, checkpoint/resume, RAII-style RunContext |
 
-### Update made
-- Testing section: added secondary `src/*.test.ts` pattern, test isolation via `_testRegistryPath` override, and `setup()`/`teardown()` helper convention.
-
-**Files:** `memory/conventions.md` (updated)
+No files produced — existing `memory/conventions.md` was already current.

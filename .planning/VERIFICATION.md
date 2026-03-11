@@ -8,9 +8,10 @@
 
 ### [PASS] git-diff: `git diff --stat`
 ```
-.planning/.lock              |   6 +--
- .planning/.verify-cache.json |   2 +-
+.planning/.dashboard.pid     |   2 +-
+ .planning/.verify-cache.json |   4 +-
  .planning/CHECKPOINT.json    |  20 +++++++--
- .planning/task_2-SUMMARY.md  | 102 +++++++++++++++++++++++++++----------------
- 4 files changed, 85 insertions(+), 45 deletions(-)
+ .planning/task_4-SUMMARY.md  | 101 +++++++++++++++++++++++++++++++++++--------
+ CLAUDE.md                    |   1 +
+ 5 files changed, 103 insertions(+), 25 deletions(-)
 ```
