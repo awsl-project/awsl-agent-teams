@@ -18,7 +18,8 @@ import * as path from "node:path";
 import { TaskQueue } from "./queue.js";
 import { type Engine, detectEngine } from "./runner.js";
 import { loadHistory } from "./history.js";
-import { loadAgents, saveAgent, deleteAgent } from "./agents.js";
+import { loadAgents, saveAgent, deleteAgent, getPromptTemplates, composePromptPreview } from "./agents.js";
+import { SkillRegistry } from "./skills.js";
 import { log } from "./log.js";
 
 export interface RemoteClientOptions {
@@ -246,6 +247,22 @@ export class RemoteClient {
 					const agentsDir = path.join(this.options.cwd, "agents");
 					const deleted = deleteAgent(agentsDir, (payload as any).name);
 					result = { deleted };
+					break;
+				}
+
+				case "agents:templates": {
+					result = getPromptTemplates();
+					break;
+				}
+
+				case "agents:preview": {
+					const agentsDir = path.join(this.options.cwd, "agents");
+					const agents = loadAgents([agentsDir]);
+					const agent = agents.find(a => a.name === (payload as any).name);
+					if (!agent) throw new Error(`Agent not found: ${(payload as any).name}`);
+					const registry = new SkillRegistry();
+					const skillInstructions = registry.buildInstructions(agent.role, agent.skills);
+					result = composePromptPreview(agent, agents, skillInstructions);
 					break;
 				}
 

@@ -1,4 +1,4 @@
-# task_2: Add agent CRUD API endpoints to the dashboard HTTP server in
+# task_2: Dashboard API endpoints for agents
 
 Assignee: coder
 Status: done
@@ -6,23 +6,20 @@ Status: done
 ## Result
 ## AWSL_RESULT
 
-### Task 2 Complete: Agent CRUD API endpoints in `src/dashboard.ts`
+### Task 2: Dashboard API Endpoints for Agents — Complete
 
-**4 endpoints added before the 404 handler:**
+Added 2 new API endpoints to `src/dashboard.ts`:
 
-| Endpoint | Description |
-|----------|-------------|
-| `GET /api/agents` | Returns all agents (builtins + custom from `agents/` dir). With `?name=X`, returns single agent or 404 |
-| `POST /api/agents` | Creates new custom agent. Validates name pattern, requires non-empty systemPrompt, rejects duplicates (409) |
-| `PUT /api/agents` | Updates existing agent (builtin or custom). Must exist (404 if not). Merges via `saveAgent()` |
-| `DELETE /api/agents?name=X` | Deletes custom agent file. Cannot delete builtin-only agents (400). Returns `{ deleted: boolean }` |
+1. **`GET /api/agents/templates`** — Returns all 7 built-in prompt templates as `Array<{ name, description, prompt }>`. Calls `getPromptTemplates()` from agents module.
 
-**Files modified:**
-- `src/dashboard.ts` — Added import of agent CRUD functions + BUILTINS, added PUT to CORS methods, added 4 route handlers (~95 lines)
+2. **`POST /api/agents/preview`** — Accepts `{ name }` body, composes full prompt preview with skills and team roster. Returns `{ composed, sections: { base, skills, team } }`. Uses `SkillRegistry.buildInstructions()` + `composePromptPreview()`.
 
-**Files created:**
-- `src/dashboard-agents.test.ts` — 15 tests covering all endpoints, validation, edge cases
+Both endpoints have proper validation (400 for missing name, 404 for nonexistent agent).
 
-**Verification:**
-- `npx tsc --noEmit` — clean, no errors
-- `npx tsx src/dashboard-agents.test.ts` — **15/15 passed**
+### Files Modified
+- **`src/dashboard.ts`** — Added 2 endpoints (`/api/agents/templates`, `/api/agents/preview`), imported `getPromptTemplates`, `composePromptPreview`, `SkillRegistry`
+- **`src/dashboard-agents.test.ts`** — Added 4 new tests (templates shape, preview composition, preview not found, preview missing name)
+
+### Test Results
+- **19/19 tests pass** (15 existing + 4 new)
+- TypeScript type-check: clean
