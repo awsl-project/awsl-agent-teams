@@ -1107,6 +1107,227 @@ a { color: var(--blue); text-decoration: none; }
   .agents-mgmt-grid { gap: 6px; }
   .agent-mgmt-card { min-width: 120px; }
 }
+
+/* ─── Fullscreen Editor Overlay ── */
+
+.fs-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: var(--bg);
+  z-index: 500;
+  display: flex;
+  flex-direction: column;
+}
+
+.fs-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--card);
+}
+
+.fs-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  flex: 1;
+}
+
+.fs-char-count {
+  font-size: 11px;
+  color: var(--ink3);
+  font-variant-numeric: tabular-nums;
+}
+
+.fs-header button {
+  font-family: var(--font);
+  font-size: 12px;
+  padding: 5px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--ink2);
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.15s;
+}
+
+.fs-header button:hover { border-color: var(--blue); color: var(--blue); }
+.fs-header button.primary { background: var(--blue); color: #fff; border-color: var(--blue); }
+.fs-header button.primary:hover { background: #2563eb; }
+
+.fs-body {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+.fs-editor-pane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 20px;
+  overflow: hidden;
+}
+
+.fs-editor-pane textarea {
+  flex: 1;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--ink);
+  outline: none;
+  resize: none;
+  transition: border-color 0.15s;
+}
+
+.fs-editor-pane textarea:focus { border-color: var(--blue); }
+
+.fs-preview-pane {
+  width: 45%;
+  border-left: 1px solid var(--border);
+  background: var(--card);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.fs-preview-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg2);
+}
+
+.fs-preview-header span {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink2);
+}
+
+.fs-preview-tabs {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.fs-preview-tabs button {
+  font-family: var(--font);
+  font-size: 11px;
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink3);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.fs-preview-tabs button.active {
+  background: var(--blue);
+  color: #fff;
+  border-color: var(--blue);
+}
+
+.fs-preview-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 16px;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ink2);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ─── Template Selector ────────── */
+
+.template-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.template-bar label {
+  font-size: 11px;
+  color: var(--ink3);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+.template-bar select {
+  font-family: var(--font);
+  font-size: 12px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--ink);
+  outline: none;
+  flex: 1;
+}
+
+.template-bar button {
+  font-family: var(--font);
+  font-size: 11px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card);
+  color: var(--ink2);
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.template-bar button:hover { border-color: var(--blue); color: var(--blue); }
+
+/* ─── Char Count ───────────────── */
+
+.prompt-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 4px;
+}
+
+.char-count {
+  font-size: 11px;
+  color: var(--ink4);
+  font-variant-numeric: tabular-nums;
+}
+
+.prompt-expand-btn {
+  font-family: var(--font);
+  font-size: 11px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ink3);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.prompt-expand-btn:hover { border-color: var(--blue); color: var(--blue); }
+
+@media (max-width: 700px) {
+  .fs-body { flex-direction: column; }
+  .fs-preview-pane { width: 100%; border-left: none; border-top: 1px solid var(--border); max-height: 40%; }
+}
 </style>
 </head>
 <body>
@@ -1331,14 +1552,50 @@ a { color: var(--blue); text-decoration: none; }
       </div>
       <div class="modal-field">
         <label>System Prompt</label>
-        <textarea id="aePromptTextarea" placeholder="Enter system prompt..."></textarea>
+        <div class="template-bar" id="aeTemplateBar">
+          <label>Template</label>
+          <select id="aeTemplateSelect"><option value="">— select template —</option></select>
+          <button onclick="applyTemplate()">Apply</button>
+        </div>
+        <textarea id="aePromptTextarea" placeholder="Enter system prompt..." oninput="updateCharCount()"></textarea>
+        <div class="prompt-footer">
+          <span class="char-count" id="aeCharCount">0 chars</span>
+          <button class="prompt-expand-btn" onclick="openFullscreenEditor()">Expand</button>
+        </div>
       </div>
       <div class="modal-actions">
         <button id="aeResetBtn" class="danger" style="display:none" onclick="resetAgentToDefault()">Reset to Default</button>
         <button id="aeDeleteBtn" class="danger" style="display:none" onclick="deleteAgentFromEditor()">Delete</button>
+        <button id="aePreviewBtn" style="display:none" onclick="showAgentPreview()">Preview</button>
         <span style="flex:1"></span>
         <button onclick="closeAgentEditor()">Cancel</button>
         <button class="primary" onclick="saveAgentFromEditor()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="fsEditorOverlay" class="fs-overlay" style="display:none">
+    <div class="fs-header">
+      <span class="fs-title" id="fsTitle">Edit Prompt</span>
+      <span class="fs-char-count" id="fsCharCount">0 chars</span>
+      <button onclick="closeFullscreenEditor()">Cancel</button>
+      <button class="primary" onclick="saveFullscreenEditor()">Done</button>
+    </div>
+    <div class="fs-body">
+      <div class="fs-editor-pane">
+        <textarea id="fsTextarea" oninput="updateFsCharCount()"></textarea>
+      </div>
+      <div class="fs-preview-pane" id="fsPreviewPane" style="display:none">
+        <div class="fs-preview-header">
+          <span>Preview</span>
+          <div class="fs-preview-tabs">
+            <button class="active" onclick="switchPreviewTab('composed',this)">Composed</button>
+            <button onclick="switchPreviewTab('base',this)">Base</button>
+            <button onclick="switchPreviewTab('skills',this)">Skills</button>
+            <button onclick="switchPreviewTab('team',this)">Team</button>
+          </div>
+        </div>
+        <div class="fs-preview-content" id="fsPreviewContent"></div>
       </div>
     </div>
   </div>
@@ -2683,6 +2940,8 @@ var agentsList = [];
 var agentEditorMode = null; // 'new' | 'edit'
 var agentEditorName = null; // name being edited
 var agentRolesCollapsed = false;
+var promptTemplates = []; // cached templates from API
+var fsPreviewData = null; // { composed, sections: { base, skills, team } }
 
 var BUILTIN_NAMES = ['planner', 'architect', 'coder', 'reviewer', 'tester'];
 
@@ -2743,7 +3002,7 @@ function toggleAgentRoles() {
   document.getElementById('agentRolesContent').style.display = agentRolesCollapsed ? 'none' : 'block';
 }
 
-function openAgentEditor(name) {
+async function openAgentEditor(name) {
   var modal = document.getElementById('agentEditorModal');
   var titleEl = document.getElementById('agentEditorTitle');
   var nameInput = document.getElementById('aeNameInput');
@@ -2756,6 +3015,11 @@ function openAgentEditor(name) {
   var promptTextarea = document.getElementById('aePromptTextarea');
   var resetBtn = document.getElementById('aeResetBtn');
   var deleteBtn = document.getElementById('aeDeleteBtn');
+  var previewBtn = document.getElementById('aePreviewBtn');
+
+  // Load templates for the template selector
+  await loadTemplates();
+  populateTemplateSelect();
 
   if (name) {
     // Edit mode
@@ -2780,6 +3044,8 @@ function openAgentEditor(name) {
     resetBtn.style.display = (srcType === 'override') ? 'inline-block' : 'none';
     // Delete: only for custom agents (not pure builtins)
     deleteBtn.style.display = (srcType === 'custom' || srcType === 'override') ? 'inline-block' : 'none';
+    // Preview: available for existing agents
+    previewBtn.style.display = 'inline-block';
   } else {
     // New mode
     agentEditorMode = 'new';
@@ -2796,8 +3062,10 @@ function openAgentEditor(name) {
     promptTextarea.value = '';
     resetBtn.style.display = 'none';
     deleteBtn.style.display = 'none';
+    previewBtn.style.display = 'none';
   }
 
+  updateCharCount();
   modal.style.display = 'flex';
 }
 
@@ -2909,6 +3177,153 @@ async function resetAgentToDefault() {
   await loadAgentRoles();
   renderAgentRoles();
 }
+
+// ─── Template Selector ───────────────────────────
+async function loadTemplates() {
+  if (promptTemplates.length > 0) return;
+  try {
+    var res = await fetch('/api/agents/templates');
+    if (res.ok) promptTemplates = await res.json();
+    else promptTemplates = [];
+  } catch(e) { promptTemplates = []; }
+}
+
+function populateTemplateSelect() {
+  var sel = document.getElementById('aeTemplateSelect');
+  sel.innerHTML = '<option value="">— select template —</option>';
+  for (var i = 0; i < promptTemplates.length; i++) {
+    var t = promptTemplates[i];
+    var opt = document.createElement('option');
+    opt.value = t.name;
+    opt.textContent = t.name + ' — ' + t.description;
+    sel.appendChild(opt);
+  }
+}
+
+function applyTemplate() {
+  var sel = document.getElementById('aeTemplateSelect');
+  var name = sel.value;
+  if (!name) return;
+  var tpl = promptTemplates.find(function(t) { return t.name === name; });
+  if (!tpl) return;
+  var textarea = document.getElementById('aePromptTextarea');
+  if (textarea.value.trim() && !confirm('Replace current prompt with template?')) return;
+  textarea.value = tpl.prompt;
+  updateCharCount();
+  // Also update role select to match template
+  var roleSelect = document.getElementById('aeRoleSelect');
+  if (roleSelect.querySelector('option[value="' + name + '"]')) {
+    roleSelect.value = name;
+  }
+  // Update description if empty
+  var descInput = document.getElementById('aeDescInput');
+  if (!descInput.value.trim()) descInput.value = tpl.description;
+}
+
+// ─── Character Count ─────────────────────────────
+function updateCharCount() {
+  var textarea = document.getElementById('aePromptTextarea');
+  var el = document.getElementById('aeCharCount');
+  el.textContent = textarea.value.length + ' chars';
+}
+
+// ─── Fullscreen Editor ───────────────────────────
+function openFullscreenEditor() {
+  var textarea = document.getElementById('aePromptTextarea');
+  var fsTextarea = document.getElementById('fsTextarea');
+  var nameInput = document.getElementById('aeNameInput');
+  var name = nameInput.value || 'New Agent';
+
+  fsTextarea.value = textarea.value;
+  document.getElementById('fsTitle').textContent = 'Edit Prompt: ' + name;
+  updateFsCharCount();
+
+  // Hide preview by default
+  document.getElementById('fsPreviewPane').style.display = 'none';
+  fsPreviewData = null;
+
+  document.getElementById('fsEditorOverlay').style.display = 'flex';
+  fsTextarea.focus();
+}
+
+function closeFullscreenEditor() {
+  document.getElementById('fsEditorOverlay').style.display = 'none';
+}
+
+function saveFullscreenEditor() {
+  var fsTextarea = document.getElementById('fsTextarea');
+  var textarea = document.getElementById('aePromptTextarea');
+  textarea.value = fsTextarea.value;
+  updateCharCount();
+  closeFullscreenEditor();
+}
+
+function updateFsCharCount() {
+  var fsTextarea = document.getElementById('fsTextarea');
+  document.getElementById('fsCharCount').textContent = fsTextarea.value.length + ' chars';
+}
+
+// ─── Preview ─────────────────────────────────────
+async function showAgentPreview() {
+  var name = document.getElementById('aeNameInput').value.trim();
+  if (!name) { alert('Save the agent first to preview'); return; }
+  openFullscreenEditor();
+  await loadPreview(name);
+}
+
+async function loadPreview(name) {
+  var previewPane = document.getElementById('fsPreviewPane');
+  var content = document.getElementById('fsPreviewContent');
+  content.textContent = 'Loading preview...';
+  previewPane.style.display = 'flex';
+
+  try {
+    var res = await fetch('/api/agents/preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name })
+    });
+    if (res.ok) {
+      fsPreviewData = await res.json();
+      content.textContent = fsPreviewData.composed || '(empty)';
+      // Reset tab to composed
+      var tabs = document.querySelectorAll('.fs-preview-tabs button');
+      for (var i = 0; i < tabs.length; i++) tabs[i].classList.remove('active');
+      tabs[0].classList.add('active');
+    } else {
+      var err = await res.json();
+      content.textContent = 'Error: ' + (err.error || 'Failed to load preview');
+      fsPreviewData = null;
+    }
+  } catch(e) {
+    content.textContent = 'Error: ' + e.message;
+    fsPreviewData = null;
+  }
+}
+
+function switchPreviewTab(tab, btn) {
+  var tabs = document.querySelectorAll('.fs-preview-tabs button');
+  for (var i = 0; i < tabs.length; i++) tabs[i].classList.remove('active');
+  btn.classList.add('active');
+
+  var content = document.getElementById('fsPreviewContent');
+  if (!fsPreviewData) { content.textContent = '(no preview data)'; return; }
+
+  if (tab === 'composed') content.textContent = fsPreviewData.composed || '(empty)';
+  else if (tab === 'base') content.textContent = fsPreviewData.sections.base || '(empty)';
+  else if (tab === 'skills') content.textContent = fsPreviewData.sections.skills || '(none)';
+  else if (tab === 'team') content.textContent = fsPreviewData.sections.team || '(empty)';
+}
+
+// Handle Escape in fullscreen editor
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    if (document.getElementById('fsEditorOverlay').style.display !== 'none') {
+      closeFullscreenEditor();
+      e.stopPropagation();
+    }
+  }
+});
 
 init();
 </script>
