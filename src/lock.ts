@@ -18,7 +18,7 @@ export interface LockInfo {
 }
 
 const LOCK_FILE = ".lock";
-const STALE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+const STALE_TIMEOUT_MS = 3 * 60 * 60 * 1000; // 3 hours (tasks can run long; PID check is the primary guard)
 
 function lockPath(cwd: string): string {
 	return path.join(cwd, ".planning", LOCK_FILE);

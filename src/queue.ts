@@ -195,6 +195,28 @@ export class TaskQueue {
 	async start(defaultEngine?: Engine, options?: { once?: boolean; ignoreRunAt?: boolean; autoPush?: boolean }): Promise<void> {
 		log.section("Queue: Starting task execution");
 
+		// Graceful shutdown: on SIGTERM/SIGINT, reset current running task to pending
+		let shuttingDown = false;
+		const gracefulShutdown = (signal: string) => {
+			if (shuttingDown) return;
+			shuttingDown = true;
+			log.warn("queue", `Received ${signal}, shutting down gracefully...`);
+			// Reset any running tasks back to pending
+			try {
+				const data = this.load();
+				for (const t of data.tasks) {
+					if (t.status === "running") {
+						t.status = "pending";
+						t.startedAt = undefined;
+					}
+				}
+				this.save(data);
+				log.info("queue", "Reset running tasks to pending");
+			} catch { /* best effort */ }
+		};
+		process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+		process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+
 		// Recover from crash: any task left "running" from a prior session is stale
 		{
 			const recoverData = this.load();
@@ -212,7 +234,7 @@ export class TaskQueue {
 			}
 		}
 
-		while (true) {
+		while (!shuttingDown) {
 			const data = this.load();
 			const pendingTasks = data.tasks.filter(t => t.status === "pending");
 
