@@ -247,6 +247,9 @@ export function saveAgent(dir: string, agent: Partial<TeamAgentDef> & { name: st
 
 /** Delete an agent file from a directory. Returns true if deleted, false if not found. */
 export function deleteAgent(dir: string, name: string): boolean {
+	if (!AGENT_NAME_RE.test(name) || name.length > AGENT_NAME_MAX) {
+		throw new Error(`Invalid agent name "${name}": must match /^[a-z][a-z0-9-]*$/ and be at most ${AGENT_NAME_MAX} chars`);
+	}
 	const filePath = path.join(dir, `${name}.md`);
 	if (!fs.existsSync(filePath)) return false;
 	fs.unlinkSync(filePath);

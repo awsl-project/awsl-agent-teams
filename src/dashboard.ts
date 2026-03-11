@@ -632,6 +632,12 @@ export function startDashboard(cwd: string, port: number = 3120, host: string = 
 				res.end(JSON.stringify({ error: "name query parameter required" }));
 				return;
 			}
+			const nameRe = /^[a-z][a-z0-9-]*$/;
+			if (!nameRe.test(name) || name.length > 50) {
+				res.writeHead(400, { "Content-Type": "application/json" });
+				res.end(JSON.stringify({ error: `Invalid agent name "${name}"` }));
+				return;
+			}
 			// Cannot delete if only exists as builtin
 			const isBuiltin = BUILTINS.some(b => b.name === name);
 			const customExists = fs.existsSync(path.join(agentsDir, `${name}.md`));

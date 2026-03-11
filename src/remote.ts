@@ -256,10 +256,12 @@ export class RemoteClient {
 				}
 
 				case "agents:preview": {
+					const agentName = (payload as any)?.name;
+					if (!agentName || typeof agentName !== "string") throw new Error("payload.name is required");
 					const agentsDir = path.join(this.options.cwd, "agents");
 					const agents = loadAgents([agentsDir]);
-					const agent = agents.find(a => a.name === (payload as any).name);
-					if (!agent) throw new Error(`Agent not found: ${(payload as any).name}`);
+					const agent = agents.find(a => a.name === agentName);
+					if (!agent) throw new Error(`Agent not found: ${agentName}`);
 					const registry = new SkillRegistry();
 					const skillInstructions = registry.buildInstructions(agent.role, agent.skills);
 					result = composePromptPreview(agent, agents, skillInstructions);
