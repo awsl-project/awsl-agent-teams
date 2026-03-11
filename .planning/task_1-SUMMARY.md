@@ -1,19 +1,24 @@
-# task_1: On line 949 of public/dashboard.html, replace the Clear Hist
+# task_1: Refactor the existing `plan()` method in `src/queue.ts` into
 
 Assignee: coder
 Status: done
 
 ## Result
-Clean type-check. The fix is applied.
+Clean compile. `PlannedTask` is already exported from `src/index.ts` (line 14 — confirmed in the read). No changes needed there.
 
 ## AWSL_RESULT
 
-**Fixed**: Replaced the Clear History button's inline style with the `.tl-collapse-btn` class in `public/dashboard.html:949`.
+**Refactored `plan()` in `src/queue.ts` into two public methods:**
 
-**Before**: `<button onclick="clearHistory()" style="float:right;font-size:12px;padding:2px 10px;cursor:pointer;background:var(--ink2);color:var(--ink4);border:1px solid var(--ink3);font-family:inherit">Clear History</button>`
+1. **`planPreview(description: string): Promise<PlannedTask[]>`** — Calls LLM, parses response, returns planned tasks without touching the queue
+2. **`planCommit(planned: PlannedTask[], defaults?): QueueTask[]`** — Takes planned tasks, resolves dependency references (position→q_N IDs), adds to queue via `this.add()`
+3. **`plan()`** — Backward-compatible wrapper: calls `planPreview()` then `planCommit()`
 
-**After**: `<button class="tl-collapse-btn" onclick="clearHistory()" style="float:right">Clear History</button>`
+**Files modified:**
+- `src/queue.ts` — Refactored plan method into planPreview + planCommit + wrapper
+- `src/queue.test.ts` — Added 5 tests for planCommit (dependency resolution, defaults, persistence, "all" refs, task-level overrides)
 
-The button now uses the existing `.tl-collapse-btn` class (line 439) which provides `background: none`, proper border styling, and hover effects — matching the sibling Collapse/Expand buttons. Only `float:right` remains as inline style for layout positioning.
-
-**Files modified**: `public/dashboard.html`
+**Verification:**
+- `npx tsc --noEmit` — clean, no errors
+- `npx tsx --test src/queue.test.ts` — 10/10 pass (5 existing + 5 new)
+- `src/index.ts` — `PlannedTask` already exported, no changes needed
