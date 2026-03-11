@@ -1242,7 +1242,59 @@ awsl summary
 - **多问题排队** — 可以排队多个讨论，通宵一起处理
 - **仪表盘查看** — `GET /api/discussions` 端点可以在仪表盘上查看讨论历史
 
-## 18. 不要做的事
+## 18. 双层并行架构
+
+AWSL 在两个层级同时实现并行开发：
+
+### 第一层：AWSL 编排并行（planner 控制）
+
+planner 将目标拆成多个独立任务，按波次（wave）并行执行。每个任务是一个独立的 `claude -p` 进程。
+
+```
+Wave 1: [architect]         ← 先做设计
+Wave 2: [coder, coder]     ← 功能 A + 功能 B 同时跑
+Wave 3: [tester, reviewer] ← 测试 + 审查同时跑
+```
+
+**关键规则：** 同一 wave 内的任务**文件不能重叠**。planner 会按功能模块拆分（不是按前后端），确保每个 coder 独占自己的文件。
+
+### 第二层：CC Agent Tool 并行（coder 内部控制）
+
+coder 默认启用了 Claude Code 的 Agent tool，可以在任务内部再开子 agent 并行工作：
+
+```
+coder 接到任务："实现用户设置页面"
+  ├─ 子 agent 1 → 后端 API (src/settings.ts)
+  └─ 子 agent 2 → 前端界面 (public/settings.html)
+```
+
+coder 自己决定什么时候用子 agent，不需要你干预。
+
+### 两层叠加效果
+
+```
+AWSL 启动 3 个 coder 并行（第一层）
+  coder-1（认证模块）内部开 2 个子 agent（第二层）
+  coder-2（支付模块）内部开 2 个子 agent（第二层）
+  coder-3（通知模块）内部开 1 个子 agent（第二层）
+= 实际同时工作的 agent 可达 3 + 5 = 8 个
+```
+
+### 怎么确认 CC 有并行
+
+1. coder 的 `tools` 包含 `Agent`（内置默认开启）
+2. 自定义 agent 想启用：`tools: read,write,edit,bash,grep,glob,agent`
+3. coder 提示词里已有并行指引，CC 会在有多个独立文件变更时主动开子 agent
+
+### 什么时候不要并行
+
+| 场景 | 原因 |
+|------|------|
+| 修改同一个文件的不同部分 | 子 agent 可能产生冲突 |
+| 后一步依赖前一步的输出 | 必须串行 |
+| 简单的单文件修改 | 开子 agent 反而更慢（有启动开销） |
+
+## 19. 不要做的事
 
 | 不要 | 为什么 | 应该 |
 |------|--------|------|

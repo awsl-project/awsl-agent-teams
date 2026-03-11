@@ -740,6 +740,44 @@ Guardian 技能根据智能体角色自动激活：
 | reviewer | 审查者 | 两阶段审查 + 质量门禁 |
 | tester | 测试者 | 设计和运行测试，调试失败 |
 
+### 双层并行架构
+
+AWSL 同时在两个层级实现并行：
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  第一层：AWSL 编排（planner 控制）                        │
+│                                                         │
+│  Wave 1: [architect]         ← 先做架构设计               │
+│  Wave 2: [coder, coder]     ← 功能 A + 功能 B 并行        │
+│  Wave 3: [tester, reviewer] ← 测试 + 审查并行             │
+│                                                         │
+│  每个 coder 是独立的 claude -p 进程                       │
+│  planner 保证同一 wave 内任务文件不重叠                    │
+├─────────────────────────────────────────────────────────┤
+│  第二层：Claude Code Agent Tool（coder 内部控制）          │
+│                                                         │
+│  coder（功能 A）内部启动子 agent：                        │
+│    ├─ 子 agent 1 → API 接口 (server.ts)                  │
+│    └─ 子 agent 2 → UI 组件 (dashboard.html)              │
+│                                                         │
+│  coder（功能 B）内部启动子 agent：                        │
+│    ├─ 子 agent 1 → 数据模型 (types.ts)                   │
+│    └─ 子 agent 2 → 测试套件 (feature-b.test.ts)          │
+└─────────────────────────────────────────────────────────┘
+```
+
+- **第一层** 按**功能模块**拆分 — planner 创建独立任务，各分配一个 coder
+- **第二层** 按**文件层级**拆分 — coder 用 Agent tool 在任务内部并发修改多个文件
+- 第一层并行任务**不允许共享文件**（planner 强制保证）
+- 第二层子 agent 由父 coder 协调（任务内部无文件冲突）
+
+自定义 agent 启用 Agent tool，在 tools 中添加 `agent`：
+
+```yaml
+tools: read,write,edit,bash,grep,glob,agent
+```
+
 ## 自定义智能体
 
 在项目中创建 `agents/<name>.md` — 手动创建、通过 CLI 或仪表盘 UI 均可：

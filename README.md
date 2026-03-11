@@ -745,6 +745,44 @@ The builtin engine enforces a sandbox policy on every agent. Write operations ar
 | reviewer | reviewer | Two-stage review with quality gate |
 | tester | tester | Designs and runs tests, debugs failures |
 
+### Two-Level Parallelism
+
+AWSL achieves parallelism at two levels simultaneously:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Level 1: AWSL Orchestration (planner controls)         │
+│                                                         │
+│  Wave 1: [architect]         ← design first             │
+│  Wave 2: [coder, coder]     ← feature A + feature B    │
+│  Wave 3: [tester, reviewer] ← test + review             │
+│                                                         │
+│  Each coder is a separate claude -p process             │
+│  Planner ensures file-disjoint tasks per wave           │
+├─────────────────────────────────────────────────────────┤
+│  Level 2: Claude Code Agent Tool (coder controls)       │
+│                                                         │
+│  coder (feature A) internally spawns:                   │
+│    ├─ sub-agent 1 → API endpoint (server.ts)            │
+│    └─ sub-agent 2 → UI component (dashboard.html)       │
+│                                                         │
+│  coder (feature B) internally spawns:                   │
+│    ├─ sub-agent 1 → data model (types.ts)               │
+│    └─ sub-agent 2 → test suite (feature-b.test.ts)      │
+└─────────────────────────────────────────────────────────┘
+```
+
+- **Level 1** splits by **feature module** — planner creates independent tasks, each assigned to a coder
+- **Level 2** splits by **file layer** — coder uses the Agent tool to work on multiple files within its task concurrently
+- Parallel tasks at Level 1 MUST NOT share files (enforced by planner)
+- Sub-agents at Level 2 are coordinated by the parent coder (no file conflicts within a task)
+
+To enable the Agent tool on custom agents, add `agent` to the tools list:
+
+```yaml
+tools: read,write,edit,bash,grep,glob,agent
+```
+
 ## Custom Agents
 
 Create `agents/<name>.md` in your project — manually, via CLI, or through the Dashboard UI:
