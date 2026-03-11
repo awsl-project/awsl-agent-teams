@@ -677,7 +677,80 @@
         "reviewer"
       ],
       "maxConcurrency": 4
+    },
+    {
+      "id": "h_22",
+      "date": "2026-03-11T13:57:06.114Z",
+      "project": "awsl-agent-teams",
+      "projectPath": "C:\\Users\\11421\\awsl-agent-teams",
+      "queueTaskId": "q_2",
+      "goal": "面板和本地终端都要加可以自定义角色提示词的功能",
+      "status": "done",
+      "startedAt": "2026-03-11T13:16:40.923Z",
+      "completedAt": "2026-03-11T13:57:06.114Z",
+      "duration": 2425191,
+      "tasksCompleted": 8,
+      "tasksTotal": 8,
+      "summary": "✅ 8/8 tasks completed successfully.\n\n✅ task_1 (coder): Agent CRUD functions in agents.ts [src/agents.ts, src/index.ts]\n   → All green.\n\n## AWSL_RESULT\n\n### Task 1: Agent CRUD Functions — Complete\n\nAdded 3 new exports to `src/agents.ts`:\n\n1. **`PROMPT_TEMPLATES`** — 7 built-in role templates (coder, reviewer, architect, tester, planner, devops, documenter) with description + prompt text\n2. **`getPromptTemplates()`** — Ret\n\n✅ task_2 (coder): Dashboard API endpoints for agents [src/dashboard.ts]\n   → ## AWSL_RESULT\n\n### Task 2: Dashboard API Endpoints for Agents — Complete\n\nAdded 2 new API endpoints to `src/dashboard.ts`:\n\n1. **`GET /api/agents/templates`** — Returns all 7 built-in prompt templates as `Array<{ name, description, prompt }>`. Calls `getPromptTemplates()` from agents module.\n\n2. **\n\n✅ task_3 (coder): CLI agents subcommands [src/cli.ts]\n   → ## AWSL_RESULT\n\n### Task 3: CLI Agents Subcommands — Complete\n\nAdded 3 new subcommands and 1 new flag to the `agents` CLI command in `src/cli.ts`:\n\n| Subcommand | Description |\n|------------|-------------|\n| `awsl agents templates` | Lists all 7 built-in prompt templates with descriptions |\n| `awsl\n\n✅ task_4 (coder): Dashboard UI agent editor [public/dashboard.html]\n   → Everything looks correct and well-formed.\n\n## AWSL_RESULT\n\n### Task 4: Dashboard UI Agent Editor — Complete\n\nEnhanced the agent editor in `public/dashboard.html` with 4 new features:\n\n| Feature | Description |\n|---------|-------------|\n| **Template Selector** | Dropdown above textarea loads 7 built-\n\n✅ task_5 (coder): Remote relay agent commands [src/remote.ts]\n   → ## AWSL_RESULT\n\n### Task 5: Remote Relay Agent Commands — Complete\n\nAdded 2 new remote commands to `src/remote.ts`:\n\n1. **`agents:templates`** — Returns all 7 built-in prompt templates via `getPromptTemplates()`. No payload required.\n2. **`agents:preview`** — Accepts `{ name }` payload, resolves the\n\n✅ task_6 (tester): Unit tests for agent CRUD [tests/agents.test.ts]\n   → Type check clean.\n\n## AWSL_RESULT\n\n### Task 6: Unit Tests for Agent CRUD — Complete\n\nEnhanced `tests/agents.test.ts` with comprehensive coverage. Added **7 new describe blocks** and **32 new tests** (25 existing → 57 total).\n\n### Test Suites Added\n\n| Suite | Tests | Coverage |\n|-------|-------|-----\n\n✅ task_7 (coder): Documentation update [README.md, README.zh-CN.md, BEST_PRACTICES.md]\n   → All documentation is updated consistently. Here's the summary:\n\n## AWSL_RESULT\n\n### Task 7: Documentation Update — Complete\n\nUpdated 3 documentation files to cover all new prompt template and editing features:\n\n| File | Changes |\n|------|---------|\n| **README.md** (English) | 7 edits: CLI agents sec\n\n✅ task_8 (reviewer): Security review [src/agents.ts, src/dashboard.ts, src/cli.ts, src/remote.ts]\n   → ## AWSL_RESULT\n\n### Security Review — Complete\n\n**6 findings identified, 3 fixed:**\n\n| # | Severity | Issue | Location | Status |\n|---|----------|-------|----------|--------|\n| 1 | **CRITICAL** | Path traversal in `deleteAgent()` — no name validation before `path.join` | `src/agents.ts:249` | **FIXE",
+      "engine": "claude-code",
+      "inputTokens": 21215,
+      "outputTokens": 98660,
+      "costUsd": 12.529813549999998,
+      "waves": [
+        {
+          "wave": 1,
+          "taskIds": [
+            "task_1"
+          ],
+          "agents": [
+            "coder"
+          ],
+          "parallel": 1
+        },
+        {
+          "wave": 2,
+          "taskIds": [
+            "task_2",
+            "task_3",
+            "task_5",
+            "task_6"
+          ],
+          "agents": [
+            "coder",
+            "tester"
+          ],
+          "parallel": 4
+        },
+        {
+          "wave": 3,
+          "taskIds": [
+            "task_4",
+            "task_8"
+          ],
+          "agents": [
+            "coder",
+            "reviewer"
+          ],
+          "parallel": 2
+        },
+        {
+          "wave": 4,
+          "taskIds": [
+            "task_7"
+          ],
+          "agents": [
+            "coder"
+          ],
+          "parallel": 1
+        }
+      ],
+      "agents": [
+        "coder",
+        "tester",
+        "reviewer"
+      ],
+      "maxConcurrency": 4
     }
   ],
-  "updatedAt": "2026-03-11T13:16:40.568Z"
+  "updatedAt": "2026-03-11T13:57:06.114Z"
 }
