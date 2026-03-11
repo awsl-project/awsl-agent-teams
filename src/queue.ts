@@ -12,6 +12,7 @@ import { execSync, spawn } from "node:child_process";
 import { executeTeam, type ExecuteOptions } from "./orchestrator.js";
 import { type Engine, detectEngine } from "./runner.js";
 import { loadAgents } from "./agents.js";
+import { discussTeam } from "./discuss.js";
 import { RunContext } from "./context.js";
 import { log } from "./log.js";
 import { appendHistory } from "./history.js";
@@ -45,6 +46,7 @@ export interface QueueTask {
 	id: string;
 	goal: string;
 	engine?: Engine;
+	mode?: "build" | "discuss";
 	options: {
 		model?: string;
 		concurrency?: number;
@@ -54,6 +56,7 @@ export interface QueueTask {
 		autoPush?: boolean;
 		verify?: boolean;
 		replan?: boolean;
+		discussRounds?: number;
 	};
 	status: "pending" | "running" | "done" | "failed" | "paused";
 	scheduledAt?: string;
@@ -85,7 +88,7 @@ export class TaskQueue {
 	/**
 	 * Add a new task to the queue.
 	 */
-	add(goal: string, options?: QueueTask["options"], extra?: { engine?: Engine; dependsOn?: string[]; runAt?: string }): QueueTask {
+	add(goal: string, options?: QueueTask["options"], extra?: { engine?: Engine; dependsOn?: string[]; runAt?: string; mode?: "build" | "discuss" }): QueueTask {
 		const data = this.load();
 		const id = `q_${this.nextId(data)}`;
 		const task: QueueTask = {
@@ -98,6 +101,7 @@ export class TaskQueue {
 		if (extra?.engine) task.engine = extra.engine;
 		if (extra?.dependsOn) task.dependsOn = extra.dependsOn;
 		if (extra?.runAt) task.runAt = extra.runAt;
+		if (extra?.mode) task.mode = extra.mode;
 		data.tasks.push(task);
 		this.save(data);
 
@@ -339,90 +343,143 @@ export class TaskQueue {
 				const concurrency = nextTask.options.concurrency ?? 2;
 				const engine = detectEngine(nextTask.engine ?? defaultEngine);
 
-				// Build execute options
-				const execOptions: ExecuteOptions = {
-					brainstorm: !nextTask.options.quick,
-					research: !nextTask.options.quick,
-					verify: nextTask.options.verify ?? true,
-					autoCommit: nextTask.options.autoCommit ?? true,
-					replan: nextTask.options.replan ?? true,
-					qualityGate: true,
-					engine,
-					maxRateLimitRetries: 20,
-					resumeFromCheckpoint: true,
-				};
-
-				// Execute team (with task-level timeout: 2 hours)
+				// Task-level timeout: 2 hours
 				const TASK_TIMEOUT_MS = 2 * 60 * 60 * 1000;
-				const teamResultPromise = executeTeam(
-					nextTask.goal,
-					agents,
-					this.cwd,
-					model,
-					concurrency,
-					execOptions,
-				);
 				const timeoutPromise = new Promise<never>((_, reject) =>
 					setTimeout(() => reject(new Error(`Task ${nextTask.id} timed out after ${TASK_TIMEOUT_MS / 60000} minutes`)), TASK_TIMEOUT_MS)
 				);
-				const teamResult = await Promise.race([teamResultPromise, timeoutPromise]);
 
-				// Reload data in case it changed during execution
-				const freshData = this.load();
-				const freshTask = freshData.tasks.find(t => t.id === nextTask.id);
-				if (freshTask) {
-					freshTask.status = teamResult.success ? "done" : "failed";
-					freshTask.completedAt = new Date().toISOString();
-					freshTask.result = {
-						success: teamResult.success,
-						summary: teamResult.summary,
+				if (nextTask.mode === "discuss") {
+					// ── Discussion mode — multi-agent reasoning ──
+					const discussResult = await Promise.race([
+						discussTeam(nextTask.goal, agents, this.cwd, model, {
+							rounds: nextTask.options.discussRounds,
+							engine,
+						}),
+						timeoutPromise,
+					]);
+
+					const freshData = this.load();
+					const freshTask = freshData.tasks.find(t => t.id === nextTask.id);
+					if (freshTask) {
+						freshTask.status = "done";
+						freshTask.completedAt = new Date().toISOString();
+						freshTask.result = {
+							success: true,
+							summary: discussResult.answer.slice(0, 500),
+						};
+						this.save(freshData);
+
+						try {
+							appendHistory(this.cwd, {
+								date: new Date().toISOString(),
+								project: path.basename(this.cwd),
+								projectPath: this.cwd,
+								queueTaskId: freshTask.id,
+								goal: freshTask.goal,
+								status: "done",
+								startedAt: freshTask.startedAt!,
+								completedAt: freshTask.completedAt!,
+								duration: Date.parse(freshTask.completedAt!) - Date.parse(freshTask.startedAt!),
+								tasksCompleted: discussResult.agents.length,
+								tasksTotal: discussResult.agents.length,
+								summary: discussResult.answer.slice(0, 500),
+								engine: detectEngine(freshTask.engine) as string,
+								inputTokens: discussResult.inputTokens,
+								outputTokens: discussResult.outputTokens,
+								costUsd: discussResult.costUsd,
+								agents: discussResult.agents,
+								mode: "discuss",
+								answer: discussResult.answer,
+							});
+						} catch (e) {
+							log.warn("queue", `Failed to record history: ${e}`);
+						}
+					}
+					log.info("queue", `${nextTask.id}: discussion complete`);
+				} else {
+					// ── Build mode — full team execution ──
+					const execOptions: ExecuteOptions = {
+						brainstorm: !nextTask.options.quick,
+						research: !nextTask.options.quick,
+						verify: nextTask.options.verify ?? true,
+						autoCommit: nextTask.options.autoCommit ?? true,
+						replan: nextTask.options.replan ?? true,
+						qualityGate: true,
+						engine,
+						maxRateLimitRetries: 20,
+						resumeFromCheckpoint: true,
 					};
-					if (!teamResult.success) {
-						freshTask.error = teamResult.summary;
-					}
-					this.save(freshData);
 
-					// Record history entry
+					const teamResult = await Promise.race([
+						executeTeam(
+							nextTask.goal,
+							agents,
+							this.cwd,
+							model,
+							concurrency,
+							execOptions,
+						),
+						timeoutPromise,
+					]);
+
+					// Reload data in case it changed during execution
+					const freshData = this.load();
+					const freshTask = freshData.tasks.find(t => t.id === nextTask.id);
+					if (freshTask) {
+						freshTask.status = teamResult.success ? "done" : "failed";
+						freshTask.completedAt = new Date().toISOString();
+						freshTask.result = {
+							success: teamResult.success,
+							summary: teamResult.summary,
+						};
+						if (!teamResult.success) {
+							freshTask.error = teamResult.summary;
+						}
+						this.save(freshData);
+
+						// Record history entry
+						try {
+							const tasksCompletedMatch = teamResult.summary.match(/(\d+)\/\d+ tasks/);
+							const tasksTotalMatch = teamResult.summary.match(/\d+\/(\d+) tasks/);
+							appendHistory(this.cwd, {
+								date: new Date().toISOString(),
+								project: path.basename(this.cwd),
+								projectPath: this.cwd,
+								queueTaskId: freshTask.id,
+								goal: freshTask.goal,
+								status: freshTask.status as "done" | "failed",
+								startedAt: freshTask.startedAt!,
+								completedAt: freshTask.completedAt!,
+								duration: Date.parse(freshTask.completedAt!) - Date.parse(freshTask.startedAt!),
+								tasksCompleted: tasksCompletedMatch ? parseInt(tasksCompletedMatch[1], 10) : 0,
+								tasksTotal: tasksTotalMatch ? parseInt(tasksTotalMatch[1], 10) : 0,
+								summary: freshTask.result?.summary ?? "",
+								engine: detectEngine(freshTask.engine) as string,
+								inputTokens: teamResult.inputTokens ?? 0,
+								outputTokens: teamResult.outputTokens ?? 0,
+								costUsd: teamResult.costUsd ?? 0,
+								waves: teamResult.waves,
+								agents: teamResult.agents,
+								maxConcurrency: teamResult.maxConcurrency,
+							});
+						} catch (e) {
+							log.warn("queue", `Failed to record history: ${e}`);
+						}
+					}
+
+					// Auto-commit queue state after task completion
 					try {
-						const tasksCompletedMatch = teamResult.summary.match(/(\d+)\/\d+ tasks/);
-						const tasksTotalMatch = teamResult.summary.match(/\d+\/(\d+) tasks/);
-						appendHistory(this.cwd, {
-							date: new Date().toISOString(),
-							project: path.basename(this.cwd),
-							projectPath: this.cwd,
-							queueTaskId: freshTask.id,
-							goal: freshTask.goal,
-							status: freshTask.status as "done" | "failed",
-							startedAt: freshTask.startedAt!,
-							completedAt: freshTask.completedAt!,
-							duration: Date.parse(freshTask.completedAt!) - Date.parse(freshTask.startedAt!),
-							tasksCompleted: tasksCompletedMatch ? parseInt(tasksCompletedMatch[1], 10) : 0,
-							tasksTotal: tasksTotalMatch ? parseInt(tasksTotalMatch[1], 10) : 0,
-							summary: freshTask.result?.summary ?? "",
-							engine: detectEngine(freshTask.engine) as string,
-							inputTokens: teamResult.inputTokens ?? 0,
-							outputTokens: teamResult.outputTokens ?? 0,
-							costUsd: teamResult.costUsd ?? 0,
-							waves: teamResult.waves,
-							agents: teamResult.agents,
-							maxConcurrency: teamResult.maxConcurrency,
-						});
+						const committed = atomicCommit(this.cwd, nextTask.id, `queue: ${nextTask.id} ${teamResult.success ? "done" : "failed"} — ${nextTask.goal}`);
+						if (committed && (nextTask.options.autoPush ?? options?.autoPush ?? false)) {
+							gitPush(this.cwd);
+						}
 					} catch (e) {
-						log.warn("queue", `Failed to record history: ${e}`);
+						log.warn("queue", `Failed to auto-commit after task: ${e}`);
 					}
-				}
 
-				// Auto-commit queue state after task completion
-				try {
-					const committed = atomicCommit(this.cwd, nextTask.id, `queue: ${nextTask.id} ${teamResult.success ? "done" : "failed"} — ${nextTask.goal}`);
-					if (committed && (nextTask.options.autoPush ?? options?.autoPush ?? false)) {
-						gitPush(this.cwd);
-					}
-				} catch (e) {
-					log.warn("queue", `Failed to auto-commit after task: ${e}`);
+					log.info("queue", `${nextTask.id}: ${teamResult.success ? "done" : "failed"} — ${teamResult.summary}`);
 				}
-
-				log.info("queue", `${nextTask.id}: ${teamResult.success ? "done" : "failed"} — ${teamResult.summary}`);
 			} catch (err: any) {
 				// Mark as failed on error
 				const freshData = this.load();
