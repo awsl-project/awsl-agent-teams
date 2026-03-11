@@ -230,6 +230,12 @@ awsl lock              # Show current lock status
 awsl unlock [--force]  # Release lock
 awsl agents            # List available agents
 
+# Night session summary
+awsl summary                        # Summarize last night's session (22:00→06:00)
+awsl summary --date 2026-03-10      # Summarize a specific night
+awsl summary --from 20:00 --to 08:00  # Custom time range
+awsl summary --all-projects         # Aggregate across all registered projects
+
 # Project management
 awsl projects                       # List all registered projects with status
 awsl projects add [path] [--name N] # Register a project (default: cwd)
@@ -451,6 +457,42 @@ curl -X POST http://server:3120/api/clients/command \
 Supported relay actions: `queue:add`, `queue:remove`, `queue:clear`, `queue:list`, `queue:get`, `queue:set-time`, `queue:start`, `system:info`.
 
 > For full deployment guide (systemd, PM2, Docker, Nginx reverse proxy, NAT traversal), see [DEPLOY.md](DEPLOY.md).
+
+## Night Session Summary
+
+Review what happened during a night coding session. Pulls data from HISTORY.json (task queue results) and `git log` (commits) within the time range.
+
+```bash
+awsl summary
+```
+
+**Options:**
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--from <HH:MM>` | `22:00` | Session start time |
+| `--to <HH:MM>` | `06:00` | Session end time |
+| `--date <YYYY-MM-DD>` | auto | Anchor date (auto-detects based on current time) |
+| `--all-projects` | false | Aggregate across all registered projects |
+| `--cwd <path>` | `.` | Working directory |
+
+**Time range auto-detection:** If now < 06:00 → last night. If now >= 22:00 → tonight. Otherwise → last night.
+
+**Example output:**
+
+```
+┌─────────────────────────────────────┐
+│     Night Session Summary           │
+│     2026-03-10 22:00 → 03-11 06:00 │
+├─────────────────────────────────────┤
+│  Tasks: 5 total, 4 done, 1 failed  │
+│  Git:   12 commits                  │
+│  Time:  2h 34m                      │
+│  Cost:  $0.42                       │
+├─────────────────────────────────────┤
+│  Agents: coder ×8, reviewer ×2     │
+└─────────────────────────────────────┘
+```
 
 ## Enable AWSL in Any Project
 
@@ -837,6 +879,11 @@ awsl projects                                # List all registered projects with
 awsl projects add [path] [--name N]          # Register a project (default: cwd)
 awsl projects remove <path|name>             # Unregister a project
 awsl projects scan [dir]                     # Auto-discover projects in a directory
+
+# Night session summary
+awsl summary                                 # Last night's session (22:00→06:00)
+awsl summary --date 2026-03-10               # Specific night
+awsl summary --all-projects                  # All registered projects
 
 # Remote control (connect local machine to remote dashboard)
 awsl remote init http://server:3120          # Save config + start connection

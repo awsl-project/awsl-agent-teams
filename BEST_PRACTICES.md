@@ -60,6 +60,8 @@ awsl run "goal" --engine claude-code
 查看睡前模式仪表盘        →  awsl dashboard
 后台启动仪表盘            →  awsl dashboard --bg
 停止后台仪表盘            →  awsl dashboard stop
+查看昨晚工作总结          →  awsl summary
+查看指定日期的夜间工作    →  awsl summary --date 2026-03-10
 管理多项目                →  awsl projects
 自动发现项目              →  awsl projects scan ~/dev
 ```
@@ -925,7 +927,74 @@ my-project/
 | 放 agents/*.md | 领域专家定义 | 可选 |
 | 分点甩需求 | 直接列出，自动走队列 | 每次使用 |
 
-## 16. 不要做的事
+## 16. 夜间工作总结（`awsl summary`）
+
+通宵构建后，用 `awsl summary` 快速回顾昨晚做了什么。
+
+### 基本用法
+
+```bash
+# 早上醒来第一件事 — 查看昨晚的成果
+awsl summary
+
+# 查看前天晚上的工作
+awsl summary --date 2026-03-09
+
+# 多项目概览（汇总所有注册项目的数据）
+awsl summary --all-projects
+
+# 自定义时间范围（比如通宵到早上 8 点）
+awsl summary --from 20:00 --to 08:00
+```
+
+### 数据来源
+
+| 数据 | 来源 |
+|------|------|
+| 任务完成/失败数 | `.planning/HISTORY.json`（队列执行历史） |
+| Git 提交记录 | `git log`（指定时间范围内的提交） |
+| 耗时、token 消耗 | HISTORY.json 中的任务统计 |
+| 智能体分布 | HISTORY.json 中的 wave 信息 |
+
+### 时间范围自动检测
+
+不指定 `--date` 时，AWSL 自动判断：
+
+| 当前时间 | 行为 |
+|---------|------|
+| 凌晨（< 06:00） | 总结"昨晚"：昨天 22:00 → 今天 06:00 |
+| 夜间（>= 22:00） | 总结"今晚"：今天 22:00 → 明天 06:00 |
+| 白天（06:00-22:00） | 总结"昨晚"：昨天 22:00 → 今天 06:00 |
+
+### 推荐工作流
+
+**睡前：**
+```bash
+awsl queue start              # 启动队列，去睡觉
+```
+
+**早上：**
+```bash
+awsl summary                  # 一眼看昨晚成果
+awsl queue list               # 查看还有没有任务在跑
+git log --oneline -20         # 看详细提交
+awsl dashboard                # 打开仪表盘看更多细节
+```
+
+**复盘过去几天：**
+```bash
+awsl summary --date 2026-03-08
+awsl summary --date 2026-03-09
+awsl summary --date 2026-03-10
+```
+
+### 提示
+
+- `--all-projects` 适合管理多个项目的开发者，一条命令看所有项目的夜间进度
+- 如果 HISTORY.json 为空但有 git 提交，summary 仍然能统计 git 活动
+- summary 输出的格式适合复制到 Slack/日报中作为工作汇报
+
+## 17. 不要做的事
 
 | 不要 | 为什么 | 应该 |
 |------|--------|------|
@@ -939,7 +1008,7 @@ my-project/
 | 不写测试框架 | Agent 可能选错框架 | 在 goal 里明确：用 Vitest / Jest / pytest |
 | 大项目不加集成测试 task | 单元测试通过不代表整体工作 | PLAN.md 最后加一个集成测试 task |
 
-## 17. 限额自动恢复
+## 18. 限额自动恢复
 
 AWSL 自动检测 token 限额错误并等待恢复，不需要手动干预。
 
@@ -1014,7 +1083,7 @@ await executeTeam(goal, agents, cwd, model, concurrency, {
 - 崩溃后重启，检查点仍然有效 — 自动恢复
 - 退避等待期间进程保持前台运行（不要关终端！）
 
-## 18. 任务队列（睡前模式）
+## 19. 任务队列（睡前模式）
 
 排队多个目标，一键启动，通宵执行。每个任务自带限额恢复能力。
 

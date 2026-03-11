@@ -230,6 +230,12 @@ awsl lock              # 查看当前锁状态
 awsl unlock [--force]  # 释放锁
 awsl agents            # 列出可用智能体
 
+# 夜间工作总结
+awsl summary                             # 总结昨晚的工作（22:00→06:00）
+awsl summary --date 2026-03-10           # 总结指定日期的夜间工作
+awsl summary --from 20:00 --to 08:00     # 自定义时间范围
+awsl summary --all-projects              # 汇总所有已注册项目
+
 # 项目管理
 awsl projects                            # 列出所有已注册项目及状态
 awsl projects add [path] [--name N]      # 注册项目（默认当前目录）
@@ -446,6 +452,42 @@ curl -X POST http://server:3120/api/clients/command \
 支持的中继命令：`queue:add`、`queue:remove`、`queue:clear`、`queue:list`、`queue:get`、`queue:set-time`、`queue:start`、`system:info`。
 
 > 完整部署指南（systemd、PM2、Docker、Nginx 反向代理、内网穿透等）见 [DEPLOY.md](DEPLOY.md)。
+
+## 夜间工作总结
+
+回顾夜间编码工作的成果。从 HISTORY.json（任务队列结果）和 `git log`（提交记录）中提取指定时间范围内的数据。
+
+```bash
+awsl summary
+```
+
+**选项：**
+
+| 选项 | 默认值 | 说明 |
+|------|--------|------|
+| `--from <HH:MM>` | `22:00` | 工作开始时间 |
+| `--to <HH:MM>` | `06:00` | 工作结束时间 |
+| `--date <YYYY-MM-DD>` | 自动 | 锚定日期（根据当前时间自动判断） |
+| `--all-projects` | false | 汇总所有已注册项目 |
+| `--cwd <path>` | `.` | 工作目录 |
+
+**时间范围自动检测：** 当前时间 < 06:00 → 昨晚。当前时间 >= 22:00 → 今晚。其他 → 昨晚。
+
+**输出示例：**
+
+```
+┌─────────────────────────────────────┐
+│     夜间工作总结                      │
+│     2026-03-10 22:00 → 03-11 06:00  │
+├─────────────────────────────────────┤
+│  任务: 5 个, 4 完成, 1 失败          │
+│  Git:  12 次提交                     │
+│  耗时: 2 小时 34 分                  │
+│  费用: $0.42                         │
+├─────────────────────────────────────┤
+│  智能体: coder ×8, reviewer ×2      │
+└─────────────────────────────────────┘
+```
 
 ## 在任意项目中启用 AWSL
 
@@ -832,6 +874,11 @@ awsl projects                                  # 列出所有已注册项目及�
 awsl projects add [path] [--name N]            # 注册项目（默认当前目录）
 awsl projects remove <path|name>               # 取消注册项目
 awsl projects scan [dir]                       # 自动发现目录下的项目
+
+# 夜间工作总结
+awsl summary                                   # 昨晚的工作总结（22:00→06:00）
+awsl summary --date 2026-03-10                 # 指定日期
+awsl summary --all-projects                    # 汇总所有项目
 
 # 远程控制（将本地机器连接到远程面板）
 awsl remote init http://server:3120            # 保存配置 + 启动连接
