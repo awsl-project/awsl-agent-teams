@@ -1,46 +1,35 @@
 {
   "design": {
-    "title": "Multi-Project Management — Projects Page + Central Registry",
-    "designDoc": ".planning/designs/multi-project.md",
-    "summary": "Add a global project registry (~/.awsl/projects.json) and a Projects page in the dashboard to manage multiple projects from one place. Each project keeps its own .planning/ directory. Dashboard reads all registered projects' status. Cross-project queue operations work by spawning detached awsl processes.",
-    "newFiles": ["src/projects.ts"],
-    "modifiedFiles": ["src/dashboard.ts", "src/cli.ts", "src/index.ts", "public/dashboard.html", "README.md", "README.zh-CN.md", "BEST_PRACTICES.md"],
-    "dataModel": {
-      "registryPath": "~/.awsl/projects.json",
-      "ProjectEntry": "{ name, path (unique key), addedAt, lastActiveAt?, tags?, engine? }",
-      "ProjectRegistry": "{ projects: ProjectEntry[], updatedAt }",
-      "ProjectStatus": "{ name, path, exists, hasPlanning, isLocked, queue: {pending,running,done,failed,total}, lastRun?: {date,status,goal,duration} }"
+    "title": "Queue Task Splitting — queue split command with preview + confirm",
+    "designDoc": ".planning/design.md",
+    "summary": "Refactor queue.plan() into planPreview() + planCommit() two-step API. Add 'queue split' CLI command with interactive preview and Y/n confirmation. Enhance PlannedTask with mode field. Improve LLM prompt for messy Chinese input.",
+    "modifiedFiles": ["src/queue.ts", "src/cli.ts", "src/index.ts", "CLAUDE.md", "README.md", "README.zh-CN.md", "BEST_PRACTICES.md"],
+    "apiChanges": {
+      "planPreview(description)": "NEW: Returns PlannedTask[] without adding to queue (LLM call only)",
+      "planCommit(planned, defaults)": "NEW: Takes PlannedTask[], resolves deps, adds to queue, returns QueueTask[]",
+      "plan(description, defaults)": "KEPT: Convenience wrapper calling planPreview + planCommit"
     },
-    "apiEndpoints": {
-      "GET /api/projects": "List all projects with live status",
-      "POST /api/projects/add": "Register a project { path, name? }",
-      "POST /api/projects/remove": "Unregister { path }",
-      "POST /api/projects/scan": "Auto-discover { dir }",
-      "GET /api/projects/queue?path=": "Get project queue",
-      "POST /api/projects/queue/add": "Add task to project queue { path, goal }",
-      "POST /api/projects/queue/start": "Start project queue (spawn detached process)",
-      "POST /api/projects/queue/clear": "Clear project queue",
-      "GET /api/projects/history?path=": "Get project history",
-      "GET /api/projects/stats?path=": "Get project stats"
+    "cliChanges": {
+      "queue split <text> [opts]": "NEW: Split text → preview table → Y/n confirm → add to queue",
+      "flags": ["--yes (skip confirmation)", "--engine", "--quick", "--concurrency", "--model"]
     },
-    "cliCommands": {
-      "awsl projects": "List all registered projects with status",
-      "awsl projects add [path]": "Register project (default: cwd)",
-      "awsl projects remove <path|name>": "Unregister project",
-      "awsl projects scan [dir]": "Auto-discover projects"
-    },
-    "waves": {
-      "wave1_parallel": ["task_1: src/projects.ts (ProjectManager)", "task_2: CLI projects subcommand + auto-register"],
-      "wave2_depends_task1": ["task_3: Dashboard API endpoints", "task_4: Dashboard UI Projects section"],
-      "wave3_depends_task1": ["task_5: index.ts exports"],
-      "wave4_depends_all": ["task_6: Tests", "task_7: Documentation"]
+    "interfaceChanges": {
+      "PlannedTask": "Add optional mode?: 'build' | 'discuss' field"
     },
     "keyDecisions": {
-      "registry_location": "~/.awsl/projects.json — global user-level, not per-project",
-      "project_identity": "Absolute path is unique key, name is display label",
-      "cross_project_queue_start": "Spawn detached child process 'awsl queue start --cwd <path>'",
-      "auto_registration": "awsl start/run/queue auto-registers current project",
-      "no_shared_queue": "Each project keeps its own queue, dashboard is unified view only"
-    }
+      "preview_before_commit": "Core fix: users need to see tasks before they're added",
+      "backward_compat": "plan() kept as wrapper so existing scripts don't break",
+      "split_vs_plan": "split = interactive preview, plan = immediate add — different intent",
+      "no_interactive_edit_v1": "User can queue remove individual tasks after split",
+      "chinese_output": "Preview table uses Chinese labels per user preference"
+    },
+    "implementationOrder": [
+      "1. src/queue.ts — refactor plan into planPreview + planCommit",
+      "2. src/cli.ts — add queue split command with Y/n confirmation",
+      "3. src/index.ts — export PlannedTask",
+      "4. Documentation (README.md, README.zh-CN.md, BEST_PRACTICES.md)",
+      "5. CLAUDE.md — update auto-queue rule",
+      "6. Build + test"
+    ]
   }
 }

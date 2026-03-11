@@ -1,17 +1,20 @@
-Conventions file is already comprehensive and up-to-date. Only added one minor detail about the `process.exit(0)` test convention.
-
 ## AWSL_RESULT
 
-The conventions analysis is complete. The file at `memory/conventions.md` already contained thorough documentation from a previous session. Key conventions:
+Conventions document already existed at `memory/conventions.md` — verified against current codebase and updated with minor corrections.
 
-| Area | Convention |
-|------|-----------|
-| **Naming** | camelCase vars/funcs, PascalCase types, UPPER_SNAKE constants, kebab-case files |
-| **Style** | Strict TS, ES modules with `.js` ext, `node:` prefix, named exports only, section dividers |
-| **Errors** | Fail-soft (return null/false), bare `catch {}`, throw only for preconditions |
-| **Async** | async/await, sync fs ops, `Promise.all`/`allSettled` for parallelism, `spawn` for streaming |
-| **Logging** | `log.info/warn/debug(source, msg)` to stderr, never `console.log` in production |
-| **State** | File-as-state in `.planning/`, JSON for data, Markdown for plans |
-| **Testing** | `node:test` + `node:assert/strict` primary; custom assert helpers secondary; `process.exit(0)` on success |
+### Key conventions summary:
 
-**File**: `memory/conventions.md` (updated, 143 lines)
+**Naming**: camelCase functions (verb-first), PascalCase interfaces/classes, UPPER_SNAKE constants, `create` prefix for factories, no enums (string literal unions)
+
+**Style**: TypeScript strict, ES modules with `.js` extensions, `node:` prefix for builtins, `import type` for types, tabs, double quotes, section dividers with `─── Title ───`
+
+**Error handling**: Fail-soft (return defaults, not throw), bare `catch {}` when unused, `catch (e: any)` when message needed, never throw in agent tools, atomic file creation with `wx` flag
+
+**Async**: async/await only, sync fs throughout, `spawn` for streaming, `Promise.allSettled` for non-critical parallel work, manual worker pool (`runParallel`)
+
+**Testing**: `node:test` + `node:assert/strict`, tests colocated in `src/*.test.ts`, no mocking framework, temp dirs via `fs.mkdtempSync`, helper functions for fixture setup
+
+**Architecture**: Conductor/Guardian pattern, dual engine, factory functions, provider pattern, topo-sort waves, checkpoint/resume, file-as-state in `.planning/`
+
+### Files updated:
+- `memory/conventions.md` — minor corrections to testing section, added `discuss.ts` to module boundaries

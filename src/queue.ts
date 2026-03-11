@@ -544,16 +544,10 @@ export class TaskQueue {
 	// ─── Plan from natural language ──────────────────────────
 
 	/**
-	 * Use LLM to parse a natural language description into structured queue tasks,
-	 * then add them all to the queue with inferred dependencies.
-	 *
-	 * Example input: "先构建用户认证，然后加支付模块，最后写集成测试"
-	 * Result: 3 tasks with q_1 → q_2 → q_3 dependency chain.
+	 * Preview: call LLM to parse a natural language description into PlannedTask[],
+	 * WITHOUT modifying the queue. Allows inspection before committing.
 	 */
-	async plan(
-		description: string,
-		defaults?: { engine?: Engine; quick?: boolean; concurrency?: number; model?: string },
-	): Promise<QueueTask[]> {
+	async planPreview(description: string): Promise<PlannedTask[]> {
 		log.info("queue", "Parsing natural language into queue tasks...");
 
 		const prompt = `You are a task planner. Parse the following natural language description into a list of independent build tasks for a software project queue.
@@ -594,8 +588,17 @@ ${description}`;
 			throw new Error("LLM returned empty or invalid task list");
 		}
 
-		// Add tasks to queue, mapping position references to actual IDs.
-		// We pre-compute the IDs so dependency refs can resolve correctly.
+		return planned;
+	}
+
+	/**
+	 * Commit: take a PlannedTask[] array (from planPreview), resolve dependency
+	 * references, and add each task to the queue.
+	 */
+	planCommit(
+		planned: PlannedTask[],
+		defaults?: { engine?: Engine; quick?: boolean; concurrency?: number; model?: string },
+	): QueueTask[] {
 		const added: QueueTask[] = [];
 		const data = this.load();
 		const firstId = this.nextId(data);
@@ -635,6 +638,20 @@ ${description}`;
 		}
 
 		return added;
+	}
+
+	/**
+	 * Use LLM to parse a natural language description into structured queue tasks,
+	 * then add them all to the queue with inferred dependencies.
+	 *
+	 * Backward-compatible wrapper: calls planPreview() then planCommit().
+	 */
+	async plan(
+		description: string,
+		defaults?: { engine?: Engine; quick?: boolean; concurrency?: number; model?: string },
+	): Promise<QueueTask[]> {
+		const planned = await this.planPreview(description);
+		return this.planCommit(planned, defaults);
 	}
 
 	// ─── Call Claude CLI ─────────────────────────────────────

@@ -51,9 +51,14 @@
       "options": {
         "quick": false
       },
-      "status": "running",
+      "status": "done",
       "scheduledAt": "2026-03-10T15:01:20.358Z",
-      "startedAt": "2026-03-11T02:21:20.872Z"
+      "startedAt": "2026-03-11T02:21:20.872Z",
+      "completedAt": "2026-03-11T02:27:35.615Z",
+      "result": {
+        "success": true,
+        "summary": "✅ 1/1 tasks completed successfully.\n\n✅ task_1 (coder): On line 949 of public/dashboard.html, replace the Clear History button's inli... [public/dashboard.html]\n   → Clean type-check. The fix is applied.\n\n## AWSL_RESULT\n\n**Fixed**: Replaced the Clear History button's inline style with the `.tl-collapse-btn` class in `public/dashboard.html:949`.\n\n**Before**: `<button onclick=\"clearHistory()\" style=\"float:right;font-size:12px;padding:2px 10px;cursor:pointer;backgr"
+      }
     },
     {
       "id": "q_5",
@@ -61,10 +66,11 @@
       "options": {
         "quick": false
       },
-      "status": "pending",
-      "scheduledAt": "2026-03-10T15:02:40.439Z"
+      "status": "running",
+      "scheduledAt": "2026-03-10T15:02:40.439Z",
+      "startedAt": "2026-03-11T02:27:35.647Z"
     }
   ],
   "createdAt": "2026-03-10T14:57:06.247Z",
-  "updatedAt": "2026-03-11T02:21:20.872Z"
+  "updatedAt": "2026-03-11T02:27:35.647Z"
 }

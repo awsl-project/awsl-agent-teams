@@ -453,7 +453,42 @@
         "reviewer"
       ],
       "maxConcurrency": 3
+    },
+    {
+      "id": "h_18",
+      "date": "2026-03-11T02:27:35.616Z",
+      "project": "awsl-agent-teams",
+      "projectPath": "C:\\Users\\11421\\awsl-agent-teams",
+      "queueTaskId": "q_4",
+      "goal": "clear history的 按钮底色是黑色太不合理了 要帮我修",
+      "status": "done",
+      "startedAt": "2026-03-11T02:21:20.872Z",
+      "completedAt": "2026-03-11T02:27:35.615Z",
+      "duration": 374743,
+      "tasksCompleted": 1,
+      "tasksTotal": 1,
+      "summary": "✅ 1/1 tasks completed successfully.\n\n✅ task_1 (coder): On line 949 of public/dashboard.html, replace the Clear History button's inli... [public/dashboard.html]\n   → Clean type-check. The fix is applied.\n\n## AWSL_RESULT\n\n**Fixed**: Replaced the Clear History button's inline style with the `.tl-collapse-btn` class in `public/dashboard.html:949`.\n\n**Before**: `<button onclick=\"clearHistory()\" style=\"float:right;font-size:12px;padding:2px 10px;cursor:pointer;backgr",
+      "engine": "claude-code",
+      "inputTokens": 2122,
+      "outputTokens": 11794,
+      "costUsd": 1.2606764000000001,
+      "waves": [
+        {
+          "wave": 1,
+          "taskIds": [
+            "task_1"
+          ],
+          "agents": [
+            "coder"
+          ],
+          "parallel": 1
+        }
+      ],
+      "agents": [
+        "coder"
+      ],
+      "maxConcurrency": 1
     }
   ],
-  "updatedAt": "2026-03-11T02:21:20.841Z"
+  "updatedAt": "2026-03-11T02:27:35.616Z"
 }
