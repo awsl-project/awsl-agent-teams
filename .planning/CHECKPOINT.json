@@ -1,0 +1,43 @@
+{
+  "wave": 0,
+  "completedTasks": [
+    "task_1",
+    "task_2"
+  ],
+  "taskResults": {
+    "task_1": "File created and verified.\n\n## AWSL_RESULT\n\n**Task:** Create hello1.txt\n**Status:** Done\n\n**Files created:**\n- `test/hello1.txt` — contains exactly `hello from agent 1`\n\n**Verification:** `cat test/hello1.txt` outputs `hello from agent 1` — matches expected content.",
+    "task_2": "## AWSL_RESULT\n\nTask completed successfully.\n\n- **File created:** `test/hello2.txt`\n- **Content:** `hello from agent 2`\n- **Verification:** `cat test/hello2.txt` outputs exactly `hello from agent 2`"
+  },
+  "failedTasks": [],
+  "taskErrors": {},
+  "rateLimitRetries": 0,
+  "savedAt": "2026-03-11T15:47:47.948Z",
+  "memory": {
+    "result:planner:session": {
+      "value": "16ec62df-ec26-4ff4-bfec-d415d789a2b4",
+      "author": "planner",
+      "timestamp": 1773244036492
+    },
+    "plan": {
+      "value": "[\n  {\n    \"id\": \"task_1\",\n    \"name\": \"Create hello1.txt\",\n    \"assignee\": \"coder\",\n    \"dependencies\": [],\n    \"files\": [\n      \"test/hello1.txt\"\n    ],\n    \"action\": \"Create the file test/hello1.txt with the exact content 'hello from agent 1' (no quotes). Create the test/ directory first if it doesn't exist.\",\n    \"verify\": \"cat test/hello1.txt\",\n    \"done\": \"test/hello1.txt exists and contains exactly 'hello from agent 1'\"\n  },\n  {\n    \"id\": \"task_2\",\n    \"name\": \"Create hello2.txt\",\n    \"assignee\": \"coder\",\n    \"dependencies\": [],\n    \"files\": [\n      \"test/hello2.txt\"\n    ],\n    \"action\": \"Create the file test/hello2.txt with the exact content 'hello from agent 2' (no quotes). Create the test/ directory first if it doesn't exist.\",\n    \"verify\": \"cat test/hello2.txt\",\n    \"done\": \"test/hello2.txt exists and contains exactly 'hello from agent 2'\"\n  }\n]",
+      "author": "planner",
+      "timestamp": 1773244036493
+    },
+    "result:coder:session": {
+      "value": "e8b7c883-6266-4f7e-9ee5-74466afb817e",
+      "author": "coder",
+      "timestamp": 1773244067854
+    },
+    "result:task_2": {
+      "value": "## AWSL_RESULT\n\nTask completed successfully.\n\n- **File created:** `test/hello2.txt`\n- **Content:** `hello from agent 2`\n- **Verification:** `cat test/hello2.txt` outputs exactly `hello from agent 2`",
+      "author": "coder",
+      "timestamp": 1773244064097
+    },
+    "result:task_1": {
+      "value": "File created and verified.\n\n## AWSL_RESULT\n\n**Task:** Create hello1.txt\n**Status:** Done\n\n**Files created:**\n- `test/hello1.txt` — contains exactly `hello from agent 1`\n\n**Verification:** `cat test/hello1.txt` outputs `hello from agent 1` — matches expected content.",
+      "author": "coder",
+      "timestamp": 1773244067854
+    }
+  },
+  "goal": "Create two files in parallel using the Agent tool: (1) test/hello1.txt containing 'hello from agent 1' (2) test/hello2.txt containing 'hello from agent 2'. Use separate agents for each file."
+}
