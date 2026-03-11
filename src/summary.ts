@@ -42,6 +42,13 @@ export interface SessionSummary {
 	totalOutputTokens: number;
 	agentBreakdown: Record<string, number>;
 	projects: string[];
+	discussions: {
+		question: string;
+		answer: string;
+		agents: string[];
+		duration: number;
+		costUsd: number;
+	}[];
 }
 
 export interface SummaryOptions {
@@ -55,6 +62,9 @@ export interface SummaryOptions {
 // ─── Time helpers ────────────────────────────────────────────
 
 function parseHHMM(timeStr: string): { hours: number; minutes: number } {
+	if (!/^\d{1,2}:\d{2}$/.test(timeStr)) {
+		throw new Error(`Invalid time format "${timeStr}" — expected HH:MM (e.g. "22:00")`);
+	}
 	const parts = timeStr.split(":");
 	return { hours: parseInt(parts[0], 10), minutes: parseInt(parts[1], 10) };
 }
@@ -117,7 +127,8 @@ function getGitCommits(cwd: string, from: Date, to: Date): CommitInfo[] {
 	try {
 		const fromISO = from.toISOString();
 		const toISO = to.toISOString();
-		const format = "%H|%s|%aI|%an";
+		const SEP = "%x00";
+		const format = `%H${SEP}%s${SEP}%aI${SEP}%an`;
 		const output = execSync(
 			`git log --after="${fromISO}" --before="${toISO}" --format="${format}"`,
 			{ cwd, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] },
@@ -126,7 +137,7 @@ function getGitCommits(cwd: string, from: Date, to: Date): CommitInfo[] {
 		if (!output) return [];
 
 		return output.split("\n").map((line) => {
-			const [hash, message, date, author] = line.split("|");
+			const [hash, message, date, author] = line.split("\0");
 			return { hash, message, date, author };
 		});
 	} catch {
@@ -212,6 +223,17 @@ export function generateSummary(options: SummaryOptions): SessionSummary {
 	const done = filtered.filter((e) => e.status === "done").length;
 	const failed = filtered.filter((e) => e.status === "failed").length;
 
+	// Extract discussions from discuss-mode entries
+	const discussions = filtered
+		.filter((e) => e.mode === "discuss" && e.answer)
+		.map((e) => ({
+			question: e.goal,
+			answer: e.answer as string,
+			agents: e.agents ?? [],
+			duration: e.duration,
+			costUsd: e.costUsd ?? 0,
+		}));
+
 	return {
 		timeRange,
 		tasks: {
@@ -230,6 +252,7 @@ export function generateSummary(options: SummaryOptions): SessionSummary {
 		totalOutputTokens,
 		agentBreakdown,
 		projects: [...projectSet],
+		discussions,
 	};
 }
 
@@ -267,7 +290,7 @@ function formatTimeOnly(d: Date): string {
  * Format a SessionSummary into a pretty CLI string with box-drawing chars.
  */
 export function formatSummary(summary: SessionSummary): string {
-	const { timeRange, tasks, git, totalDuration, totalCostUsd, totalInputTokens, totalOutputTokens, agentBreakdown, projects } = summary;
+	const { timeRange, tasks, git, totalDuration, totalCostUsd, totalInputTokens, totalOutputTokens, agentBreakdown, projects, discussions } = summary;
 
 	if (tasks.total === 0 && git.commitCount === 0) {
 		return "No activity found in this time range.";
@@ -324,6 +347,23 @@ export function formatSummary(summary: SessionSummary): string {
 			lines.push(`    ${startTime}  ${status.padEnd(8)} ${entry.goal} (${dur}, ${cost})`);
 		}
 		lines.push("");
+	}
+
+	// Discussions
+	if (discussions.length > 0) {
+		lines.push("  Discussions:");
+		for (const d of discussions) {
+			const dur = formatDuration(d.duration);
+			const cost = `$${d.costUsd.toFixed(2)}`;
+			const agentCount = d.agents.length;
+			const preview = d.answer.length > 150
+				? d.answer.slice(0, 150).replace(/\n/g, " ") + "..."
+				: d.answer.replace(/\n/g, " ");
+			lines.push(`    Q: ${d.question}`);
+			lines.push(`    A: ${preview}`);
+			lines.push(`    (${agentCount} agents, ${dur}, ${cost})`);
+			lines.push("");
+		}
 	}
 
 	// Projects
