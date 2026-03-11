@@ -229,6 +229,12 @@ awsl review            # Static code review (no LLM) — detect any, secrets, mi
 awsl lock              # Show current lock status
 awsl unlock [--force]  # Release lock
 awsl agents            # List available agents
+
+# Project management
+awsl projects                       # List all registered projects with status
+awsl projects add [path] [--name N] # Register a project (default: cwd)
+awsl projects remove <path|name>    # Unregister a project
+awsl projects scan [dir]            # Auto-discover projects in a directory
 ```
 
 ## Task Queue (Sleep Mode)
@@ -352,6 +358,7 @@ Features:
 - **Duration trend chart** — SVG line chart showing build time trends over the last 30 days
 - **Timeline** — Vertical timeline of all runs, grouped by date, filterable by project
 - **Project sidebar** — All projects with color-coded badges and task counts
+- **Projects management** — Register, remove, scan, and view all projects with live status (queue counts, lock state, last run). Select a project to view its queue or add tasks to it directly from the dashboard
 - **Queue monitor** — Live view of current queue status with auto-refresh (30s)
 - **Queue operations** — Add, remove, and clear tasks directly from the dashboard UI
 - **Queue scheduling** — Datetime picker on the add-task form to set `runAt`; queue table shows a "Run At" column with effective time (own time shown directly, inherited from dependency chain shown with arrow indicator); click a pending task's time cell to edit/clear the scheduled time
@@ -371,6 +378,16 @@ API endpoints:
 - `POST /api/queue/clear` — clear all tasks
 - `POST /api/queue/set-time` — set/change/clear scheduled time `{id, runAt}`
 - `POST /api/history/clear` — clear execution history
+- `GET /api/projects` — list all registered projects with live status
+- `POST /api/projects/add` — register a project `{path, name?, tags?}`
+- `POST /api/projects/remove` — unregister a project `{path}`
+- `POST /api/projects/scan` — auto-discover projects `{dir, depth?}`
+- `GET /api/projects/queue?path=` — get queue for a specific project
+- `POST /api/projects/queue/add` — add task to a project's queue `{path, goal, ...}`
+- `POST /api/projects/queue/start` — start queue execution for a project `{path, engine?, once?}`
+- `POST /api/projects/queue/clear` — clear a project's queue `{path}`
+- `GET /api/projects/history?path=` — get history for a specific project
+- `GET /api/projects/stats?path=` — get stats for a specific project
 - `GET /api/clients` — list connected remote clients
 - `POST /api/clients/command` — send command to a client `{clientId, action, payload?}`
 - `WebSocket /ws/relay` — relay endpoint for remote client connections
@@ -814,6 +831,12 @@ awsl status                                  # Check what's running
 awsl dashboard [--port N]                     # Open the sleep mode pixel dashboard (default: 3120)
 awsl dashboard --bg                          # Start dashboard as background process
 awsl dashboard stop                          # Stop background dashboard process
+
+# Project management
+awsl projects                                # List all registered projects with status
+awsl projects add [path] [--name N]          # Register a project (default: cwd)
+awsl projects remove <path|name>             # Unregister a project
+awsl projects scan [dir]                     # Auto-discover projects in a directory
 
 # Remote control (connect local machine to remote dashboard)
 awsl remote init http://server:3120          # Save config + start connection

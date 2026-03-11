@@ -60,6 +60,8 @@ awsl run "goal" --engine claude-code
 查看睡前模式仪表盘        →  awsl dashboard
 后台启动仪表盘            →  awsl dashboard --bg
 停止后台仪表盘            →  awsl dashboard stop
+管理多项目                →  awsl projects
+自动发现项目              →  awsl projects scan ~/dev
 ```
 
 ### 怎么选模式？
@@ -1248,6 +1250,32 @@ awsl dashboard
   - 波次分解（每波并行了哪些角色、几个 agent 同时跑）
 - 数据来源：orchestrator 执行时收集 wave 和 agent 信息，写入 HISTORY.json
 - 远程客户端的数据同样参与聚合统计
+
+**项目管理面板：**
+
+管理多个 AWSL 项目的统一入口。所有项目注册到 `~/.awsl/projects.json`，面板实时展示每个项目的状态。
+
+- **项目卡片** — 每个已注册项目显示为一张卡片，包含：
+  - 状态指示灯（idle/active/running/locked/missing）
+  - 队列进度条（pending/done/failed 比例）
+  - 上次运行信息（时间、状态、耗时）
+- **选中项目** — 点击项目卡片后：
+  - 显示操作按钮（查看队列、添加任务、启动执行）
+  - 可直接在面板上操作该项目的任务队列
+- **注册项目** — 三种方式：
+  - CLI：`awsl projects add /path/to/project --name my-app`
+  - API：`POST /api/projects/add {path, name?, tags?}`
+  - 自动注册：运行 `awsl run` 或 `awsl queue start` 时自动注册当前目录
+- **自动发现** — `awsl projects scan ~/dev` 递归扫描目录，自动注册含 `.planning/` 或 `.git` 的项目
+- **跨项目队列操作** — 通过面板 API 向任意已注册项目添加任务、启动执行，无需切换目录
+
+CLI 命令：
+```bash
+awsl projects                            # 列出所有项目及状态
+awsl projects add [path] [--name N]      # 注册项目
+awsl projects remove <path|name>         # 取消注册
+awsl projects scan [dir]                 # 自动发现
+```
 
 **后台启动仪表盘：**
 ```bash

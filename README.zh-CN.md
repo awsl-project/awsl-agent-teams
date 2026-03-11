@@ -229,6 +229,12 @@ awsl review            # 静态代码审查（无 LLM）— 检测 any、密钥�
 awsl lock              # 查看当前锁状态
 awsl unlock [--force]  # 释放锁
 awsl agents            # 列出可用智能体
+
+# 项目管理
+awsl projects                            # 列出所有已注册项目及状态
+awsl projects add [path] [--name N]      # 注册项目（默认当前目录）
+awsl projects remove <path|name>         # 取消注册项目
+awsl projects scan [dir]                 # 自动发现目录下的项目
 ```
 
 ## 任务队列（睡前模式）
@@ -352,6 +358,7 @@ awsl dashboard stop         # 停止后台仪表盘进程
 - **耗时趋势图** — SVG 折线图，展示最近 30 天的构建耗时变化
 - **时间线** — 按日期分组的运行记录，支持按项目筛选
 - **项目侧边栏** — 所有项目列表，彩色徽章 + 任务计数
+- **项目管理** — 注册、移除、扫描、查看所有项目的实时状态（队列计数、锁状态、上次运行）。选中项目可直接在面板上查看其队列或添加任务
 - **队列监控** — 当前队列状态实时刷新（30 秒间隔）
 - **队列操作** — 直接在看板上添加、删除、清空队列任务
 - **队列定时调度** — 添加任务表单中的日期时间选择器可设置 `runAt`；队列表格新增"执行时间"列，显示生效时间（任务自身时间直接显示，从依赖链继承的时间带箭头标识）；点击 pending 任务的时间单元格可编辑/清除调度时间
@@ -371,6 +378,16 @@ API 端点：
 - `POST /api/queue/clear` — 清空所有任务
 - `POST /api/queue/set-time` — 设置/修改/清除调度时间 `{id, runAt}`
 - `POST /api/history/clear` — 清除执行历史
+- `GET /api/projects` — 所有已注册项目的实时状态
+- `POST /api/projects/add` — 注册项目 `{path, name?, tags?}`
+- `POST /api/projects/remove` — 取消注册项目 `{path}`
+- `POST /api/projects/scan` — 自动发现项目 `{dir, depth?}`
+- `GET /api/projects/queue?path=` — 获取指定项目的队列
+- `POST /api/projects/queue/add` — 向指定项目添加任务 `{path, goal, ...}`
+- `POST /api/projects/queue/start` — 启动指定项目的队列执行 `{path, engine?, once?}`
+- `POST /api/projects/queue/clear` — 清空指定项目的队列 `{path}`
+- `GET /api/projects/history?path=` — 获取指定项目的执行历史
+- `GET /api/projects/stats?path=` — 获取指定项目的统计数据
 - `GET /api/clients` — 已连接的远程客户端列表
 - `POST /api/clients/command` — 向客户端发送命令 `{clientId, action, payload?}`
 - `WebSocket /ws/relay` — 远程客户端 WebSocket 中继端点
@@ -809,6 +826,12 @@ awsl status                                    # 查看运行状态
 awsl dashboard [--port N]                      # 打开睡前模式像素风仪表盘（默认端口 3120）
 awsl dashboard --bg                            # 后台启动仪表盘进程
 awsl dashboard stop                            # 停止后台仪表盘进程
+
+# 项目管理
+awsl projects                                  # 列出所有已注册项目及状态
+awsl projects add [path] [--name N]            # 注册项目（默认当前目录）
+awsl projects remove <path|name>               # 取消注册项目
+awsl projects scan [dir]                       # 自动发现目录下的项目
 
 # 远程控制（将本地机器连接到远程面板）
 awsl remote init http://server:3120            # 保存配置 + 启动连接
