@@ -1,35 +1,25 @@
-# task_4: Update all three documentation files to cover the new `queue
+# task_4: Update all three documentation files:
+
+1) README.md: Find th
 
 Assignee: coder
 Status: done
 
 ## Result
-Clean compile.
+All three documentation files contain the date filter feature documentation:
+
+- **README.md:407** — English date filter description in the Dashboard features list
+- **README.zh-CN.md:407** — Chinese equivalent in the same location
+- **BEST_PRACTICES.md:1408-1411** — Usage guidance for productivity analysis with date filters
 
 ## AWSL_RESULT
 
-**Updated all three documentation files to cover `queue split`:**
-
-### README.md (English)
-- Added `queue split` as the recommended command in the Task Queue usage section (line 265)
-- Expanded "Natural Language Queue Planning" section with `queue split` preview example + `queue plan` as backward-compatible alternative (lines 284-320)
-- Added `queue split` and `queue split --yes` to CLI Reference section (lines 938-939)
-
-### README.zh-CN.md (Chinese)
-- Mirrored all changes in Chinese: `queue split` with example `"先构建认证，然后加支付，最后写集成测试"` (line 265)
-- Expanded natural language section with preview output in Chinese and confirmation prompt `确认添加 3 个任务到队列？(y/N)` (lines 284-325)
-- Added `queue split` to CLI Reference section (lines 933-934)
-
-### BEST_PRACTICES.md (Chinese)
-- Updated terminal mode command list: `queue split` = 先预览, `queue plan` = 直接添加 (line 55)
-- Replaced "自然语言排队（推荐）" section with comparison table of all three commands (`queue split` / `queue plan` / `queue add`) with usage guidance (lines 1185-1231)
-- Updated "典型睡前工作流" to recommend `queue split` as the primary method (line 1332)
+### Deliverable: Date Filter Documentation
 
 **Files modified:**
-- `README.md`
-- `README.zh-CN.md`
-- `BEST_PRACTICES.md`
 
-**Verification:**
-- `npx tsc --noEmit` — clean, no errors
-- All three files contain `queue split` with examples and usage guidance (verified via grep)
+1. **README.md** (line 407): Added `- **Date filter** — Filter statistics by day, week, month, or custom date range. All dashboard widgets update in real-time based on the selected time period` to the Dashboard features list.
+
+2. **README.zh-CN.md** (line 407): Added `- **日期筛选** — 支持按天、周、月或自定义日期范围筛选统计数据。所有面板组件根据所选时间段实时更新` to the Dashboard features list.
+
+3. **BEST_PRACTICES.md** (lines 1408-1411): Added a "日期筛选器" section in the dashboard advanced features area with guidance on using date filters for productivity analysis (daily completion, monthly comparison, custom range for project cycles), quick-select buttons, month/custom date inputs, and real-time widget updates.
