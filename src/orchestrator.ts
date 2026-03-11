@@ -110,7 +110,7 @@ export interface ExecuteOptions {
 	qualityGate?: boolean;
 	/** Custom skill registry. Default uses built-in skills. */
 	skills?: SkillRegistry;
-	/** Execution engine: "claude-code" or "builtin". Auto-detected if omitted. */
+	/** Execution engine: "claude-code", "codex", or "builtin". Auto-detected if omitted. */
 	engine?: Engine;
 	/** Max auto-fix attempts. Default 3. */
 	maxFixAttempts?: number;

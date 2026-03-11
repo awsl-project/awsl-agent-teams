@@ -1,9 +1,13 @@
 /**
- * AWSL Agent runner — dual engine support.
+ * AWSL Agent runner — multi-engine support.
  *
  * Engine "claude-code":
  *   Spawns `claude -p` subprocess per task — full Claude Code power
  *   (built-in tools, compaction, context management, all permissions)
+ *
+ * Engine "codex":
+ *   Spawns `codex exec` subprocess per task — full Codex CLI power
+ *   (tools, sandbox, non-interactive execution)
  *
  * Engine "builtin":
  *   Uses pi-agent-core Agent class in-process — works with any LLM provider
@@ -14,6 +18,7 @@
 
 import { execSync, spawn } from "node:child_process";
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import { Agent, type AgentEvent, type AgentMessage } from "@mariozechner/pi-agent-core";
 import { getModel } from "@mariozechner/pi-ai";
@@ -26,7 +31,7 @@ import { defaultPolicy } from "./sandbox.js";
 import { log } from "./log.js";
 import { getLogStream } from "./logstream.js";
 
-export type Engine = "claude-code" | "builtin";
+export type Engine = "claude-code" | "codex" | "builtin";
 
 export interface RunResult {
 	agent: string;
@@ -37,6 +42,15 @@ export interface RunResult {
 	inputTokens?: number;
 	outputTokens?: number;
 	costUsd?: number;
+}
+
+interface CodexJsonEvent {
+	type?: string;
+	thread_id?: string;
+	usage?: {
+		input_tokens?: number;
+		output_tokens?: number;
+	};
 }
 
 // ─── Rate Limit Detection ────────────────────────────────────
@@ -55,6 +69,238 @@ const RATE_LIMIT_PATTERNS = [
 
 export function isRateLimitError(text: string): boolean {
 	return RATE_LIMIT_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+// ─── Codex Engine ───────────────────────────────────────────
+
+async function runWithCodex(
+	agentDef: TeamAgentDef,
+	task: string,
+	cwd: string,
+	memory: SharedMemory,
+	teamRoster: string,
+	skillRegistry?: SkillRegistry,
+	taskId?: string,
+): Promise<RunResult> {
+	const skills = skillRegistry ?? new SkillRegistry();
+	const skillInstructions = skills.buildInstructions(agentDef.role, agentDef.skills);
+	const memSummary = memory.getSummary();
+
+	const prompt = `# Agent: ${agentDef.name} (${agentDef.role})
+
+${agentDef.systemPrompt}
+${skillInstructions}
+
+## Team Context
+${teamRoster}
+
+## Shared Memory
+${memSummary === "(empty)" ? "No shared data yet." : memSummary}
+
+## Instructions
+- Complete the task below
+- At the end, output a section "## AWSL_RESULT" with your final deliverable summary
+- If you produced files, list them
+- If you ran tests, include the results
+
+## Task
+${task}`;
+
+	let codexCmd: string;
+	let baseArgs: string[];
+	const codexCliJs = path.join(path.dirname(process.execPath), "node_modules", "@openai", "codex", "bin", "codex.js");
+
+	if (process.platform === "win32" && fs.existsSync(codexCliJs)) {
+		codexCmd = process.execPath; // node.exe
+		baseArgs = [codexCliJs];
+	} else {
+		codexCmd = "codex";
+		baseArgs = [];
+	}
+
+	const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "awsl-codex-"));
+	const lastMessagePath = path.join(tmpDir, "last-message.txt");
+
+	const args = [
+		...baseArgs,
+		"exec",
+		"--json",
+		"--ephemeral",
+		"--full-auto",
+		"--sandbox",
+		"workspace-write",
+		"--output-last-message",
+		lastMessagePath,
+	];
+
+	// Use model if specified on agent
+	if (agentDef.model) {
+		const modelId = agentDef.model.includes(":") ? agentDef.model.split(":")[1] : agentDef.model;
+		args.push("--model", modelId);
+	}
+
+	// Read prompt from stdin for robust multiline handling
+	args.push("-");
+
+	log.info(agentDef.name, `Starting... (engine: codex)`);
+
+	return new Promise<RunResult>((resolve) => {
+		const child = spawn(codexCmd, args, {
+			cwd,
+			stdio: ["pipe", "pipe", "pipe"],
+			env: process.env,
+		});
+
+		child.stdin.write(prompt);
+		child.stdin.end();
+
+		let stdout = "";
+		let stderr = "";
+		let sessionId = "";
+		let inputTokens = 0;
+		let outputTokens = 0;
+		let turns = 0;
+		let stdoutLineBuffer = "";
+		let stderrLineBuffer = "";
+
+		const logStream = getLogStream();
+		const logTaskId = taskId ?? agentDef.name;
+
+		const parseJsonEvent = (line: string) => {
+			const trimmed = line.trim();
+			if (!trimmed) return;
+			try {
+				const event = JSON.parse(trimmed) as CodexJsonEvent;
+				if (event.type === "thread.started" && event.thread_id) {
+					sessionId = event.thread_id;
+				}
+				if (event.type === "turn.completed") {
+					turns++;
+					inputTokens += event.usage?.input_tokens ?? 0;
+					outputTokens += event.usage?.output_tokens ?? 0;
+				}
+			} catch {
+				// ignore non-JSON lines
+			}
+		};
+
+		child.stdout.on("data", (data: Buffer) => {
+			const chunk = data.toString();
+			stdout += chunk;
+			stdoutLineBuffer += chunk;
+			const lines = stdoutLineBuffer.split("\n");
+			stdoutLineBuffer = lines.pop() ?? "";
+			for (const line of lines) {
+				if (!line.trim()) continue;
+				logStream.push({ timestamp: new Date().toISOString(), taskId: logTaskId, agent: agentDef.name, stream: "stdout", text: line });
+				parseJsonEvent(line);
+			}
+		});
+
+		child.stderr.on("data", (data: Buffer) => {
+			const chunk = data.toString();
+			stderr += chunk;
+			process.stderr.write(chunk);
+			stderrLineBuffer += chunk;
+			const lines = stderrLineBuffer.split("\n");
+			stderrLineBuffer = lines.pop() ?? "";
+			for (const line of lines) {
+				if (!line.trim()) continue;
+				logStream.push({ timestamp: new Date().toISOString(), taskId: logTaskId, agent: agentDef.name, stream: "stderr", text: line });
+			}
+		});
+
+		const cleanupTmp = () => {
+			try { if (fs.existsSync(lastMessagePath)) fs.unlinkSync(lastMessagePath); } catch { /* ignore */ }
+			try { if (fs.existsSync(tmpDir)) fs.rmdirSync(tmpDir); } catch { /* ignore */ }
+		};
+
+		child.on("close", (code) => {
+			if (stdoutLineBuffer.trim()) {
+				logStream.push({ timestamp: new Date().toISOString(), taskId: logTaskId, agent: agentDef.name, stream: "stdout", text: stdoutLineBuffer });
+				parseJsonEvent(stdoutLineBuffer);
+			}
+			if (stderrLineBuffer.trim()) {
+				logStream.push({ timestamp: new Date().toISOString(), taskId: logTaskId, agent: agentDef.name, stream: "stderr", text: stderrLineBuffer });
+			}
+
+			const combined = stderr + stdout;
+
+			if (code !== 0 && isRateLimitError(combined)) {
+				log.warn(agentDef.name, `Rate limited (exit: ${code})`);
+				cleanupTmp();
+				resolve({
+					agent: agentDef.name,
+					status: "rate_limited",
+					result: "",
+					turns: turns || 0,
+					error: combined.slice(0, 500),
+					inputTokens,
+					outputTokens,
+					costUsd: 0,
+				});
+				return;
+			}
+
+			let result = "";
+			try {
+				if (fs.existsSync(lastMessagePath)) {
+					result = fs.readFileSync(lastMessagePath, "utf-8").trim();
+				}
+			} catch {
+				// fall back to stdout
+			}
+
+			if (!result) {
+				result = stdout.trim() || stderr.trim();
+			}
+
+			if (sessionId) {
+				memory.set(`result:${agentDef.name}:session`, sessionId, agentDef.name);
+			}
+
+			log.info(agentDef.name, `Done (codex, exit: ${code})`);
+			cleanupTmp();
+			resolve({
+				agent: agentDef.name,
+				status: code === 0 ? "done" : "failed",
+				result,
+				turns: turns || 1,
+				error: code !== 0 ? `Exit code ${code}: ${(stderr || stdout).slice(0, 200)}` : undefined,
+				inputTokens,
+				outputTokens,
+				costUsd: 0,
+			});
+		});
+
+		child.on("error", (err) => {
+			cleanupTmp();
+			if (isRateLimitError(err.message)) {
+				log.warn(agentDef.name, "Rate limited (spawn error)");
+				resolve({
+					agent: agentDef.name,
+					status: "rate_limited",
+					result: "",
+					turns: 0,
+					error: err.message,
+					inputTokens: 0,
+					outputTokens: 0,
+					costUsd: 0,
+				});
+				return;
+			}
+			resolve({
+				agent: agentDef.name,
+				status: "failed",
+				result: "",
+				turns: 0,
+				error: `Spawn error: ${err.message}`,
+				inputTokens: 0,
+				outputTokens: 0,
+				costUsd: 0,
+			});
+		});
+	});
 }
 
 // ─── Engine Detection ────────────────────────────────────────
@@ -409,6 +655,10 @@ export async function runAgent(
 	if (resolved === "claude-code") {
 		// Claude Code has its own permission system; sandbox is ignored
 		return runWithClaudeCode(agentDef, task, cwd, memory, teamRoster, skillRegistry, taskId);
+	}
+	if (resolved === "codex") {
+		// Codex CLI has its own permission/sandbox system; builtin sandbox is ignored
+		return runWithCodex(agentDef, task, cwd, memory, teamRoster, skillRegistry, taskId);
 	}
 	return runWithBuiltin(agentDef, task, cwd, memory, teamRoster, defaultModel, maxTurns, skillRegistry, sandbox);
 }

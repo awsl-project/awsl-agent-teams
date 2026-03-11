@@ -7,6 +7,7 @@
  */
 
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import { execSync, spawn } from "node:child_process";
 import { executeTeam, type ExecuteOptions } from "./orchestrator.js";
@@ -515,7 +516,9 @@ Example output:
 Now parse this:
 ${description}`;
 
-		const result = await this.callClaude(prompt);
+		const result = defaults?.engine === "codex"
+			? await this.callCodex(prompt, defaults?.model)
+			: await this.callClaude(prompt, defaults?.model);
 
 		// Parse JSON from LLM response
 		let planned: PlannedTask[];
@@ -577,7 +580,7 @@ ${description}`;
 
 	// ─── Call Claude CLI ─────────────────────────────────────
 
-	private callClaude(prompt: string): Promise<string> {
+	private callClaude(prompt: string, model?: string): Promise<string> {
 		// Resolve claude CLI path (same logic as runner.ts)
 		let claudeCmd: string;
 		let baseArgs: string[];
@@ -595,6 +598,10 @@ ${description}`;
 		}
 
 		const args = [...baseArgs, "-p", "--output-format", "text"];
+		if (model) {
+			const modelId = model.includes(":") ? model.split(":")[1] : model;
+			args.push("--model", modelId);
+		}
 
 		return new Promise<string>((resolve, reject) => {
 			const cleanEnv = { ...process.env };
@@ -622,6 +629,92 @@ ${description}`;
 				}
 			});
 			child.on("error", (err) => reject(err));
+		});
+	}
+
+	private callCodex(prompt: string, model?: string): Promise<string> {
+		let codexCmd: string;
+		let baseArgs: string[];
+		const codexCliJs = path.join(path.dirname(process.execPath), "node_modules", "@openai", "codex", "bin", "codex.js");
+
+		if (process.platform === "win32" && fs.existsSync(codexCliJs)) {
+			codexCmd = process.execPath;
+			baseArgs = [codexCliJs];
+		} else {
+			codexCmd = "codex";
+			baseArgs = [];
+		}
+
+		const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "awsl-codex-plan-"));
+		const lastMessagePath = path.join(tmpDir, "last-message.txt");
+
+		const args = [
+			...baseArgs,
+			"exec",
+			"--ephemeral",
+			"--full-auto",
+			"--sandbox",
+			"workspace-write",
+			"--output-last-message",
+			lastMessagePath,
+			"-",
+		];
+
+		if (model) {
+			const modelId = model.includes(":") ? model.split(":")[1] : model;
+			args.splice(args.length - 1, 0, "--model", modelId);
+		}
+
+		return new Promise<string>((resolve, reject) => {
+			const child = spawn(codexCmd, args, {
+				cwd: this.cwd,
+				env: process.env,
+				stdio: ["pipe", "pipe", "pipe"],
+			});
+
+			let stdout = "";
+			let stderr = "";
+			child.stdout.on("data", (d: Buffer) => { stdout += d.toString(); });
+			child.stderr.on("data", (d: Buffer) => { stderr += d.toString(); });
+
+			child.stdin.write(prompt);
+			child.stdin.end();
+
+			const cleanupTmp = () => {
+				try { if (fs.existsSync(lastMessagePath)) fs.unlinkSync(lastMessagePath); } catch { /* ignore */ }
+				try { if (fs.existsSync(tmpDir)) fs.rmdirSync(tmpDir); } catch { /* ignore */ }
+			};
+
+			child.on("close", (code) => {
+				if (code !== 0) {
+					const output = (stderr + stdout).slice(0, 500);
+					cleanupTmp();
+					reject(new Error(`codex exec exited with code ${code}: ${output}`));
+					return;
+				}
+
+				let result = "";
+				try {
+					if (fs.existsSync(lastMessagePath)) {
+						result = fs.readFileSync(lastMessagePath, "utf-8").trim();
+					}
+				} catch {
+					// fallback to stdout below
+				}
+				cleanupTmp();
+				if (result) {
+					resolve(result);
+				} else if (stdout.trim()) {
+					resolve(stdout.trim());
+				} else {
+					reject(new Error(`codex exec returned empty output: ${stderr.slice(0, 500)}`));
+				}
+			});
+
+			child.on("error", (err) => {
+				cleanupTmp();
+				reject(err);
+			});
 		});
 	}
 

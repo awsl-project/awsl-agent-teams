@@ -56,7 +56,7 @@ AWSL 的架构将编排分为两个独立层：
 
 **零 API 密钥**
 
-两种模式都复用你现有的 Claude Code 订阅。CC 模式使用 Claude Code 内置的 Agent 工具；终端模式启动 `claude -p` 子进程。无需单独的 Anthropic API 密钥，不会有额外的 token 计费。
+两种模式都可以复用本地 CLI 会话。CC 模式使用 Claude Code 内置的 Agent 工具；终端模式可启动 `claude -p` 或 `codex exec` 子进程。使用这些 CLI 引擎时，无需单独配置提供商 API 密钥。
 
 ### 你能获得什么
 
@@ -100,8 +100,8 @@ AWSL 支持两种运行模式：
 
 | | CC 模式（Claude Code 技能） | 终端模式（Agent Teams） |
 |---|---|---|
-| **方式** | 在 Claude Code 中使用 `/awsl` | 终端运行 `awsl run --engine claude-code` |
-| **API 密钥** | 不需要（CC 订阅即可） | 不需要（使用 `claude -p`） |
+| **方式** | 在 Claude Code 中使用 `/awsl` | 终端运行 `awsl run --engine claude-code` 或 `--engine codex` |
+| **API 密钥** | 不需要（CC 订阅即可） | 不需要（使用 `claude -p` 或 `codex exec`） |
 | **控制方式** | 技能提示词引导 CC | 代码控制一切 |
 | **自主性** | 人在回路中 | 完全自主 |
 | **自愈能力** | 手动修复 | 自动修复循环（最多 3 次） |
@@ -129,6 +129,8 @@ node dist/cli.js init --global
 # 无需 API 密钥 — 使用你的 Claude Code 订阅
 cd my-project && git init
 awsl run "构建带认证的 REST API" --engine claude-code
+# 或
+awsl run "构建带认证的 REST API" --engine codex
 ```
 
 完整流水线自动运行：
@@ -155,14 +157,14 @@ awsl run "构建带认证的 REST API" --engine claude-code
 ### 用法
 
 ```bash
-awsl run "目标" --engine claude-code [选项]
+awsl run "目标" --engine <claude-code|codex|builtin> [选项]
 ```
 
 ### 选项
 
 | 选项 | 默认值 | 说明 |
 |--------|---------|-------------|
-| `--engine claude-code` | auto | 使用 Claude Code CLI 作为执行引擎 |
+| `--engine <type>` | auto | 执行引擎：`claude-code`、`codex` 或 `builtin`（`codex` 仅在显式指定时启用） |
 | `--quick` | false | 跳过头脑风暴和调研阶段 |
 | `--concurrency <n>` | 2 | 每波次最大并行智能体数 |
 | `--no-verify` | false | 跳过所有验证步骤：reviewer agent、代码验证 (tsc、npm test、eslint) 和自动修复循环。任务自动重试仍然运行（处理执行失败而非验证） |
@@ -240,6 +242,8 @@ awsl agents            # 列出可用智能体
 ```bash
 # 添加任务到队列
 awsl queue add "构建用户认证模块" --engine claude-code
+# 或
+awsl queue add "构建用户认证模块" --engine codex
 awsl queue add "添加支付集成" --depends-on q_1
 awsl queue add "写端到端测试" --depends-on all  # 等待所有前置任务完成
 
@@ -250,7 +254,7 @@ awsl queue add "清理临时文件" --at "+30m"               # 30 分钟后
 awsl queue add "大规模重构" --at "+2h"                  # 2 小时后
 
 # 或者：用自然语言一句话描述，自动拆分为多个任务并推断依赖
-awsl queue plan "先构建用户认证，然后加支付模块，最后写集成测试" --engine claude-code
+awsl queue plan "先构建用户认证，然后加支付模块，最后写集成测试" --engine codex
 
 # 查看队列
 awsl queue list
@@ -264,10 +268,10 @@ awsl queue start
 
 ### 自然语言队列规划
 
-一句话描述多个任务 — AWSL 使用 Claude 自动解析为结构化队列任务，并推断依赖关系。
+一句话描述多个任务 — AWSL 使用所选 CLI 引擎（`claude-code` 或 `codex`）自动解析为结构化队列任务，并推断依赖关系。
 
 ```bash
-awsl queue plan "先构建用户认证，然后加支付模块，最后写集成测试" --engine claude-code
+awsl queue plan "先构建用户认证，然后加支付模块，最后写集成测试" --engine codex
 ```
 
 输出：
@@ -291,7 +295,7 @@ Planned 3 task(s):
 | 选项 | 说明 |
 |--------|-------------|
 | `--quick` | 跳过头脑风暴和调研 |
-| `--engine <type>` | 执行引擎（claude-code 或 builtin） |
+| `--engine <type>` | 执行引擎（`claude-code`、`codex` 或 `builtin`） |
 | `--concurrency <n>` | 最大并行智能体数 |
 | `--model <model>` | 覆盖默认模型 |
 | `--depends-on <ids>` | 逗号分隔的任务 ID，或 `all` |
@@ -703,7 +707,7 @@ CC 模式与终端模式在相同复杂任务上的真实基准对比：
 |----------|-----------------|
 | 快速功能，人在场 | CC 模式（`/awsl`） |
 | 大型项目，想先审查计划 | CC 模式（`/awsl-plan` → `/awsl-go`） |
-| 通宵构建，无人值守 | 终端模式（`--engine claude-code`） |
+| 通宵构建，无人值守 | 终端模式（`--engine claude-code` 或 `--engine codex`） |
 | CI/CD 集成 | 终端模式 |
 | 最高代码质量 | 终端模式（审查者循环） |
 | 最快交付 | CC 模式 |
@@ -766,6 +770,8 @@ node dist/cli.js init --global           # 全局（~/.claude/skills/）
 awsl run "目标" --engine claude-code
 awsl run "目标" --engine claude-code --quick
 awsl run "目标" --engine claude-code --concurrency 4
+awsl run "目标" --engine codex
+awsl run "目标" --engine codex --quick
 
 # 仅规划工作流
 awsl run --plan-only "目标"
@@ -798,6 +804,7 @@ awsl queue list                                # 查看队列
 awsl queue show q_1                            # 查看单个任务详情
 awsl queue remove q_1                          # 移除任务
 awsl queue start --engine claude-code          # 开始执行
+awsl queue start --engine codex                # 使用 Codex 开始执行
 awsl queue clear                               # 清空队列
 # 快速启动 — 一条命令启动所有服务
 awsl start                                     # 启动仪表盘 + 远程连接（如已配置）
@@ -824,7 +831,7 @@ awsl remote stop                               # 停止后台客户端
 | `OPENAI_API_KEY` | 仅 OpenAI 模型需要 | OpenAI API 密钥 |
 | `DEBUG=1` | 否 | 启用调试日志 |
 
-> **注意：** `--engine claude-code` **不需要** API 密钥。它通过 `claude -p` 使用你的 Claude Code 订阅。
+> **注意：** `--engine claude-code` 和 `--engine codex` 在 AWSL 中都**不需要额外 API 密钥**，它们分别复用本地 CLI 会话（`claude -p` 或 `codex exec`）。
 
 ## 静态代码审查
 
