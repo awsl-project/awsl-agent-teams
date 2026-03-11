@@ -44,5 +44,34 @@ describe("TaskQueue.plan engine routing", () => {
 			fs.rmSync(tmpDir, { recursive: true, force: true })
 		}
 	})
-})
 
+	it("uses callClaude when engine is claude-code", async () => {
+		const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "awsl-queue-plan-test-"))
+
+		try {
+			const queue = new TaskQueue(tmpDir) as any
+
+			let codexCalled = 0
+			let claudeCalled = 0
+
+			queue.callCodex = async () => {
+				codexCalled++
+				return '[{"goal":"Task A","dependsOn":[],"quick":false}]'
+			}
+
+			queue.callClaude = async () => {
+				claudeCalled++
+				return '[{"goal":"Task B","dependsOn":[],"quick":false}]'
+			}
+
+			const tasks = await queue.plan("do B", { engine: "claude-code" })
+
+			assert.equal(claudeCalled, 1, "callClaude should be called exactly once")
+			assert.equal(codexCalled, 0, "callCodex should not be called when engine=claude-code")
+			assert.equal(tasks.length, 1, "should create one queue task from claude plan")
+			assert.equal(tasks[0].goal, "Task B", "should use claude result content")
+		} finally {
+			fs.rmSync(tmpDir, { recursive: true, force: true })
+		}
+	})
+})

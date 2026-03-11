@@ -83,6 +83,18 @@ export class TaskQueue {
 		this.queuePath = path.join(cwd, ".planning", "QUEUE.json");
 	}
 
+	private resolveCodexCliJs(): string | null {
+		const candidates = [
+			path.join(process.env.APPDATA || "", "npm", "node_modules", "@openai", "codex", "bin", "codex.js"),
+			path.join(path.dirname(process.execPath), "node_modules", "@openai", "codex", "bin", "codex.js"),
+			path.join(path.dirname(process.execPath), "..", "node_modules", "@openai", "codex", "bin", "codex.js"),
+		];
+		for (const p of candidates) {
+			if (p && fs.existsSync(p)) return p;
+		}
+		return null;
+	}
+
 	/**
 	 * Add a new task to the queue.
 	 */
@@ -635,9 +647,9 @@ ${description}`;
 	private callCodex(prompt: string, model?: string): Promise<string> {
 		let codexCmd: string;
 		let baseArgs: string[];
-		const codexCliJs = path.join(path.dirname(process.execPath), "node_modules", "@openai", "codex", "bin", "codex.js");
+		const codexCliJs = this.resolveCodexCliJs();
 
-		if (process.platform === "win32" && fs.existsSync(codexCliJs)) {
+		if (process.platform === "win32" && codexCliJs) {
 			codexCmd = process.execPath;
 			baseArgs = [codexCliJs];
 		} else {
@@ -662,7 +674,12 @@ ${description}`;
 
 		if (model) {
 			const modelId = model.includes(":") ? model.split(":")[1] : model;
-			args.splice(args.length - 1, 0, "--model", modelId);
+			const stdinArgIdx = args.indexOf("-");
+			if (stdinArgIdx >= 0) {
+				args.splice(stdinArgIdx, 0, "--model", modelId);
+			} else {
+				args.push("--model", modelId);
+			}
 		}
 
 		return new Promise<string>((resolve, reject) => {

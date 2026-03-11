@@ -53,6 +53,18 @@ interface CodexJsonEvent {
 	};
 }
 
+function resolveCodexCliJs(): string | null {
+	const candidates = [
+		path.join(process.env.APPDATA || "", "npm", "node_modules", "@openai", "codex", "bin", "codex.js"),
+		path.join(path.dirname(process.execPath), "node_modules", "@openai", "codex", "bin", "codex.js"),
+		path.join(path.dirname(process.execPath), "..", "node_modules", "@openai", "codex", "bin", "codex.js"),
+	];
+	for (const p of candidates) {
+		if (p && fs.existsSync(p)) return p;
+	}
+	return null;
+}
+
 // ─── Rate Limit Detection ────────────────────────────────────
 
 const RATE_LIMIT_PATTERNS = [
@@ -108,9 +120,9 @@ ${task}`;
 
 	let codexCmd: string;
 	let baseArgs: string[];
-	const codexCliJs = path.join(path.dirname(process.execPath), "node_modules", "@openai", "codex", "bin", "codex.js");
+	const codexCliJs = resolveCodexCliJs();
 
-	if (process.platform === "win32" && fs.existsSync(codexCliJs)) {
+	if (process.platform === "win32" && codexCliJs) {
 		codexCmd = process.execPath; // node.exe
 		baseArgs = [codexCliJs];
 	} else {
