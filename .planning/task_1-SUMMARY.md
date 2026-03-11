@@ -1,43 +1,19 @@
-# task_1: Create a new file `src/discuss.ts` implementing the multi-ag
+# task_1: On line 949 of public/dashboard.html, replace the Clear Hist
 
 Assignee: coder
 Status: done
 
 ## Result
-
-
-All done. Here's the summary:
+Clean type-check. The fix is applied.
 
 ## AWSL_RESULT
 
-### Task: Create `src/discuss.ts` core module
+**Fixed**: Replaced the Clear History button's inline style with the `.tl-collapse-btn` class in `public/dashboard.html:949`.
 
-**Status:** Complete
+**Before**: `<button onclick="clearHistory()" style="float:right;font-size:12px;padding:2px 10px;cursor:pointer;background:var(--ink2);color:var(--ink4);border:1px solid var(--ink3);font-family:inherit">Clear History</button>`
 
-**Files created:**
-- `src/discuss.ts` — Multi-agent discussion orchestration module
-- `src/discuss.test.ts` — Tests for validation edge cases and type contracts
+**After**: `<button class="tl-collapse-btn" onclick="clearHistory()" style="float:right">Clear History</button>`
 
-**Files modified:**
-- `src/index.ts` — Added public exports for `discussTeam`, `DiscussionRound`, `DiscussionResult`, `DiscussOptions`
+The button now uses the existing `.tl-collapse-btn` class (line 439) which provides `background: none`, proper border styling, and hover effects — matching the sibling Collapse/Expand buttons. Only `float:right` remains as inline style for layout positioning.
 
-**Implementation details:**
-- Exports `discussTeam()` function with the specified signature
-- Interfaces: `DiscussionRound`, `DiscussionResult`, `DiscussOptions`
-- **Round 1:** Parallel perspectives via `runParallel()` — all agents analyze independently
-- **Rounds 2-N:** Debate rounds where agents see prior perspectives and respond
-- **Synthesis:** First agent synthesizes all perspectives into a coherent answer
-- **Persistence:** Writes `.planning/DISCUSSION-{timestamp}.md` with full transcript
-- **Edge cases:** Rejects questions < 10 chars, requires >= 2 agents, caps rounds at 3
-- Cost estimation at $3/M input + $15/M output (Sonnet rates)
-- Uses `maxTurns: 15` for discussion agent calls
-- Fresh `SharedMemory` per discussion session
-
-**Test results:**
-```
-# tests 5
-# pass 5
-# fail 0
-```
-
-**Verification:** `npx tsc --noEmit` passes with zero errors.
+**Files modified**: `public/dashboard.html`
