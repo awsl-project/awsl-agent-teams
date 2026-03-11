@@ -1,15 +1,19 @@
 {
-  "wave": 0,
+  "wave": 1,
   "completedTasks": [
-    "task_1"
+    "task_1",
+    "task_2",
+    "task_3"
   ],
   "taskResults": {
-    "task_1": "Clean compile. `PlannedTask` is already exported from `src/index.ts` (line 14 — confirmed in the read). No changes needed there.\n\n## AWSL_RESULT\n\n**Refactored `plan()` in `src/queue.ts` into two public methods:**\n\n1. **`planPreview(description: string): Promise<PlannedTask[]>`** — Calls LLM, parses response, returns planned tasks without touching the queue\n2. **`planCommit(planned: PlannedTask[], defaults?): QueueTask[]`** — Takes planned tasks, resolves dependency references (position→q_N IDs), adds to queue via `this.add()`\n3. **`plan()`** — Backward-compatible wrapper: calls `planPreview()` then `planCommit()`\n\n**Files modified:**\n- `src/queue.ts` — Refactored plan method into planPreview + planCommit + wrapper\n- `src/queue.test.ts` — Added 5 tests for planCommit (dependency resolution, defaults, persistence, \"all\" refs, task-level overrides)\n\n**Verification:**\n- `npx tsc --noEmit` — clean, no errors\n- `npx tsx --test src/queue.test.ts` — 10/10 pass (5 existing + 5 new)\n- `src/index.ts` — `PlannedTask` already exported, no changes needed"
+    "task_1": "Clean compile. `PlannedTask` is already exported from `src/index.ts` (line 14 — confirmed in the read). No changes needed there.\n\n## AWSL_RESULT\n\n**Refactored `plan()` in `src/queue.ts` into two public methods:**\n\n1. **`planPreview(description: string): Promise<PlannedTask[]>`** — Calls LLM, parses response, returns planned tasks without touching the queue\n2. **`planCommit(planned: PlannedTask[], defaults?): QueueTask[]`** — Takes planned tasks, resolves dependency references (position→q_N IDs), adds to queue via `this.add()`\n3. **`plan()`** — Backward-compatible wrapper: calls `planPreview()` then `planCommit()`\n\n**Files modified:**\n- `src/queue.ts` — Refactored plan method into planPreview + planCommit + wrapper\n- `src/queue.test.ts` — Added 5 tests for planCommit (dependency resolution, defaults, persistence, \"all\" refs, task-level overrides)\n\n**Verification:**\n- `npx tsc --noEmit` — clean, no errors\n- `npx tsx --test src/queue.test.ts` — 10/10 pass (5 existing + 5 new)\n- `src/index.ts` — `PlannedTask` already exported, no changes needed",
+    "task_2": "Everything looks correct. \n\n## AWSL_RESULT\n\n**Added `queue split` subcommand to `src/cli.ts`:**\n\n1. **Option parsing** (lines 1146-1163): Parses `--engine`, `--quick`, `--concurrency`, `--model`, `--yes`/`-y`, plus description text from remaining args\n2. **Preview table** (lines 1175-1186): Calls `queue.planPreview(description)`, prints numbered table with `#`, `Deps`, `Goal` columns using `─` separator\n3. **Confirmation prompt** (lines 1188-1201): Uses `node:readline` `createInterface` + `rl.question()` wrapped in a Promise. Skipped when `--yes` flag is set. Prints `已取消` on decline\n4. **Commit & output** (lines 1203-1214): Calls `queue.planCommit(planned, defaults)`, prints result table with actual `q_N` IDs (same format as `queue plan` output)\n5. **Usage updated** (line 78-79): Added `queue split` with `--yes` flag documentation\n6. **Error message updated** (line 1217): Added `split` to list of valid queue subcommands\n\n**Files modified:**\n- `src/cli.ts` — Added `createInterface` import, `queue split` subcommand, usage entry, updated error message\n\n**Verification:**\n- `npx tsc --noEmit` — clean, no errors",
+    "task_3": "Clean compile.\n\n## AWSL_RESULT\n\n**Added 4 planCommit edge-case tests to `src/queue.test.ts`:**\n\n1. **`planCommit adds tasks with no dependencies`** — Independent tasks without `dependsOn`, verifies goal text, `quick` flag, and persistence via `list()`\n2. **`planCommit resolves position-based dependencies`** — Combined test: empty deps → `undefined`, position ref `\"1\"` → resolved to actual ID, `\"all\"` → kept as `\"all\"`\n3. **`planCommit applies defaults`** — Verifies `model` and `concurrency` defaults are applied to tasks\n4. **`planCommit with empty array returns empty`** — Empty `PlannedTask[]` returns empty result without errors\n\n**Verification:**\n- `npx tsx --test src/queue.test.ts` — 14/14 pass (5 original + 5 coder + 4 new)\n- `npx tsc --noEmit` — clean, no errors\n\n**Files modified:**\n- `src/queue.test.ts` — Added 4 test cases (lines 174–232)"
   },
   "failedTasks": [],
   "taskErrors": {},
   "rateLimitRetries": 0,
-  "savedAt": "2026-03-11T02:39:44.326Z",
+  "savedAt": "2026-03-11T02:41:24.593Z",
   "memory": {
     "result:architect:session": {
       "value": "858cecc8-0b9c-45fe-bc56-21a98f00f7cc",
@@ -42,14 +46,29 @@
       "timestamp": 1773196659705
     },
     "result:coder:session": {
-      "value": "861c55f1-4713-40c3-8ef2-b08bdbb46daf",
+      "value": "248b5230-ccea-42ba-a6ae-2ccaf2aadcd8",
       "author": "coder",
-      "timestamp": 1773196783995
+      "timestamp": 1773196884465
     },
     "result:task_1": {
       "value": "Clean compile. `PlannedTask` is already exported from `src/index.ts` (line 14 — confirmed in the read). No changes needed there.\n\n## AWSL_RESULT\n\n**Refactored `plan()` in `src/queue.ts` into two public methods:**\n\n1. **`planPreview(description: string): Promise<PlannedTask[]>`** — Calls LLM, parses response, returns planned tasks without touching the queue\n2. **`planCommit(planned: PlannedTask[], defaults?): QueueTask[]`** — Takes planned tasks, resolves dependency references (position→q_N IDs), adds to queue via `this.add()`\n3. **`plan()`** — Backward-compatible wrapper: calls `planPreview()` then `planCommit()`\n\n**Files modified:**\n- `src/queue.ts` — Refactored plan method into planPreview + planCommit + wrapper\n- `src/queue.test.ts` — Added 5 tests for planCommit (dependency resolution, defaults, persistence, \"all\" refs, task-level overrides)\n\n**Verification:**\n- `npx tsc --noEmit` — clean, no errors\n- `npx tsx --test src/queue.test.ts` — 10/10 pass (5 existing + 5 new)\n- `src/index.ts` — `PlannedTask` already exported, no changes needed",
       "author": "coder",
       "timestamp": 1773196783996
+    },
+    "result:tester:session": {
+      "value": "09698a79-3119-4bb2-bbb4-dcac1727f406",
+      "author": "tester",
+      "timestamp": 1773196865276
+    },
+    "result:task_3": {
+      "value": "Clean compile.\n\n## AWSL_RESULT\n\n**Added 4 planCommit edge-case tests to `src/queue.test.ts`:**\n\n1. **`planCommit adds tasks with no dependencies`** — Independent tasks without `dependsOn`, verifies goal text, `quick` flag, and persistence via `list()`\n2. **`planCommit resolves position-based dependencies`** — Combined test: empty deps → `undefined`, position ref `\"1\"` → resolved to actual ID, `\"all\"` → kept as `\"all\"`\n3. **`planCommit applies defaults`** — Verifies `model` and `concurrency` defaults are applied to tasks\n4. **`planCommit with empty array returns empty`** — Empty `PlannedTask[]` returns empty result without errors\n\n**Verification:**\n- `npx tsx --test src/queue.test.ts` — 14/14 pass (5 original + 5 coder + 4 new)\n- `npx tsc --noEmit` — clean, no errors\n\n**Files modified:**\n- `src/queue.test.ts` — Added 4 test cases (lines 174–232)",
+      "author": "tester",
+      "timestamp": 1773196865277
+    },
+    "result:task_2": {
+      "value": "Everything looks correct. \n\n## AWSL_RESULT\n\n**Added `queue split` subcommand to `src/cli.ts`:**\n\n1. **Option parsing** (lines 1146-1163): Parses `--engine`, `--quick`, `--concurrency`, `--model`, `--yes`/`-y`, plus description text from remaining args\n2. **Preview table** (lines 1175-1186): Calls `queue.planPreview(description)`, prints numbered table with `#`, `Deps`, `Goal` columns using `─` separator\n3. **Confirmation prompt** (lines 1188-1201): Uses `node:readline` `createInterface` + `rl.question()` wrapped in a Promise. Skipped when `--yes` flag is set. Prints `已取消` on decline\n4. **Commit & output** (lines 1203-1214): Calls `queue.planCommit(planned, defaults)`, prints result table with actual `q_N` IDs (same format as `queue plan` output)\n5. **Usage updated** (line 78-79): Added `queue split` with `--yes` flag documentation\n6. **Error message updated** (line 1217): Added `split` to list of valid queue subcommands\n\n**Files modified:**\n- `src/cli.ts` — Added `createInterface` import, `queue split` subcommand, usage entry, updated error message\n\n**Verification:**\n- `npx tsc --noEmit` — clean, no errors",
+      "author": "coder",
+      "timestamp": 1773196884465
     }
   },
   "goal": "queue要支持拆任务 有时候我会说一大串 能帮我拆成一堆独立需求和队列任务"
