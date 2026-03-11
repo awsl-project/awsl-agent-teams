@@ -404,6 +404,7 @@ Features:
 - **Live log stream** — Real-time SSE-based log panel showing agent stdout/stderr as it happens
 - **Browser notifications** — Alerts on task failure and queue completion (requires permission)
 - **Agent analysis** — Shows unique agent roles, average/peak parallelism, total waves, and per-run wave breakdown with agent badges
+- **Date filter** — Filter statistics by day, week, month, or custom date range. All dashboard widgets update in real-time based on the selected time period
 - **Pixel art aesthetic** — Press Start 2P font, retro animations
 
 API endpoints:
