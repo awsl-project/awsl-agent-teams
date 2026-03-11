@@ -805,6 +805,21 @@ a { color: var(--blue); text-decoration: none; }
 
 .projects-actions button:hover { border-color: var(--blue); color: var(--blue); }
 
+.proj-mgmt-btn {
+  font-family: var(--font);
+  font-size: 11px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card);
+  color: var(--ink2);
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.15s;
+}
+
+.proj-mgmt-btn:hover { border-color: var(--blue); color: var(--blue); }
+
 .projects-empty {
   padding: 16px 0;
   text-align: center;
@@ -945,7 +960,12 @@ a { color: var(--blue); text-decoration: none; }
     <div class="projects-bar" id="projectsList"></div>
     <div class="projects-actions" id="projectActions" style="display:none">
       <span class="sel-label">Selected: <strong id="projectSelName">-</strong></span>
+      <button onclick="removeProject()" style="border-color:var(--red);color:var(--red)">Remove</button>
       <button onclick="selectProject(null)">&#8592; Back to Local</button>
+    </div>
+    <div class="projects-mgmt" style="margin-top:10px;display:flex;gap:8px;">
+      <button onclick="showAddProject()" class="proj-mgmt-btn">+ Add Project</button>
+      <button onclick="showScanDialog()" class="proj-mgmt-btn">Scan Directory</button>
     </div>
     <div class="projects-empty" id="projectsEmpty" style="display:none">
       <span>No projects registered</span>
@@ -991,6 +1011,7 @@ a { color: var(--blue); text-decoration: none; }
 <script>
 var hist = null, queue = null, filterProj = null, clients = [], selectedClient = null;
 var projects = [], selectedProject = null;
+var projectQueue = null, projectHist = null;
 var collapsedDates = {};
 var timelineWrapCollapsed = {};
 
@@ -1077,6 +1098,22 @@ async function loadProjects() {
     if (res.ok) projects = await res.json();
     else projects = [];
   } catch(e) { projects = []; }
+}
+
+async function loadProjectData(projPath) {
+  if (!projPath) { projectQueue = null; projectHist = null; return; }
+  try {
+    var ep = encodeURIComponent(projPath);
+    var [qr, hr] = await Promise.allSettled([
+      fetch('/api/projects/queue?path=' + ep),
+      fetch('/api/projects/history?path=' + ep)
+    ]);
+    projectQueue = qr.status === 'fulfilled' && qr.value.ok ? await qr.value.json() : { tasks: [] };
+    projectHist = hr.status === 'fulfilled' && hr.value.ok ? await hr.value.json() : { entries: [] };
+  } catch(e) {
+    projectQueue = { tasks: [] };
+    projectHist = { entries: [] };
+  }
 }
 
 function fmtMem(bytes) {
@@ -1207,9 +1244,10 @@ function renderProjectCards() {
   }
 }
 
-function selectProject(projPath) {
+async function selectProject(projPath) {
   selectedProject = projPath;
   if (projPath) selectedClient = null;
+  await loadProjectData(projPath);
   renderProjectCards();
   renderClients();
   var sp = projPath ? projects.find(function(p) { return p.path === projPath; }) : null;
@@ -1217,6 +1255,16 @@ function selectProject(projPath) {
   if (sp) {
     document.getElementById('projLabel').textContent = sp.name;
     document.getElementById('projLabel').title = sp.path;
+  } else if (!projPath) {
+    // Reset to local project info
+    try {
+      var infoRes = await fetch('/api/info');
+      if (infoRes.ok) {
+        var info = await infoRes.json();
+        document.getElementById('projLabel').textContent = info.project || '?';
+        document.getElementById('projLabel').title = info.cwd || '';
+      }
+    } catch(e) {}
   }
   render._lastKey = '';
   render();
@@ -1681,8 +1729,13 @@ function render() {
   var entries = hist.entries || [];
   var qt = queue ? queue.tasks || [] : [];
 
+  // If a project is selected, use its queue + history data
+  if (selectedProject) {
+    entries = projectHist ? projectHist.entries || [] : [];
+    qt = projectQueue ? projectQueue.tasks || [] : [];
+  }
   // If a remote client is selected, use its queue + history data
-  if (selectedClient) {
+  else if (selectedClient) {
     var sc = clients.find(function(c){return c.id === selectedClient;});
     qt = sc && sc.status && sc.status.queue ? sc.status.queue : [];
     entries = sc && sc.status && sc.status.history ? sc.status.history : [];
@@ -1750,7 +1803,7 @@ async function init() {
   var ok = await load();
   document.getElementById('loading').style.display = 'none';
   if (ok) render();
-  setInterval(async function() { await loadClients(); await loadProjects(); if (await load()) render(); }, 30000);
+  setInterval(async function() { await loadClients(); await loadProjects(); if (selectedProject) await loadProjectData(selectedProject); if (await load()) render(); }, 30000);
 }
 
 // ─── Trend chart (SVG with area fill) ─────────────────
@@ -1876,6 +1929,12 @@ async function addTask() {
   try {
     if (selectedClient) {
       await clientCmd('queue:add', { goal: goal, quick: quick, runAt: runAt });
+    } else if (selectedProject) {
+      await fetch('/api/projects/queue/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: selectedProject, goal: goal, quick: quick, runAt: runAt })
+      });
     } else {
       await fetch('/api/queue/add', {
         method: 'POST',
@@ -1887,6 +1946,7 @@ async function addTask() {
   document.getElementById('qGoal').value = '';
   document.getElementById('qRunAt').value = '';
   await loadClients();
+  if (selectedProject) await loadProjectData(selectedProject);
   if (await load()) render();
 }
 
@@ -1958,6 +2018,10 @@ async function removeTask(id) {
   try {
     if (selectedClient) {
       await clientCmd('queue:remove', { id: id });
+    } else if (selectedProject) {
+      // No individual remove endpoint for project queues — use clear instead
+      alert('Use "Clear All" to remove project queue tasks');
+      return;
     } else {
       await fetch('/api/queue/remove?id=' + encodeURIComponent(id), { method: 'DELETE' });
     }
@@ -1970,6 +2034,12 @@ async function startQueue() {
   try {
     if (selectedClient) {
       await clientCmd('queue:start', { once: false, ignoreRunAt: true });
+    } else if (selectedProject) {
+      await fetch('/api/projects/queue/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: selectedProject })
+      });
     } else {
       await fetch('/api/queue/start', {
         method: 'POST',
@@ -1982,6 +2052,7 @@ async function startQueue() {
     alert('Failed to start queue: ' + e.message);
   }
   await loadClients();
+  if (selectedProject) await loadProjectData(selectedProject);
   if (await load()) render();
 }
 
@@ -1989,12 +2060,161 @@ async function clearQueue() {
   try {
     if (selectedClient) {
       await clientCmd('queue:clear');
+    } else if (selectedProject) {
+      await fetch('/api/projects/queue/clear', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: selectedProject })
+      });
     } else {
       await fetch('/api/queue/clear', { method: 'POST' });
     }
   } catch(e) {}
   await loadClients();
+  if (selectedProject) await loadProjectData(selectedProject);
   if (await load()) render();
+}
+
+// ─── Project CRUD ─────────────────────────────────
+
+function showProjectDialog(title, fields, onSubmit) {
+  var overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.3);z-index:300;display:flex;align-items:center;justify-content:center;';
+  var box = document.createElement('div');
+  box.style.cssText = 'background:var(--card);border-radius:12px;padding:20px;box-shadow:0 8px 32px rgba(0,0,0,0.15);min-width:340px;max-width:480px;font-family:var(--font);';
+  box.innerHTML = '<div style="font-size:14px;font-weight:600;margin-bottom:12px;">' + esc(title) + '</div>';
+
+  var inputs = {};
+  for (var i = 0; i < fields.length; i++) {
+    var f = fields[i];
+    var label = document.createElement('div');
+    label.style.cssText = 'font-size:12px;color:var(--ink3);margin-bottom:4px;margin-top:8px;';
+    label.textContent = f.label;
+    box.appendChild(label);
+    var input = document.createElement('input');
+    input.type = f.type || 'text';
+    input.placeholder = f.placeholder || '';
+    input.value = f.value || '';
+    input.style.cssText = 'font-family:var(--font);font-size:13px;padding:6px 10px;border:1px solid var(--border);border-radius:8px;width:100%;outline:none;background:var(--bg);color:var(--ink);';
+    box.appendChild(input);
+    inputs[f.key] = input;
+  }
+
+  var btns = document.createElement('div');
+  btns.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;margin-top:14px;';
+  var cancelBtn = document.createElement('button');
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.style.cssText = 'font-family:var(--font);font-size:12px;padding:6px 12px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--ink2);cursor:pointer;';
+  var submitBtn = document.createElement('button');
+  submitBtn.textContent = 'OK';
+  submitBtn.style.cssText = 'font-family:var(--font);font-size:12px;padding:6px 12px;border:1px solid var(--blue);border-radius:8px;background:var(--blue);color:#fff;cursor:pointer;';
+  btns.appendChild(cancelBtn);
+  btns.appendChild(submitBtn);
+  box.appendChild(btns);
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+
+  function close() { document.body.removeChild(overlay); }
+  overlay.addEventListener('click', function(e) { if (e.target === overlay) close(); });
+  cancelBtn.onclick = close;
+  submitBtn.onclick = function() {
+    var vals = {};
+    for (var k in inputs) vals[k] = inputs[k].value.trim();
+    close();
+    onSubmit(vals);
+  };
+  // Enter key submits
+  for (var k in inputs) {
+    inputs[k].addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') submitBtn.click();
+    });
+  }
+  if (fields.length > 0) inputs[fields[0].key].focus();
+}
+
+async function showAddProject() {
+  showProjectDialog('Add Project', [
+    { key: 'path', label: 'Project Path (absolute)', placeholder: 'C:\\Users\\...\\my-project' },
+    { key: 'name', label: 'Display Name (optional)', placeholder: '' }
+  ], async function(vals) {
+    if (!vals.path) return;
+    try {
+      var res = await fetch('/api/projects/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: vals.path, name: vals.name || undefined })
+      });
+      if (!res.ok) {
+        var err = await res.json();
+        alert('Failed: ' + (err.error || 'Unknown error'));
+        return;
+      }
+    } catch(e) { alert('Failed: ' + e.message); return; }
+    await loadProjects();
+    render._lastKey = '';
+    render();
+  });
+}
+
+async function showScanDialog() {
+  showProjectDialog('Scan for Projects', [
+    { key: 'dir', label: 'Directory to scan (absolute)', placeholder: 'C:\\Users\\...\\projects' },
+    { key: 'depth', label: 'Scan depth', placeholder: '2', value: '2', type: 'number' }
+  ], async function(vals) {
+    if (!vals.dir) return;
+    try {
+      var res = await fetch('/api/projects/scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dir: vals.dir, depth: parseInt(vals.depth) || 2 })
+      });
+      if (!res.ok) {
+        var err = await res.json();
+        alert('Scan failed: ' + (err.error || 'Unknown error'));
+        return;
+      }
+      var found = await res.json();
+      if (found.length === 0) {
+        alert('No projects found in ' + vals.dir);
+        return;
+      }
+      // Register all found projects
+      var added = 0;
+      for (var i = 0; i < found.length; i++) {
+        try {
+          await fetch('/api/projects/add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: found[i] })
+          });
+          added++;
+        } catch(e) {}
+      }
+      alert('Found ' + found.length + ' project(s), registered ' + added + ' new.');
+    } catch(e) { alert('Scan failed: ' + e.message); return; }
+    await loadProjects();
+    render._lastKey = '';
+    render();
+  });
+}
+
+async function removeProject() {
+  if (!selectedProject) return;
+  var sp = projects.find(function(p) { return p.path === selectedProject; });
+  if (!confirm('Remove project "' + (sp ? sp.name : selectedProject) + '" from registry?')) return;
+  try {
+    await fetch('/api/projects/remove', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: selectedProject })
+    });
+  } catch(e) {}
+  selectedProject = null;
+  projectQueue = null;
+  projectHist = null;
+  await loadProjects();
+  render._lastKey = '';
+  render();
 }
 
 async function clearHistory() {
