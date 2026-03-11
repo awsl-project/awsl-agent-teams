@@ -394,6 +394,7 @@ API 端点：
 - `POST /api/projects/queue/clear` — 清空指定项目的队列 `{path}`
 - `GET /api/projects/history?path=` — 获取指定项目的执行历史
 - `GET /api/projects/stats?path=` — 获取指定项目的统计数据
+- `GET /api/discussions` — 历史中的讨论条目
 - `GET /api/clients` — 已连接的远程客户端列表
 - `POST /api/clients/command` — 向客户端发送命令 `{clientId, action, payload?}`
 - `WebSocket /ws/relay` — 远程客户端 WebSocket 中继端点
@@ -452,6 +453,49 @@ curl -X POST http://server:3120/api/clients/command \
 支持的中继命令：`queue:add`、`queue:remove`、`queue:clear`、`queue:list`、`queue:get`、`queue:set-time`、`queue:start`、`system:info`。
 
 > 完整部署指南（systemd、PM2、Docker、Nginx 反向代理、内网穿透等）见 [DEPLOY.md](DEPLOY.md)。
+
+## 讨论模式
+
+不是所有问题都需要写代码。有时候你需要让智能体团队 **一起思考** — 辩论架构决策、评估技术权衡、分析设计方案。
+
+讨论模式让所有智能体并行分析问题（从各自的专业角度出发），然后可选地进行多轮辩论（智能体互相回应对方观点），最终综合为一个连贯的答案。
+
+### 用法
+
+```bash
+# 直接讨论
+awsl discuss "How should we design the authentication system?"
+
+# 通过队列讨论（带辩论轮次）
+awsl queue add --discuss "What database schema fits our use case?" --rounds 2
+
+# 定时调度通宵讨论
+awsl queue add --discuss --at 03:00 "Analyze microservices vs monolith trade-offs for our scale"
+```
+
+### 讨论流程
+
+```
+第 1 轮: 并行观点收集    所有智能体独立分析问题
+第 2..N 轮: 辩论（可选）  智能体互相回应对方的观点
+综合:                     汇总为最终连贯答案
+持久化:                   保存到 .planning/DISCUSSION-{timestamp}.md
+```
+
+### 选项
+
+| 选项 | 默认值 | 说明 |
+|------|--------|------|
+| `--rounds <n>` | 1 | 讨论轮次（1-3）。更多轮次 = 更深入的辩论 |
+| `--at <time>` | — | 定时调度（语法同队列任务） |
+| `--cwd <path>` | `.` | 工作目录 |
+
+### 输出
+
+- 讨论记录保存到 `.planning/DISCUSSION-{timestamp}.md`
+- 每个文件包含：所有智能体的观点、辩论轮次、最终综合答案
+- 讨论记录会出现在 `awsl summary` 的输出中
+- 仪表盘 API：`GET /api/discussions` 返回历史中的讨论条目
 
 ## 夜间工作总结
 
@@ -708,6 +752,7 @@ skills:
 ├── WAVES.md              # 计算出的波次调度
 ├── VERIFICATION.md       # 确定性检查结果（tsc、eslint、测试）
 ├── REVIEW.md             # LLM 审查者发现（规格合规 + 代码质量）
+├── DISCUSSION-*.md       # 讨论模式记录（自动管理）
 ├── research/
 │   ├── architecture.md   # 代码库分析
 │   └── conventions.md    # 代码风格分析
@@ -768,6 +813,7 @@ CC 模式与终端模式在相同复杂任务上的真实基准对比：
 | 最快交付 | CC 模式 |
 | Bug 修复 | CC 模式（`/awsl-quick`） |
 | 通宵多项目构建 | 任务队列（`awsl queue start`） |
+| 架构决策、设计权衡 | 讨论模式（`awsl discuss`） |
 
 ## 库 API
 
@@ -858,6 +904,12 @@ awsl queue show q_1                            # 查看单个任务详情
 awsl queue remove q_1                          # 移除任务
 awsl queue start --engine claude-code          # 开始执行
 awsl queue clear                               # 清空队列
+
+# 讨论模式
+awsl discuss "How should we design the auth system?"              # 直接讨论
+awsl queue add --discuss "Evaluate database options" --rounds 2   # 通过队列讨论，带辩论轮次
+awsl queue add --discuss --at 03:00 "Microservices vs monolith"   # 定时调度通宵讨论
+
 # 快速启动 — 一条命令启动所有服务
 awsl start                                     # 启动仪表盘 + 远程连接（如已配置）
 awsl start --server http://server:3120         # 启动 + 配置远程，一步到位

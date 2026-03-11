@@ -394,6 +394,7 @@ API endpoints:
 - `POST /api/projects/queue/clear` — clear a project's queue `{path}`
 - `GET /api/projects/history?path=` — get history for a specific project
 - `GET /api/projects/stats?path=` — get stats for a specific project
+- `GET /api/discussions` — discussion entries from history
 - `GET /api/clients` — list connected remote clients
 - `POST /api/clients/command` — send command to a client `{clientId, action, payload?}`
 - `WebSocket /ws/relay` — relay endpoint for remote client connections
@@ -457,6 +458,49 @@ curl -X POST http://server:3120/api/clients/command \
 Supported relay actions: `queue:add`, `queue:remove`, `queue:clear`, `queue:list`, `queue:get`, `queue:set-time`, `queue:start`, `system:info`.
 
 > For full deployment guide (systemd, PM2, Docker, Nginx reverse proxy, NAT traversal), see [DEPLOY.md](DEPLOY.md).
+
+## Discussion Mode
+
+Not every question needs code. Sometimes you need your agent team to **think together** — debate architecture decisions, evaluate trade-offs, or analyze design choices.
+
+Discussion mode runs all agents in parallel to analyze a question from their specialized perspective, then optionally runs debate rounds where agents respond to each other, and finally synthesizes everything into a coherent answer.
+
+### Usage
+
+```bash
+# Direct discussion
+awsl discuss "How should we design the authentication system?"
+
+# Via queue (with debate rounds)
+awsl queue add --discuss "What database schema fits our use case?" --rounds 2
+
+# Schedule an overnight discussion
+awsl queue add --discuss --at 03:00 "Analyze microservices vs monolith trade-offs for our scale"
+```
+
+### Discussion Flow
+
+```
+Round 1: Parallel Perspectives    All agents independently analyze the question
+Round 2..N: Debate (optional)     Agents respond to each other's points
+Synthesis:                        Combined into a final coherent answer
+Persist:                          Saved to .planning/DISCUSSION-{timestamp}.md
+```
+
+### Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--rounds <n>` | 1 | Number of discussion rounds (1-3). More rounds = deeper debate |
+| `--at <time>` | — | Schedule for later (same syntax as queue tasks) |
+| `--cwd <path>` | `.` | Working directory |
+
+### Output
+
+- Discussion transcripts are saved to `.planning/DISCUSSION-{timestamp}.md`
+- Each file contains: all agent perspectives, debate rounds, and the final synthesized answer
+- Discussions appear in `awsl summary` output alongside build results
+- Dashboard API: `GET /api/discussions` returns discussion entries from history
 
 ## Night Session Summary
 
@@ -717,6 +761,7 @@ State persists across sessions:
 ├── QUEUE.json            # Task queue for sleep mode (auto-managed)
 ├── HISTORY.json          # Sleep mode execution history (auto-managed)
 ├── .dashboard.pid        # Background dashboard process PID (auto-managed)
+├── DISCUSSION-*.md       # Discussion mode transcripts (auto-managed)
 ├── research/
 │   ├── architecture.md   # Codebase analysis
 │   └── conventions.md    # Code style analysis
@@ -773,6 +818,7 @@ Real benchmark comparing CC Mode vs Terminal Mode on an identical complex task:
 | Fastest delivery | CC Mode |
 | Bug fix | CC Mode (`/awsl-quick`) |
 | Overnight multi-project build | Task Queue (`awsl queue start`) |
+| Architecture decisions, design trade-offs | Discussion Mode (`awsl discuss`) |
 
 ## Library API
 
@@ -863,6 +909,12 @@ awsl queue show q_1                           # Show detailed info for a single 
 awsl queue remove q_1                         # Remove a task
 awsl queue start --engine claude-code         # Start queue execution
 awsl queue clear                              # Clear all tasks
+
+# Discussion mode
+awsl discuss "How should we design the auth system?"              # Direct discussion
+awsl queue add --discuss "Evaluate database options" --rounds 2   # Via queue with debate
+awsl queue add --discuss --at 03:00 "Microservices vs monolith"   # Schedule overnight
+
 # Quick start — one command boots everything
 awsl start                                   # Start dashboard + remote (if configured)
 awsl start --server http://server:3120       # Start + configure remote in one shot

@@ -57,6 +57,8 @@ awsl run "goal" --engine claude-code
 启动并配置远程面板        →  awsl start --server http://server:3120
 停止所有服务              →  awsl stop
 查看服务状态              →  awsl status
+讨论架构/设计问题          →  awsl discuss "question"
+定时讨论（带辩论）         →  awsl queue add --discuss "question" --rounds 2
 查看睡前模式仪表盘        →  awsl dashboard
 后台启动仪表盘            →  awsl dashboard --bg
 停止后台仪表盘            →  awsl dashboard stop
@@ -76,6 +78,7 @@ awsl run "goal" --engine claude-code
 | 追求最高代码质量 | 终端模式 — reviewer 循环审查 + 自动修复 |
 | 通宵多项目构建 | 任务队列 (`awsl queue start`) — 排队 + 限额恢复，真正的睡前模式 |
 | 改 bug | CC 模式 (`/awsl-quick`) — 最快 |
+| 架构决策、设计权衡 | 讨论模式 (`awsl discuss`) — 多角度分析 |
 
 ## 2. 写好 Goal
 
@@ -994,7 +997,75 @@ awsl summary --date 2026-03-10
 - 如果 HISTORY.json 为空但有 git 提交，summary 仍然能统计 git 活动
 - summary 输出的格式适合复制到 Slack/日报中作为工作汇报
 
-## 17. 不要做的事
+## 17. 讨论模式 vs 构建模式
+
+AWSL 不只能写代码，还能让多个智能体协作讨论。关键是选对模式。
+
+### 什么时候用讨论模式
+
+| 场景 | 推荐 |
+|------|------|
+| 架构决策："微服务还是单体？" | 讨论模式 |
+| 设计权衡："SQL vs NoSQL 对我们的场景哪个合适？" | 讨论模式 |
+| 算法选择："用什么搜索策略？" | 讨论模式 |
+| 技术评估："React vs Vue vs Svelte 怎么选？" | 讨论模式 |
+| 代码审查策略："如何组织测试结构？" | 讨论模式 |
+| 直接写代码："构建 REST API" | 构建模式（`/awsl`） |
+| 修 bug："修复登录 500 错误" | 构建模式（`/awsl-quick`） |
+| 添加功能："加个支付模块" | 构建模式 |
+
+**规则：** 需要 **思考和决策** 的问题用讨论模式，需要 **写代码** 的任务用构建模式。
+
+### 用法
+
+```bash
+# 直接讨论
+awsl discuss "How should we design the authentication system?"
+
+# 通过队列（适合排队多个讨论 + 构建任务）
+awsl queue add --discuss "What database schema fits our use case?" --rounds 2
+
+# 通宵讨论（适合复杂问题，让 agent 慢慢想）
+awsl queue add --discuss --at 03:00 "Analyze microservices vs monolith trade-offs"
+```
+
+### 讨论轮次（`--rounds`）
+
+| 轮次 | 效果 | 适用场景 |
+|------|------|---------|
+| 1（默认） | 每个 agent 独立给出观点，直接综合 | 简单问题、信息收集 |
+| 2 | agent 互相回应，有一轮辩论 | 大多数架构/设计问题 |
+| 3 | 两轮辩论，观点充分碰撞 | 复杂权衡、有争议的决策 |
+
+**提示：** 复杂问题建议用 `--rounds 2` 或 `--rounds 3`，让 agent 有机会互相挑战和补充。
+
+### 查看结果
+
+讨论结果保存在 `.planning/DISCUSSION-{timestamp}.md`，包含：
+- 每个 agent 的独立观点
+- 辩论轮次中的互相回应
+- 最终综合答案（共识、分歧、建议、待解决问题）
+
+```bash
+# 查看最近的讨论记录
+ls .planning/DISCUSSION-*.md
+
+# 讨论也会出现在夜间总结中
+awsl summary
+```
+
+### 提示
+
+- **定时讨论** — 复杂问题用 `--at` 安排在夜间，不占用白天的使用额度
+- **讨论 + 构建** — 先用讨论模式做决策，再用构建模式实现：
+  ```bash
+  awsl queue add --discuss "设计数据库 schema" --rounds 2
+  awsl queue add "按照讨论结果实现数据库模块" --depends-on q_1
+  ```
+- **多问题排队** — 可以排队多个讨论，通宵一起处理
+- **仪表盘查看** — `GET /api/discussions` 端点可以在仪表盘上查看讨论历史
+
+## 18. 不要做的事
 
 | 不要 | 为什么 | 应该 |
 |------|--------|------|
@@ -1007,8 +1078,9 @@ awsl summary --date 2026-03-10
 | verify 字段写自然语言 | 代码无法自动执行 | 写可执行命令：`npm test`、`tsc --noEmit` |
 | 不写测试框架 | Agent 可能选错框架 | 在 goal 里明确：用 Vitest / Jest / pytest |
 | 大项目不加集成测试 task | 单元测试通过不代表整体工作 | PLAN.md 最后加一个集成测试 task |
+| 用构建模式做决策 | 写出来的代码可能方向错 | 先用讨论模式确定方案，再构建 |
 
-## 18. 限额自动恢复
+## 19. 限额自动恢复
 
 AWSL 自动检测 token 限额错误并等待恢复，不需要手动干预。
 
@@ -1083,7 +1155,7 @@ await executeTeam(goal, agents, cwd, model, concurrency, {
 - 崩溃后重启，检查点仍然有效 — 自动恢复
 - 退避等待期间进程保持前台运行（不要关终端！）
 
-## 19. 任务队列（睡前模式）
+## 20. 任务队列（睡前模式）
 
 排队多个目标，一键启动，通宵执行。每个任务自带限额恢复能力。
 
