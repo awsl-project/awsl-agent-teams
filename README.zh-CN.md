@@ -229,6 +229,11 @@ awsl review            # 静态代码审查（无 LLM）— 检测 any、密钥�
 awsl lock              # 查看当前锁状态
 awsl unlock [--force]  # 释放锁
 awsl agents            # 列出可用智能体
+awsl agents show <name>           # 查看智能体完整详情
+awsl agents create <name> [flags] # 创建自定义智能体
+awsl agents edit <name> [flags]   # 编辑已有智能体
+awsl agents delete <name>         # 删除自定义智能体
+awsl agents reset <name>          # 恢复内置默认值
 
 # 夜间工作总结
 awsl summary                             # 总结昨晚的工作（22:00→06:00）
@@ -403,6 +408,7 @@ awsl dashboard stop         # 停止后台仪表盘进程
 - **清除历史** — 一键清除所有执行历史记录（删除 HISTORY.json）
 - **实时日志流** — 基于 SSE 的实时日志面板，展示 agent 的 stdout/stderr
 - **浏览器通知** — 任务失败和队列完成时弹出提醒（需授权）
+- **角色管理** — 可视化 CRUD 编辑器，可创建自定义智能体、覆盖内置提示词、或恢复默认值 — 全部在仪表盘上操作
 - **Agent 分析** — 展示使用的 agent 角色、平均/峰值并行度、总波次数，每次运行可展开查看波次详情和 agent 徽章
 - **日期筛选** — 支持按天、周、月或自定义日期范围筛选统计数据。所有面板组件根据所选时间段实时更新
 - **像素艺术风格** — Press Start 2P 字体、复古动画
@@ -427,6 +433,10 @@ API 端点：
 - `POST /api/projects/queue/clear` — 清空指定项目的队列 `{path}`
 - `GET /api/projects/history?path=` — 获取指定项目的执行历史
 - `GET /api/projects/stats?path=` — 获取指定项目的统计数据
+- `GET /api/agents` — 列出所有智能体（内置 + 自定义）。`?name=X` 返回单个智能体
+- `POST /api/agents` — 创建自定义智能体 `{name, role, systemPrompt, ...}`
+- `PUT /api/agents` — 更新智能体 `{name, ...fields}`
+- `DELETE /api/agents?name=X` — 删除自定义智能体文件
 - `GET /api/discussions` — 历史中的讨论条目
 - `GET /api/clients` — 已连接的远程客户端列表
 - `POST /api/clients/command` — 向客户端发送命令 `{clientId, action, payload?}`
@@ -483,7 +493,7 @@ curl -X POST http://server:3120/api/clients/command \
   -d '{"clientId":"my-laptop","action":"queue:start","payload":{"once":true}}'
 ```
 
-支持的中继命令：`queue:add`、`queue:remove`、`queue:clear`、`queue:list`、`queue:get`、`queue:set-time`、`queue:start`、`system:info`。
+支持的中继命令：`queue:add`、`queue:remove`、`queue:clear`、`queue:list`、`queue:get`、`queue:set-time`、`queue:start`、`agents:list`、`agents:get`、`agents:save`、`agents:delete`、`system:info`。
 
 > 完整部署指南（systemd、PM2、Docker、Nginx 反向代理、内网穿透等）见 [DEPLOY.md](DEPLOY.md)。
 
@@ -724,7 +734,7 @@ Guardian 技能根据智能体角色自动激活：
 
 ## 自定义智能体
 
-在项目中创建 `agents/<name>.md`：
+在项目中创建 `agents/<name>.md` — 手动创建、通过 CLI 或仪表盘 UI 均可：
 
 ```markdown
 ---
@@ -746,7 +756,7 @@ model: anthropic:claude-sonnet-4-20250514
 
 | 字段 | 说明 |
 |-------|-------------|
-| `name` | 智能体标识（必填） |
+| `name` | 智能体标识（必填）。必须匹配 `/^[a-z][a-z0-9-]*$/`，最长 50 字符 |
 | `role` | `planner`、`architect`、`coder`、`reviewer`、`tester` 或 `custom` |
 | `description` | 该智能体的功能描述 |
 | `tools` | 逗号分隔字符串（`read,write,edit,bash`）或 YAML 数组 |
@@ -771,6 +781,46 @@ skills:
 ```
 
 > 无效的 frontmatter 会输出友好错误信息（含文件名和具体校验问题）— 该智能体被跳过，不会静默出错。
+
+### 通过 CLI 管理智能体
+
+```bash
+awsl agents                    # 列出所有智能体（内置 + 自定义）
+awsl agents show <name>        # 查看完整详情，包含系统提示词
+awsl agents create <name>      # 创建新的自定义智能体
+  --role <role>                #   角色（默认：custom）
+  --description <desc>         #   简短描述
+  --prompt <text>              #   系统提示词（内联）
+  --prompt-file <path>         #   从文件读取系统提示词
+  --tools <t1,t2>             #   工具列表
+  --model <model>              #   覆盖模型
+  --skills <s1,s2>            #   Guardian 技能
+  --thinking <level>           #   思考级别（low/medium/high）
+awsl agents edit <name>        # 编辑已有智能体（与 create 相同的参数）
+awsl agents delete <name>      # 删除自定义智能体文件
+awsl agents reset <name>       # 删除覆盖文件，恢复内置默认值
+```
+
+**覆盖机制：** 编辑内置智能体（如 `coder`）会创建 `agents/coder.md` 来覆盖默认值。使用 `agents reset coder` 可删除覆盖文件，恢复原始设置。
+
+### 通过仪表盘管理智能体
+
+仪表盘包含 **角色管理** 卡片和可视化编辑器：
+
+- **智能体卡片** — 每个智能体显示为一张卡片，含名称、角色徽章（彩色）和来源徽章（`built-in` 灰色 / `custom` 绿色 / `override` 黄色）
+- **编辑器弹窗** — 点击卡片或 `[+New]` 打开完整编辑器，包含名称、角色、描述、模型、工具、技能、思考级别和系统提示词（等宽字体文本框）字段
+- **操作** — `[Save]` 创建/更新，`[Reset to Default]` 恢复被覆盖的内置智能体，`[Delete]` 删除自定义智能体
+
+### 智能体 CRUD API
+
+| 方法 | 路径 | 说明 |
+|--------|------|-------------|
+| `GET` | `/api/agents` | 列出所有智能体。`?name=X` 返回单个智能体 |
+| `POST` | `/api/agents` | 创建自定义智能体 `{name, role, systemPrompt, ...}` |
+| `PUT` | `/api/agents` | 更新智能体 `{name, ...fields}` |
+| `DELETE` | `/api/agents?name=X` | 删除自定义智能体文件 |
+
+远程客户端也支持通过中继命令管理智能体：`agents:list`、`agents:get`、`agents:save`、`agents:delete`。
 
 ## .planning/ 目录
 
@@ -924,6 +974,11 @@ awsl unlock --force          # 强制释放任何锁
 
 # 智能体
 awsl agents                  # 列出所有智能体
+awsl agents show <name>      # 查看智能体完整详情，含系统提示词
+awsl agents create <name>    # 创建自定义智能体（--role, --prompt, --tools 等）
+awsl agents edit <name>      # 编辑已有智能体（与 create 相同参数）
+awsl agents delete <name>    # 删除自定义智能体文件
+awsl agents reset <name>     # 删除覆盖文件，恢复内置默认值
 
 # 任务队列（睡前模式）
 awsl queue add "构建 REST API" --quick        # 添加任务

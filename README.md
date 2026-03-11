@@ -229,6 +229,11 @@ awsl review            # Static code review (no LLM) — detect any, secrets, mi
 awsl lock              # Show current lock status
 awsl unlock [--force]  # Release lock
 awsl agents            # List available agents
+awsl agents show <name>           # Show full agent details
+awsl agents create <name> [flags] # Create custom agent
+awsl agents edit <name> [flags]   # Edit existing agent
+awsl agents delete <name>         # Delete custom agent
+awsl agents reset <name>          # Restore built-in default
 
 # Night session summary
 awsl summary                        # Summarize last night's session (22:00→06:00)
@@ -403,6 +408,7 @@ Features:
 - **Clear History** — One-click button to clear all execution history (deletes HISTORY.json)
 - **Live log stream** — Real-time SSE-based log panel showing agent stdout/stderr as it happens
 - **Browser notifications** — Alerts on task failure and queue completion (requires permission)
+- **Agent roles management** — Visual CRUD editor for agent definitions. Create custom agents, override built-in prompts, or reset to defaults — all from the dashboard UI
 - **Agent analysis** — Shows unique agent roles, average/peak parallelism, total waves, and per-run wave breakdown with agent badges
 - **Date filter** — Filter statistics by day, week, month, or custom date range. All dashboard widgets update in real-time based on the selected time period
 - **Pixel art aesthetic** — Press Start 2P font, retro animations
@@ -427,6 +433,10 @@ API endpoints:
 - `POST /api/projects/queue/clear` — clear a project's queue `{path}`
 - `GET /api/projects/history?path=` — get history for a specific project
 - `GET /api/projects/stats?path=` — get stats for a specific project
+- `GET /api/agents` — list all agents (built-in + custom). `?name=X` for single agent
+- `POST /api/agents` — create custom agent `{name, role, systemPrompt, ...}`
+- `PUT /api/agents` — update agent `{name, ...fields}`
+- `DELETE /api/agents?name=X` — delete custom agent file
 - `GET /api/discussions` — discussion entries from history
 - `GET /api/clients` — list connected remote clients
 - `POST /api/clients/command` — send command to a client `{clientId, action, payload?}`
@@ -488,7 +498,7 @@ curl -X POST http://server:3120/api/clients/command \
   -d '{"clientId":"my-laptop","action":"system:info"}'
 ```
 
-Supported relay actions: `queue:add`, `queue:remove`, `queue:clear`, `queue:list`, `queue:get`, `queue:set-time`, `queue:start`, `system:info`.
+Supported relay actions: `queue:add`, `queue:remove`, `queue:clear`, `queue:list`, `queue:get`, `queue:set-time`, `queue:start`, `agents:list`, `agents:get`, `agents:save`, `agents:delete`, `system:info`.
 
 > For full deployment guide (systemd, PM2, Docker, Nginx reverse proxy, NAT traversal), see [DEPLOY.md](DEPLOY.md).
 
@@ -729,7 +739,7 @@ The builtin engine enforces a sandbox policy on every agent. Write operations ar
 
 ## Custom Agents
 
-Create `agents/<name>.md` in your project:
+Create `agents/<name>.md` in your project — manually, via CLI, or through the Dashboard UI:
 
 ```markdown
 ---
@@ -751,7 +761,7 @@ Use proper HTTP status codes and error formats.
 
 | Field | Description |
 |-------|-------------|
-| `name` | Agent identifier (required) |
+| `name` | Agent identifier (required). Must match `/^[a-z][a-z0-9-]*$/`, max 50 chars |
 | `role` | `planner`, `architect`, `coder`, `reviewer`, `tester`, or `custom` |
 | `description` | What this agent does |
 | `tools` | Comma-separated string (`read,write,edit,bash`) or YAML array |
@@ -776,6 +786,46 @@ skills:
 ```
 
 > Invalid frontmatter triggers a friendly error message with the file name and specific validation issue — the agent is skipped, not silently broken.
+
+### Managing Agents via CLI
+
+```bash
+awsl agents                    # List all agents (built-in + custom)
+awsl agents show <name>        # Show full details including system prompt
+awsl agents create <name>      # Create a new custom agent
+  --role <role>                #   Role (default: custom)
+  --description <desc>         #   Short description
+  --prompt <text>              #   System prompt (inline)
+  --prompt-file <path>         #   System prompt from file
+  --tools <t1,t2>             #   Tools list
+  --model <model>              #   Model override
+  --skills <s1,s2>            #   Guardian skills
+  --thinking <level>           #   Thinking level (low/medium/high)
+awsl agents edit <name>        # Edit an existing agent (same flags as create)
+awsl agents delete <name>      # Delete a custom agent file
+awsl agents reset <name>       # Delete override, restore built-in default
+```
+
+**How overrides work:** Editing a built-in agent (e.g. `coder`) creates `agents/coder.md` which overrides the default. Use `agents reset coder` to delete the override and restore the original.
+
+### Managing Agents via Dashboard
+
+The Dashboard includes an **Agent Roles** (角色管理) card with a visual editor:
+
+- **Agent cards** — Each agent displayed as a card with name, role badge (color-coded), and source badge (`built-in` grey / `custom` green / `override` yellow)
+- **Editor modal** — Click any card or `[+New]` to open the full editor with fields for Name, Role, Description, Model, Tools, Skills, Thinking Level, and System Prompt (monospace textarea)
+- **Actions** — `[Save]` to create/update, `[Reset to Default]` for overridden built-ins, `[Delete]` for custom agents
+
+### Agent CRUD API
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/agents` | List all agents. `?name=X` returns a single agent |
+| `POST` | `/api/agents` | Create new custom agent `{name, role, systemPrompt, ...}` |
+| `PUT` | `/api/agents` | Update existing agent `{name, ...fields}` |
+| `DELETE` | `/api/agents?name=X` | Delete custom agent file |
+
+Remote clients also support agent management via relay commands: `agents:list`, `agents:get`, `agents:save`, `agents:delete`.
 
 ## .planning/ Directory
 
@@ -929,6 +979,11 @@ awsl unlock --force          # Force release any lock
 
 # Agents
 awsl agents                  # List all agents
+awsl agents show <name>      # Show full agent details including system prompt
+awsl agents create <name>    # Create custom agent (--role, --prompt, --tools, etc.)
+awsl agents edit <name>      # Edit existing agent (same flags as create)
+awsl agents delete <name>    # Delete custom agent file
+awsl agents reset <name>     # Delete override, restore built-in default
 
 # Task queue (sleep mode)
 awsl queue add "Build REST API" --quick      # Add task to queue

@@ -260,7 +260,97 @@ Wave 2: task-2          ← 依赖 task-1，等 Wave 1 完成
 
 在 `agents/` 目录放 markdown 文件，CC 会读取并注入到对应 role 的子 agent prompt。
 
-**示例：前端项目团队**
+### 三种管理方式
+
+| 方式 | 适用场景 |
+|------|---------|
+| **手动创建文件** | 需要 git 追踪、团队协作 |
+| **CLI 命令** | 终端快速操作、脚本自动化 |
+| **仪表盘 UI** | 可视化编辑、不熟悉文件格式时 |
+
+### 文件格式
+
+Agent 定义文件是 **YAML frontmatter + Markdown body** 格式：
+
+```markdown
+---
+name: api-expert
+role: coder
+description: 精通 OpenAPI 的 REST API 专家
+tools: read,write,edit,bash
+skills: tdd,debug
+thinking: high
+model: anthropic:claude-sonnet-4-20250514
+---
+
+你是一位 REST API 专家。遵循 OpenAPI 3.0 规范。
+始终在实现代码的同时生成 OpenAPI 规格文件。
+使用正确的 HTTP 状态码和错误格式。
+```
+
+- `---` 之间是 YAML frontmatter，定义元数据（name、role、tools 等）
+- `---` 之后的 Markdown 正文就是 **系统提示词**（systemPrompt）— 这是用户最需要自定义的部分
+- 文件名必须是 `{name}.md`，name 只允许小写字母、数字和连字符（`/^[a-z][a-z0-9-]*$/`，最长 50 字符）
+
+### 用 CLI 管理智能体
+
+**创建新智能体：**
+```bash
+# 最简方式 — 用内联 prompt
+awsl agents create my-expert --role coder --prompt "你是 Rust 专家。只用 safe Rust，不用 unsafe。"
+
+# 从文件读取 prompt（适合长提示词）
+awsl agents create my-expert --role coder --prompt-file ./prompts/rust-expert.md
+
+# 完整参数
+awsl agents create api-dev \
+  --role coder \
+  --description "REST API 开发专家" \
+  --prompt "你是 REST API 专家。遵循 RESTful 最佳实践。" \
+  --tools read,write,edit,bash \
+  --skills tdd,debug \
+  --thinking high \
+  --model anthropic:claude-sonnet-4-20250514
+```
+
+**查看和编辑：**
+```bash
+# 查看完整详情（含系统提示词）
+awsl agents show coder
+
+# 编辑已有智能体（只更新指定字段，其他保留）
+awsl agents edit coder --prompt "你是一位资深 Go 开发者。只用标准库。"
+awsl agents edit coder --thinking high --tools read,write,bash
+```
+
+**覆盖内置智能体：**
+```bash
+# 编辑内置 coder 的提示词 → 创建 agents/coder.md 覆盖文件
+awsl agents edit coder --prompt "你是 Python 专家。使用 pytest 而不是 Jest。"
+
+# 不满意？恢复内置默认值（删除覆盖文件）
+awsl agents reset coder
+```
+
+**删除：**
+```bash
+# 删除自定义智能体
+awsl agents delete my-expert
+
+# 注意：不能删除内置智能体（planner/architect/coder/reviewer/tester），只能 reset
+```
+
+### 用仪表盘 UI 管理
+
+打开 `awsl dashboard`，找到 **角色管理** 卡片：
+
+1. **查看** — 所有智能体显示为卡片，含角色徽章和来源标识（`built-in` 灰色 / `custom` 绿色 / `override` 黄色）
+2. **创建** — 点击 `[+New]`，填写名称、角色、描述和系统提示词，保存
+3. **编辑** — 点击卡片打开编辑器，修改后保存
+4. **恢复默认** — 被覆盖的内置智能体显示 `[Reset to Default]` 按钮
+5. **删除** — 自定义智能体显示 `[Delete]` 按钮
+
+### 示例：前端项目团队
 
 `agents/react-dev.md`:
 ```markdown
@@ -294,8 +384,17 @@ description: 前端代码审查 + 无障碍检查
 - 响应式：移动端适配
 ```
 
-**YAML 数组语法（推荐）：**
-tools 和 skills 现在支持 YAML 数组格式：
+或者用 CLI 快速创建（等效）：
+```bash
+awsl agents create react-dev --role coder --description "React + TypeScript 前端开发" \
+  --prompt-file ./prompts/react-dev.md
+awsl agents create ui-reviewer --role reviewer --description "前端代码审查 + 无障碍检查" \
+  --prompt-file ./prompts/ui-reviewer.md
+```
+
+### YAML 数组语法
+
+tools 和 skills 支持 YAML 数组格式（推荐）：
 ```yaml
 tools:
   - read
@@ -304,13 +403,26 @@ tools:
 ```
 传统逗号分隔格式仍然兼容：`tools: read,write,bash`
 
-**Schema 校验：**
-frontmatter 现在会做 TypeBox schema 校验。无效配置会输出友好错误（含文件名和具体问题），该 agent 被跳过。
+### Schema 校验
 
-**规则：**
+frontmatter 会做 TypeBox schema 校验。无效配置会输出友好错误（含文件名和具体问题），该 agent 被跳过。
+
+### 什么时候自定义 vs 创建新的
+
+| 场景 | 推荐做法 |
+|------|---------|
+| 希望 coder 用不同的语言/框架 | **覆盖内置** — `awsl agents edit coder --prompt "..."` |
+| 需要多个不同专长的 coder | **创建新的** — `awsl agents create rust-dev --role coder ...` |
+| 需要更严格的审查标准 | **覆盖内置** — `awsl agents edit reviewer --prompt "..."` |
+| 需要领域专家（安全、DBA、前端） | **创建新的** — 给每个领域一个专属 agent |
+| 临时调整后想恢复 | **先覆盖，用完 reset** — `awsl agents reset coder` |
+
+### 规则
+
 - role 决定 Guardian 技能注入（`coder` → TDD，`reviewer` → 两阶段审查，`tester` → 系统化调试）
 - 自定义 agent 的 system prompt 会附加到 Guardian 技能之后
-- 用 `/awsl-agents create <name>` 快速创建
+- 覆盖文件保存在 `agents/` 目录，原始内置定义不会被修改
+- 建议把 `agents/` 目录提交到 git — 团队共享自定义智能体配置
 
 ## 6. 利用 .planning/ 做持续开发
 
