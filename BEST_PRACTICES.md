@@ -371,13 +371,11 @@ awsl agents delete my-expert
 
 ### 内置提示词模板
 
-AWSL 提供 9 个内置提示词模板，覆盖常见角色：
+AWSL 提供 7 个内置提示词模板，覆盖常见角色：
 
 | 模板 | 说明 |
 |------|------|
-| `coder` | 全栈开发者 |
-| `frontend-coder` | 前端专家 — HTML、CSS、JS、UI |
-| `backend-coder` | 后端专家 — API、Node.js、TypeScript |
+| `coder` | 全栈开发者（内置 Agent tool 子 agent 并行） |
 | `reviewer` | 安全导向的代码审查者 |
 | `architect` | 系统架构设计师 |
 | `tester` | 测试设计与执行 |

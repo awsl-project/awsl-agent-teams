@@ -736,9 +736,7 @@ Guardian 技能根据智能体角色自动激活：
 |------|------|-------------|
 | planner | 规划师 | 将目标分解为结构化微任务 |
 | architect | 架构师 | 设计系统架构和接口 |
-| coder | 编码者 | 全栈开发 — 通用实现 |
-| frontend-coder | 前端编码者 | 前端专家 — HTML、CSS、JS、UI 组件 |
-| backend-coder | 后端编码者 | 后端专家 — API、Node.js、TypeScript |
+| coder | 编码者 | 全栈开发，内置子 agent 并行（启用 Agent tool） |
 | reviewer | 审查者 | 两阶段审查 + 质量门禁 |
 | tester | 测试者 | 设计和运行测试，调试失败 |
 

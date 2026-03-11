@@ -741,9 +741,7 @@ The builtin engine enforces a sandbox policy on every agent. Write operations ar
 |------|------|-------------|
 | planner | planner | Decomposes goals into structured micro-tasks |
 | architect | architect | Designs system architecture and interfaces |
-| coder | coder | Full-stack developer — general purpose implementation |
-| frontend-coder | coder | Frontend specialist — HTML, CSS, JS, UI components |
-| backend-coder | coder | Backend specialist — APIs, Node.js, TypeScript |
+| coder | coder | Full-stack developer with sub-agent parallelism (Agent tool enabled) |
 | reviewer | reviewer | Two-stage review with quality gate |
 | tester | tester | Designs and runs tests, debugs failures |
 
