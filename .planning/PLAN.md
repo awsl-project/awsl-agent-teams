@@ -1,195 +1,112 @@
 # Execution Plan
 
-## task_1: Refactor queue.ts: planPreview + planCommit
+## task_1: Add date filter UI controls and CSS
 - **Assignee:** coder
-- **Files:** src/queue.ts, src/index.ts
+- **Files:** public/dashboard.html
 
 ### Action
-Refactor the existing `plan()` method in `src/queue.ts` into two public methods:
+Add a date filter bar in public/dashboard.html inside the #app div, right BEFORE the .stats div (around line 862). Implementation:
 
-1. `planPreview(description: string): Promise<PlannedTask[]>` — Calls LLM via `callClaude()` with the existing prompt, parses the JSON response, returns the `PlannedTask[]` array WITHOUT modifying the queue. This is lines 557-595 of the current `plan()` method.
+1) HTML: Add a div with class 'date-filter' containing:
+   - Quick-select preset buttons: '今日'(Today), '本周'(This Week), '本月'(This Month), '全部'(All, default active)
+   - A <input type='month'> for month selection (labeled '选择月份')
+   - Two <input type='date'> for custom range start/end (labeled '自定义范围')
+   - Each button should have an onclick handler calling setDateFilter('today'), setDateFilter('week'), setDateFilter('month'), setDateFilter('all')
+   - Buttons should have id attributes: dfToday, dfWeek, dfMonth, dfAll
+   - Date inputs should have ids: dfMonthInput, dfStartInput, dfEndInput
 
-2. `planCommit(planned: PlannedTask[], defaults?: { engine?: Engine; quick?: boolean; concurrency?: number; model?: string }): QueueTask[]` — Takes a `PlannedTask[]` array, resolves dependency references (position→q_N IDs), adds each task to the queue via `this.add()`. This is lines 597-637 of the current `plan()` method.
-
-3. Keep `plan()` as a backward-compatible wrapper that calls `planPreview()` then `planCommit()` and returns the result.
-
-4. Update `src/index.ts` to ensure `PlannedTask` type is already exported (it is — just verify no changes needed).
-
-Do NOT change the LLM prompt or any other behavior. Pure refactor — extract into two methods.
+2) CSS: Add styles matching the existing dark theme:
+   - .date-filter: display flex, align-items center, gap 8px, flex-wrap wrap, padding 8-12px, margin-bottom 12px, background var(--bg2), border-radius 10px, border 1px solid var(--border)
+   - .date-filter button: pill-shaped (border-radius 16px), background transparent, border 1px solid var(--border), color var(--ink3), padding 4px 14px, cursor pointer, font-size 13px
+   - .date-filter button.active: background var(--blue), color white, border-color var(--blue)
+   - .date-filter input: background var(--bg), border 1px solid var(--border), color var(--ink), border-radius 6px, padding 4px 8px, font-size 13px
+   - .date-filter label: font-size 12px, color var(--ink3)
 
 ### Verify
-npx tsc --noEmit
+Open dashboard.html in browser and confirm filter bar appears above stats with all controls visible
 
 ### Done
-planPreview() and planCommit() are separate public methods on TaskQueue, plan() still works as backward compat wrapper, TypeScript compiles clean
+Date filter bar with 4 preset buttons and date/month inputs renders correctly in the dashboard
 
-## task_2: Add queue split CLI command
+## task_2: Add date filter JS logic and wire to render
 - **Assignee:** coder
 - **Dependencies:** task_1
-- **Files:** src/cli.ts
+- **Files:** public/dashboard.html
 
 ### Action
-Add a new `queue split` subcommand in `src/cli.ts` inside the `if (command === 'queue')` block (around line 1142, before the `else` fallback). Implementation:
+Add JavaScript logic for date filtering in public/dashboard.html:
 
-1. Parse the same options as `queue plan`: `--engine`, `--quick`, `--concurrency`, `--model`, `--yes` (new flag to skip confirmation), plus description text from remaining args.
+1) State variables (add near line ~1008, alongside existing filterProj/selectedClient):
+   var dateFilterMode = 'all';  // 'today' | 'week' | 'month' | 'custom' | 'all'
 
-2. Call `queue.planPreview(description)` to get the parsed `PlannedTask[]`.
+2) setDateFilter(mode) function:
+   - Sets dateFilterMode = mode
+   - Updates button active states: remove 'active' from all .date-filter buttons, add 'active' to the clicked one
+   - If mode is 'month': read value from dfMonthInput
+   - If mode is 'custom': read values from dfStartInput and dfEndInput
+   - Reset render cache: render._lastKey = null
+   - Call render()
 
-3. Print a preview table:
-```
-拆分预览: N 个任务
+3) Event handlers for inputs:
+   - dfMonthInput.onchange: call setDateFilter('month')
+   - dfStartInput.onchange and dfEndInput.onchange: call setDateFilter('custom')
 
-  #   Deps       Goal
-  ─────────────────────────────────────────
-  1   (none)     构建用户认证模块
-  2   1          添加支付模块
-  3   all        写集成测试
-```
+4) filterByDate(entries) function:
+   - If dateFilterMode === 'all': return entries unchanged
+   - If 'today': var today = localDate(new Date().toISOString()); return entries where localDate(e.date||e.startedAt) === today
+   - If 'week': compute Monday of current week as YYYY-MM-DD string; return entries where localDate(e.date||e.startedAt) >= monday && <= today
+   - If 'month': var mv = document.getElementById('dfMonthInput').value (YYYY-MM); return entries where localDate(e.date||e.startedAt) starts with mv
+   - If 'custom': var s = dfStartInput.value, end = dfEndInput.value; return entries where localDate(e.date||e.startedAt) >= s && <= end (skip check if s or end is empty)
 
-4. If `--yes` flag is NOT set, prompt for confirmation using Node.js `readline`:
-```
-确认添加到队列? (y/N) 
-```
-Read one line from stdin. If not 'y' or 'Y', print '已取消' and exit.
+5) Wire into render() function:
+   - At line ~1770, BEFORE 'var s = stats(entries)', insert: entries = filterByDate(entries);
+   - Update dirty-check key at line ~1764 to append: + '|' + dateFilterMode + '|' + (document.getElementById('dfMonthInput')?.value||'') + '|' + (document.getElementById('dfStartInput')?.value||'') + '|' + (document.getElementById('dfEndInput')?.value||'')
 
-5. If confirmed (or `--yes`), call `queue.planCommit(planned, { engine, quick, concurrency, model })` and print the result table (same format as existing `queue plan` output with actual q_N IDs).
-
-6. Update the `usage()` function to add the new command:
-```
-  queue split <text> [opts] Preview task splitting before adding to queue
-    --yes                  Skip confirmation, add immediately
-```
-
-7. Update the error message on line 1143 to include 'split' in the list of valid commands.
-
-For readline, use: `import { createInterface } from 'node:readline';` — create interface with stdin/stdout, ask question, close after answer. Wrap in a Promise for async/await.
+6) Initialize: set dfAll button to have class 'active' on page load
 
 ### Verify
-npx tsc --noEmit
+Open dashboard in browser. Click each preset button and verify stats cards, token counts, heatmap, trend chart, timeline, and agent analysis all update to show only data matching the selected date range.
 
 ### Done
-`awsl queue split <text>` shows preview table and prompts for confirmation, `--yes` flag skips prompt, usage() updated, types compile clean
+All dashboard widgets correctly filter by selected date range; preset buttons and custom inputs work; filter persists across 30s auto-refresh
 
-## task_3: Add tests for planPreview + planCommit
-- **Assignee:** tester
-- **Dependencies:** task_1
-- **Files:** src/queue.test.ts
+## task_3: Review date filter implementation
+- **Assignee:** reviewer
+- **Dependencies:** task_2
+- **Files:** public/dashboard.html
 
 ### Action
-Add tests to `src/queue.test.ts` for the new `planPreview` and `planCommit` methods. Since `planPreview` calls an LLM (can't test in unit tests), focus on `planCommit`:
-
-1. Test `planCommit` with simple independent tasks (no deps):
-```typescript
-test('planCommit adds tasks with no dependencies', () => {
-  const dir = makeTmpDir();
-  try {
-    const queue = new TaskQueue(dir);
-    const planned: PlannedTask[] = [
-      { goal: 'Build auth module', quick: false },
-      { goal: 'Build payment module', quick: true },
-    ];
-    const added = queue.planCommit(planned);
-    assert.equal(added.length, 2);
-    assert.equal(added[0].goal, 'Build auth module');
-    assert.equal(added[1].goal, 'Build payment module');
-    assert.equal(added[1].options.quick, true);
-    // Verify persisted
-    const all = queue.list();
-    assert.equal(all.length, 2);
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
-});
-```
-
-2. Test `planCommit` with position-based dependencies:
-```typescript
-test('planCommit resolves position-based dependencies', () => {
-  const dir = makeTmpDir();
-  try {
-    const queue = new TaskQueue(dir);
-    const planned: PlannedTask[] = [
-      { goal: 'First task', dependsOn: [] },
-      { goal: 'Second task', dependsOn: ['1'] },
-      { goal: 'Third task', dependsOn: ['all'] },
-    ];
-    const added = queue.planCommit(planned);
-    assert.equal(added.length, 3);
-    assert.equal(added[0].dependsOn, undefined);
-    assert.deepEqual(added[1].dependsOn, [added[0].id]);
-    assert.deepEqual(added[2].dependsOn, ['all']);
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
-});
-```
-
-3. Test `planCommit` with defaults (engine, model):
-```typescript
-test('planCommit applies defaults', () => {
-  const dir = makeTmpDir();
-  try {
-    const queue = new TaskQueue(dir);
-    const planned: PlannedTask[] = [{ goal: 'A task', quick: false }];
-    const added = queue.planCommit(planned, { model: 'test-model', concurrency: 4 });
-    assert.equal(added[0].options.model, 'test-model');
-    assert.equal(added[0].options.concurrency, 4);
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
-});
-```
-
-4. Test `planCommit` with empty array throws or returns empty:
-```typescript
-test('planCommit with empty array returns empty', () => {
-  const dir = makeTmpDir();
-  try {
-    const queue = new TaskQueue(dir);
-    const added = queue.planCommit([]);
-    assert.equal(added.length, 0);
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
-});
-```
-
-Import `PlannedTask` from `./queue.js` at the top of the file (it's already imported for QueueTask).
+Review the date filter implementation in public/dashboard.html focusing on:
+1) Date comparison correctness: ensure localDate() is used consistently, timezone handling is correct, YYYY-MM-DD string comparison works (lexicographic comparison of ISO date strings is valid)
+2) Edge cases: entries without date/startedAt fields, empty filter inputs, empty entries array after filtering
+3) Code style: must use var (not let/const), no ES6+ features (arrow functions, template literals), consistent with existing codebase patterns
+4) UX: active button state updates correctly, filter doesn't break auto-refresh, heatmap/trend still show meaningful data when filtered
+5) No XSS vectors from input.value usage
+6) Performance: filtering runs O(n) per render, acceptable for expected data sizes
+Flag issues and suggest fixes.
 
 ### Verify
-npx tsx --test src/queue.test.ts
+Read the complete dashboard.html and trace all date filter code paths
 
 ### Done
-All planCommit tests pass: independent tasks, position deps, defaults, empty array
+Review complete with issues documented or confirmation that implementation is correct
 
-## task_4: Update documentation for queue split
+## task_4: Update documentation for date filter
 - **Assignee:** coder
-- **Dependencies:** task_1, task_2
+- **Dependencies:** task_2
 - **Files:** README.md, README.zh-CN.md, BEST_PRACTICES.md
 
 ### Action
-Update all three documentation files to cover the new `queue split` command:
+Update all three documentation files:
 
-**README.md** (English):
-- In the Queue Commands section, add `queue split` with description: splits a natural language description into independent queue tasks with preview before committing. Mention `--yes` flag.
-- Add a brief example: `awsl queue split "Build auth, then payments, finally integration tests"`
+1) README.md: Find the Dashboard section and add a bullet/paragraph about the new date filter feature: 'Filter statistics by day, week, month, or custom date range. All dashboard widgets update in real-time based on the selected time period.'
 
-**README.zh-CN.md** (Chinese):
-- Mirror the same changes in Chinese. `queue split` = 拆分任务。
-- Example: `awsl queue split "先构建认证，然后加支付，最后写集成测试"`
-- Mention the interactive preview + confirmation flow.
+2) README.zh-CN.md: Add the equivalent in Chinese: '支持按天、周、月或自定义日期范围筛选统计数据。所有面板组件根据所选时间段实时更新。'
 
-**BEST_PRACTICES.md** (Chinese):
-- Add a section or update the queue section explaining when to use `queue split` vs `queue plan` vs `queue add`.
-- `queue split` = 推荐方式，先预览再确认
-- `queue plan` = 直接添加（向后兼容）
-- `queue add` = 手动添加单个任务
-- Include a usage example showing the preview output format.
-
-Keep changes minimal and consistent with existing doc style.
+3) BEST_PRACTICES.md: Add guidance about using date filters for productivity analysis, e.g.: '使用日期筛选器分析生产力趋势：按天查看每日完成量，按月对比不同月份的效率，自定义范围聚焦特定项目周期。'
 
 ### Verify
-Check that all three files mention 'queue split' with examples
+Read all three files and confirm the date filter feature is documented in each
 
 ### Done
-README.md, README.zh-CN.md, and BEST_PRACTICES.md all document queue split with examples and usage guidance
+README.md, README.zh-CN.md, and BEST_PRACTICES.md all contain date filter documentation

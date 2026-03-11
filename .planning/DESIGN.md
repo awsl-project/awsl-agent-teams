@@ -1,32 +1,47 @@
 ## AWSL_RESULT
 
-### Design: Queue Task Splitting (`queue split`)
+### Design: Dashboard Date Filter & Statistics
 
-**Core problem**: `queue.plan()` adds tasks immediately with no preview — users need to see what will be created before committing.
+**Problem:** Dashboard shows all-time stats only. User wants to view stats by day, month, or custom range.
 
-**Solution**: Refactor into two-step API + new CLI command.
-
-#### API Changes (src/queue.ts)
-- `planPreview(description)` — LLM call only, returns `PlannedTask[]` without touching queue
-- `planCommit(planned, defaults)` — Takes preview result, resolves deps, adds to queue
-- `plan()` — Kept as backward-compat wrapper
-
-#### CLI Change (src/cli.ts)
-- `queue split <text>` — Shows formatted preview table → Y/n confirmation → adds on confirm
-- Supports `--yes` for non-interactive use
-
-#### Interface Enhancement
-- `PlannedTask.mode?: "build" | "discuss"` — LLM can suggest discussion tasks
+**Solution:** Client-side date filtering in `public/dashboard.html` (~120 lines). No backend changes.
 
 #### Key Decisions
-| Decision | Why |
-|----------|-----|
-| Two-step API (preview + commit) | Users need preview before commit |
-| Keep `plan()` as wrapper | Backward compatibility |
-| `split` ≠ `plan` | Different intent: interactive vs immediate |
-| No interactive editing v1 | `queue remove` suffices; avoid overengineering |
+
+| Decision | Rationale |
+|----------|-----------|
+| Client-side only | Data volume is tiny. Entries already fully loaded. Zero backend risk. |
+| Filter before `stats()` | All widgets (stats cards, heatmap, trend, agents, timeline) respect the filter. |
+| Pill-style button bar | Clean, compact. Modes: All / Today / 7 Days / 30 Days / Month / Custom. |
+| Composes with project filter | Date filter at `render()` level, project filter inside `renderTimeline()`. |
+| No localStorage persistence | Filter resets on reload — simple, avoids stale state. |
+
+#### Filter Modes
+
+- **All** (default) — no filter, current behavior
+- **Today** — entries from today only
+- **7 Days** — last 7 days
+- **30 Days** — last 30 days
+- **Month** — pick a specific month via `<input type="month">`
+- **Custom** — date range with from/to `<input type="date">`
+
+#### Architecture
+
+1. New global: `var dateFilter = { mode: 'all' }`
+2. New function: `filterByDate(entries, df)` — filters by mode using existing `localDate()`
+3. Integration: In `render()`, apply `filterByDate()` before `stats()` call
+4. Dirty-check key updated to include filter state
+5. UI: Filter bar between header and stats cards with pill buttons + conditional inputs
 
 #### Files
-- `src/queue.ts`, `src/cli.ts`, `src/index.ts`, `CLAUDE.md`, `README.md`, `README.zh-CN.md`, `BEST_PRACTICES.md`
 
-Design stored in `.planning/design.md` and `.planning/shared-memory.json`.
+| File | Scope |
+|------|-------|
+| `public/dashboard.html` | CSS (~25 lines) + HTML (~15 lines) + JS (~80 lines) |
+
+**No backend changes.** No TypeScript file modifications needed.
+
+#### Design Documents
+
+- `.planning/design.md` — Full design with code samples
+- `.planning/shared-memory.json` — Machine-readable design for coder/tester agents

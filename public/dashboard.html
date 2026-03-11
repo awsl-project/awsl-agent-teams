@@ -14,6 +14,7 @@
   --ink2: #4a4a5e;
   --ink3: #8b8b9e;
   --ink4: #b8b8c8;
+  --bg2: #edeef2;
   --border: #ededf0;
   --green: #22c55e;
   --green-bg: #dcfce7;
@@ -837,6 +838,58 @@ a { color: var(--blue); text-decoration: none; }
   text-align: center;
 }
 
+/* ─── Date Filter ────────────── */
+
+.date-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  background: var(--bg2);
+  border-radius: 10px;
+  border: 1px solid var(--border);
+}
+
+.date-filter button {
+  border-radius: 16px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--ink3);
+  padding: 4px 14px;
+  cursor: pointer;
+  font-size: 13px;
+  font-family: var(--font);
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.date-filter button:hover {
+  color: var(--ink2);
+  border-color: var(--ink4);
+}
+
+.date-filter button.active {
+  background: var(--blue);
+  color: white;
+  border-color: var(--blue);
+}
+
+.date-filter input {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--ink);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 13px;
+  font-family: var(--font);
+}
+
+.date-filter label {
+  font-size: 12px;
+  color: var(--ink3);
+}
+
 /* ─── Scrollbar ──────────────── */
 
 ::-webkit-scrollbar { width: 6px; }
@@ -859,6 +912,14 @@ a { color: var(--blue); text-decoration: none; }
 <div class="loading" id="loading">Loading<span class="dots"></span></div>
 
 <div id="app" style="display:none">
+  <div class="date-filter">
+    <button id="dfToday" onclick="setDateFilter('today')">今日</button>
+    <button id="dfWeek" onclick="setDateFilter('week')">本周</button>
+    <button id="dfMonth" onclick="setDateFilter('month')">本月</button>
+    <button id="dfAll" class="active" onclick="setDateFilter('all')">全部</button>
+    <label>选择月份 <input type="month" id="dfMonthInput"></label>
+    <label>自定义范围 <input type="date" id="dfStartInput"> – <input type="date" id="dfEndInput"></label>
+  </div>
   <div class="stats" id="stats">
     <div class="stat">
       <div class="stat-info">

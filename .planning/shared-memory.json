@@ -1,35 +1,37 @@
 {
   "design": {
-    "title": "Queue Task Splitting — queue split command with preview + confirm",
+    "title": "Dashboard Date Filter & Statistics — by day, by month, custom range",
     "designDoc": ".planning/design.md",
-    "summary": "Refactor queue.plan() into planPreview() + planCommit() two-step API. Add 'queue split' CLI command with interactive preview and Y/n confirmation. Enhance PlannedTask with mode field. Improve LLM prompt for messy Chinese input.",
-    "modifiedFiles": ["src/queue.ts", "src/cli.ts", "src/index.ts", "CLAUDE.md", "README.md", "README.zh-CN.md", "BEST_PRACTICES.md"],
-    "apiChanges": {
-      "planPreview(description)": "NEW: Returns PlannedTask[] without adding to queue (LLM call only)",
-      "planCommit(planned, defaults)": "NEW: Takes PlannedTask[], resolves deps, adds to queue, returns QueueTask[]",
-      "plan(description, defaults)": "KEPT: Convenience wrapper calling planPreview + planCommit"
+    "summary": "Add client-side date filtering to dashboard. Pill-style button bar (All/Today/7d/30d/Month/Custom) with month picker and date range inputs. filterByDate() applied before stats() so all widgets (stats cards, heatmap, trend chart, agent analysis, timeline) respect the selected period. ~120 lines in dashboard.html only. No backend changes.",
+    "approach": "client-side-only",
+    "modifiedFiles": ["public/dashboard.html"],
+    "noBackendChanges": true,
+    "filterModes": ["all", "today", "7d", "30d", "month", "custom"],
+    "newState": {
+      "dateFilter": "{ mode: 'all' | 'today' | '7d' | '30d' | 'month' | 'custom', value?: string, from?: string, to?: string }"
     },
-    "cliChanges": {
-      "queue split <text> [opts]": "NEW: Split text → preview table → Y/n confirm → add to queue",
-      "flags": ["--yes (skip confirmation)", "--engine", "--quick", "--concurrency", "--model"]
+    "newFunctions": {
+      "filterByDate(entries, df)": "Filters entries by date range based on dateFilter state, uses existing localDate() for timezone handling",
+      "updateFilterLabel(df, count)": "Shows human-readable label with run count when filter is active"
     },
-    "interfaceChanges": {
-      "PlannedTask": "Add optional mode?: 'build' | 'discuss' field"
-    },
+    "integrationPoint": "render() — insert filterByDate() call between entry collection and stats() call (line ~1770)",
+    "uiPlacement": "Between header and stats cards",
     "keyDecisions": {
-      "preview_before_commit": "Core fix: users need to see tasks before they're added",
-      "backward_compat": "plan() kept as wrapper so existing scripts don't break",
-      "split_vs_plan": "split = interactive preview, plan = immediate add — different intent",
-      "no_interactive_edit_v1": "User can queue remove individual tasks after split",
-      "chinese_output": "Preview table uses Chinese labels per user preference"
+      "client_side_only": "Data volume is tiny (task executions). Entries already fully loaded. Zero backend risk.",
+      "all_widgets_filtered": "Date filter applied before stats() so stats cards, heatmap, trend, agents, timeline all see filtered data.",
+      "composes_with_project_filter": "Date filter at render() level, project filter inside renderTimeline(). Both compose correctly.",
+      "dirty_check_update": "Add dateFilter state to render key so filter changes trigger re-render.",
+      "no_persistence": "Filter resets to 'all' on page reload — simple, no localStorage needed."
     },
     "implementationOrder": [
-      "1. src/queue.ts — refactor plan into planPreview + planCommit",
-      "2. src/cli.ts — add queue split command with Y/n confirmation",
-      "3. src/index.ts — export PlannedTask",
-      "4. Documentation (README.md, README.zh-CN.md, BEST_PRACTICES.md)",
-      "5. CLAUDE.md — update auto-queue rule",
-      "6. Build + test"
+      "1. CSS: Add .date-filter styles (~25 lines)",
+      "2. HTML: Add filter bar between header and stats cards (~15 lines)",
+      "3. JS: Add dateFilter state variable + filterByDate() function",
+      "4. JS: Add button click handlers + input change handlers",
+      "5. JS: Integrate into render() — call filterByDate before stats()",
+      "6. JS: Update dirty-check key to include dateFilter state",
+      "7. JS: Add updateFilterLabel() for human-readable period display",
+      "8. Test: Verify all filter modes work, compose with project filter"
     ]
   }
 }
