@@ -95,6 +95,20 @@ export function startDashboard(cwd: string, port: number = 3120, host: string = 
 			return;
 		}
 
+		if (url.pathname.startsWith("/api/history/") && url.pathname.endsWith("/waves")) {
+			const entryId = url.pathname.split("/")[3];
+			const data = loadHistory(cwd);
+			const entry = data.entries.find(e => e.id === entryId);
+			if (!entry) {
+				res.writeHead(404, { "Content-Type": "application/json" });
+				res.end(JSON.stringify({ error: "not found" }));
+			} else {
+				res.writeHead(200, { "Content-Type": "application/json" });
+				res.end(JSON.stringify({ id: entry.id, goal: entry.goal, waves: entry.waves ?? [] }));
+			}
+			return;
+		}
+
 		if (url.pathname === "/api/history") {
 			const data = loadHistory(cwd);
 			res.writeHead(200, { "Content-Type": "application/json" });
@@ -680,7 +694,7 @@ export function startDashboard(cwd: string, port: number = 3120, host: string = 
 
 	server.listen(port, host, () => {
 		log.info("dashboard", `Dashboard running at http://${host}:${port}`);
-		log.info("dashboard", `API: /api/history, /api/stats, /api/queue, /api/queue/add|remove|clear|start, /api/history/clear, /api/agents/*, /api/projects/*`);
+		log.info("dashboard", `API: /api/history, /api/history/:id/waves, /api/stats, /api/queue, /api/queue/add|remove|clear|start, /api/history/clear, /api/agents/*, /api/projects/*`);
 		log.info("dashboard", `Relay: /ws/relay (WebSocket), /api/clients, /api/clients/command`);
 	});
 
