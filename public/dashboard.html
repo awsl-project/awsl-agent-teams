@@ -429,6 +429,17 @@ a { color: var(--blue); text-decoration: none; }
 .entry-waves { margin-top: 6px; font-size: 11px; }
 .entry-wave { display: flex; align-items: center; gap: 6px; padding: 2px 0; color: var(--ink3); }
 .entry-wave-label { font-weight: 600; color: var(--ink2); min-width: 52px; }
+.wave-tasks { margin: 4px 0 4px 56px; font-size: 10px; }
+.wave-task { display: flex; align-items: center; gap: 6px; padding: 1px 0; color: var(--ink3); }
+.wave-task-status { font-weight: 600; min-width: 14px; text-align: center; }
+.wave-task-status.done, .wave-task-status.verified { color: var(--green); }
+.wave-task-status.failed { color: var(--red); }
+.wave-task-desc { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wave-task-files { color: var(--ink4); font-size: 9px; }
+.wave-status-badge { font-size: 9px; padding: 0 4px; border-radius: 4px; font-weight: 600; }
+.wave-status-badge.success { background: var(--green); color: #fff; }
+.wave-status-badge.partial { background: var(--orange, #f0a030); color: #fff; }
+.wave-status-badge.failed { background: var(--red); color: #fff; }
 .agent-badge { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 8px; color: #fff; font-weight: 500; }
 .entry-agents-row { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin-top: 3px; font-size: 11px; color: var(--ink3); }
 .entry-agents-row .label { font-weight: 600; color: var(--ink2); margin-right: 2px; }
@@ -2197,11 +2208,38 @@ function renderEntryWaves(e) {
     var w = e.waves[i];
     h += '<div class="entry-wave">';
     h += '<span class="entry-wave-label">wave ' + w.wave + '</span>';
+    if (w.status) h += '<span class="wave-status-badge ' + esc(w.status) + '">' + esc(w.status) + '</span>';
     for (var j = 0; j < w.agents.length; j++) {
       h += '<span class="agent-badge" style="background:' + hc(w.agents[j]) + '">' + esc(w.agents[j]) + '</span>';
     }
     if (w.parallel > 1) h += '<span style="color:var(--blue)">//' + w.parallel + '</span>';
     h += '</div>';
+    if (w.tasks && w.tasks.length > 0) {
+      h += '<div class="wave-tasks">';
+      for (var k = 0; k < w.tasks.length; k++) {
+        var t = w.tasks[k];
+        var icon = t.status === 'failed' ? '\u2717' : '\u2713';
+        var stCls = t.status || 'done';
+        var desc = t.description || t.id;
+        if (desc.length > 60) desc = desc.substring(0, 57) + '...';
+        h += '<div class="wave-task">';
+        h += '<span class="wave-task-status ' + esc(stCls) + '">' + icon + '</span>';
+        h += '<span class="wave-task-desc">' + esc(desc) + '</span>';
+        h += '<span class="agent-badge" style="background:' + hc(t.assignee) + ';font-size:9px;padding:0 4px">' + esc(t.assignee) + '</span>';
+        if (t.files && t.files.length > 0) {
+          h += '<span class="wave-task-files">' + t.files.length + ' file' + (t.files.length > 1 ? 's' : '') + '</span>';
+        }
+        if (t.status === 'failed' && t.error) {
+          var err = t.error.length > 80 ? t.error.substring(0, 77) + '...' : t.error;
+          h += '<span style="color:var(--red);font-size:9px">' + esc(err) + '</span>';
+        } else if (t.result) {
+          var res = t.result.length > 80 ? t.result.substring(0, 77) + '...' : t.result;
+          h += '<span style="color:var(--ink4);font-size:9px">' + esc(res) + '</span>';
+        }
+        h += '</div>';
+      }
+      h += '</div>';
+    }
   }
   h += '</div>';
   return h;
