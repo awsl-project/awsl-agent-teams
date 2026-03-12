@@ -2,45 +2,15 @@
   "tasks": [
     {
       "id": "q_1",
-      "goal": "面板和本地终端都要加可以自定义角色提示词的功能",
-      "options": {
-        "quick": false
-      },
-      "status": "done",
-      "scheduledAt": "2026-03-11T12:46:18.688Z",
-      "startedAt": "2026-03-11T12:46:31.344Z",
-      "completedAt": "2026-03-11T13:16:40.568Z",
-      "result": {
-        "success": true,
-        "summary": "✅ 8/8 tasks completed successfully.\n\n✅ task_1 (coder): Add four new exported functions to src/agents.ts:\n\n1. `serializeAgent(agent: ... [src/agents.ts, src/index.ts]\n   → ## AWSL_RESULT\n\n### Task 1 Complete: Agent CRUD functions in `src/agents.ts`\n\n**Implemented 4 functions + 1 export:**\n\n| Function | Description |\n|----------|-------------|\n| `serializeAgent(agent)` | Converts `TeamAgentDef` to YAML frontmatter + markdown body using `yaml.stringify` |\n| `saveAgent(d\n\n✅ task_2 (coder): Add agent CRUD API endpoints to the dashboard HTTP server in src/dashboard.ts... [src/dashboard.ts]\n   → ## AWSL_RESULT\n\n### Task 2 Complete: Agent CRUD API endpoints in `src/dashboard.ts`\n\n**4 endpoints added before the 404 handler:**\n\n| Endpoint | Description |\n|----------|-------------|\n| `GET /api/agents` | Returns all agents (builtins + custom from `agents/` dir). With `?name=X`, returns single ag\n\n✅ task_3 (coder): Enhance the existing `agents` CLI command in src/cli.ts with subcommands. Imp... [src/cli.ts]\n   → ## AWSL_RESULT\n\n### Task 3 Complete: Agents CLI Subcommands in `src/cli.ts`\n\n**Implemented 6 subcommands:**\n\n| Subcommand | Description |\n|------------|-------------|\n| `awsl agents` | List all agents (existing behavior preserved) |\n| `awsl agents show <name>` | Show full details including systemPro\n\n✅ task_4 (coder): Add an 'Agent Roles' (角色管理) collapsible card section to public/dashboard.html... [public/dashboard.html]\n   → All 25 tests pass. Type-check clean.\n\n## AWSL_RESULT\n\n### Task 4 Complete: Agent Roles (角色管理) Dashboard UI\n\n**Added to `public/dashboard.html`:**\n\n| Component | Description |\n|-----------|-------------|\n| **Agent Roles Card** | Collapsible `角色管理` section with `[+New]` and `[Collapse]` buttons. Displ\n\n✅ task_5 (coder): Add agent management commands to the RemoteClient's executeCommand switch in ... [src/remote.ts]\n   → Type-check clean, all 20 tests pass (GREEN).\n\n## AWSL_RESULT\n\n### Task 5 Complete: Agent CRUD commands in `src/remote.ts`\n\n**4 command cases added to `executeCommand` switch:**\n\n| Command | Description |\n|---------|-------------|\n| `agents:list` | Loads builtins + custom agents from `{cwd}/agents/`,\n\n✅ task_6 (tester): Create tests/agents.test.ts using node:test and node:assert/strict. Test the ... [tests/agents.test.ts]\n   → All 25 tests pass across 6 test suites.\n\n## AWSL_RESULT\n\n### Task 6 Complete: Agent CRUD Tests (`tests/agents.test.ts`)\n\n**Framework:** `node:test` + `node:assert/strict`\n\n**6 test suites, 25 tests — all passing:**\n\n| Suite | Tests | Coverage |\n|-------|-------|----------|\n| `serializeAgent` | 4 | B\n\n✅ task_7 (coder): Update all three documentation files to cover the new custom role prompts fea... [README.md, README.zh-CN.md, BEST_PRACTICES.md]\n   → All three documentation files have been updated.\n\n## AWSL_RESULT\n\n### Task 7 Complete: Documentation Updated for Custom Role Prompts Feature\n\n**Files modified:**\n\n| File | Changes |\n|------|---------|\n| **README.md** (English) | Expanded Custom Agents section with CLI commands, Dashboard UI, and API\n\n✅ task_8 (reviewer): Review all new code for security issues:\n\n1. **Path traversal** — Verify agen... [src/agents.ts, src/dashboard.ts, src/cli.ts, src/remote.ts]\n   → Type-check passes. Here is my full security review:\n\n## AWSL_RESULT\n\n### Security Review: Agent CRUD Feature\n\n---\n\n### 1. [CRITICAL] Path Traversal in `deleteAgent()` — No Name Validation\n- **Severity:** Critical\n- **Location:** `src/agents.ts:249-254`\n- **Description:** `deleteAgent(dir, name)` con"
-      }
-    },
-    {
-      "id": "q_2",
-      "goal": "面板和本地终端都要加可以自定义角色提示词的功能",
-      "options": {
-        "quick": false
-      },
-      "status": "done",
-      "scheduledAt": "2026-03-11T12:46:25.732Z",
-      "startedAt": "2026-03-11T13:16:40.923Z",
-      "completedAt": "2026-03-11T13:57:06.114Z",
-      "result": {
-        "success": true,
-        "summary": "✅ 8/8 tasks completed successfully.\n\n✅ task_1 (coder): Agent CRUD functions in agents.ts [src/agents.ts, src/index.ts]\n   → All green.\n\n## AWSL_RESULT\n\n### Task 1: Agent CRUD Functions — Complete\n\nAdded 3 new exports to `src/agents.ts`:\n\n1. **`PROMPT_TEMPLATES`** — 7 built-in role templates (coder, reviewer, architect, tester, planner, devops, documenter) with description + prompt text\n2. **`getPromptTemplates()`** — Ret\n\n✅ task_2 (coder): Dashboard API endpoints for agents [src/dashboard.ts]\n   → ## AWSL_RESULT\n\n### Task 2: Dashboard API Endpoints for Agents — Complete\n\nAdded 2 new API endpoints to `src/dashboard.ts`:\n\n1. **`GET /api/agents/templates`** — Returns all 7 built-in prompt templates as `Array<{ name, description, prompt }>`. Calls `getPromptTemplates()` from agents module.\n\n2. **\n\n✅ task_3 (coder): CLI agents subcommands [src/cli.ts]\n   → ## AWSL_RESULT\n\n### Task 3: CLI Agents Subcommands — Complete\n\nAdded 3 new subcommands and 1 new flag to the `agents` CLI command in `src/cli.ts`:\n\n| Subcommand | Description |\n|------------|-------------|\n| `awsl agents templates` | Lists all 7 built-in prompt templates with descriptions |\n| `awsl\n\n✅ task_4 (coder): Dashboard UI agent editor [public/dashboard.html]\n   → Everything looks correct and well-formed.\n\n## AWSL_RESULT\n\n### Task 4: Dashboard UI Agent Editor — Complete\n\nEnhanced the agent editor in `public/dashboard.html` with 4 new features:\n\n| Feature | Description |\n|---------|-------------|\n| **Template Selector** | Dropdown above textarea loads 7 built-\n\n✅ task_5 (coder): Remote relay agent commands [src/remote.ts]\n   → ## AWSL_RESULT\n\n### Task 5: Remote Relay Agent Commands — Complete\n\nAdded 2 new remote commands to `src/remote.ts`:\n\n1. **`agents:templates`** — Returns all 7 built-in prompt templates via `getPromptTemplates()`. No payload required.\n2. **`agents:preview`** — Accepts `{ name }` payload, resolves the\n\n✅ task_6 (tester): Unit tests for agent CRUD [tests/agents.test.ts]\n   → Type check clean.\n\n## AWSL_RESULT\n\n### Task 6: Unit Tests for Agent CRUD — Complete\n\nEnhanced `tests/agents.test.ts` with comprehensive coverage. Added **7 new describe blocks** and **32 new tests** (25 existing → 57 total).\n\n### Test Suites Added\n\n| Suite | Tests | Coverage |\n|-------|-------|-----\n\n✅ task_7 (coder): Documentation update [README.md, README.zh-CN.md, BEST_PRACTICES.md]\n   → All documentation is updated consistently. Here's the summary:\n\n## AWSL_RESULT\n\n### Task 7: Documentation Update — Complete\n\nUpdated 3 documentation files to cover all new prompt template and editing features:\n\n| File | Changes |\n|------|---------|\n| **README.md** (English) | 7 edits: CLI agents sec\n\n✅ task_8 (reviewer): Security review [src/agents.ts, src/dashboard.ts, src/cli.ts, src/remote.ts]\n   → ## AWSL_RESULT\n\n### Security Review — Complete\n\n**6 findings identified, 3 fixed:**\n\n| # | Severity | Issue | Location | Status |\n|---|----------|-------|----------|--------|\n| 1 | **CRITICAL** | Path traversal in `deleteAgent()` — no name validation before `path.join` | `src/agents.ts:249` | **FIXE"
-      }
-    },
-    {
-      "id": "q_3",
       "goal": "我现在的远程面板看不到每个wave具体解决了啥",
       "options": {
         "quick": false
       },
-      "status": "pending",
-      "scheduledAt": "2026-03-11T14:11:16.947Z",
-      "runAt": "2026-03-10T20:59:00.000Z"
+      "status": "running",
+      "scheduledAt": "2026-03-12T00:18:17.495Z",
+      "startedAt": "2026-03-12T00:18:19.771Z"
     }
   ],
-  "createdAt": "2026-03-11T12:46:18.688Z",
-  "updatedAt": "2026-03-11T14:59:53.830Z"
+  "createdAt": "2026-03-12T00:18:17.495Z",
+  "updatedAt": "2026-03-12T00:18:19.771Z"
 }

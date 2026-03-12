@@ -1,37 +1,30 @@
 ## AWSL_RESULT
 
-### Design: Enhanced Custom Role Prompts (自定义角色提示词增强)
+### Design: Wave Detail Visibility in Remote Dashboard
 
-**核心发现**: Agent CRUD 基础设施已经存在（dashboard 的角色管理 + CLI 的 `awsl agents` 命令）。用户需要的是**提示词编辑体验的增强**。
+**Problem:** 远程面板的 WaveInfo 只有 `{ wave, taskIds, agents, parallel }` — 看不到每个 wave 具体解决了什么。
 
-### 设计要点
+**Solution:** Enrich `WaveInfo` with per-task details (description, status, files, result/error).
 
-**3 个核心问题 → 3 个解决方案**:
+### Key Decisions
 
-| 问题 | 解决方案 |
-|------|---------|
-| Dashboard 文本框太小，编辑长提示词体验差 | 全屏编辑器 overlay + 字符计数 |
-| 用户不知道怎么写好的提示词 | 7 个内置角色模板 (coder/reviewer/architect/tester/planner/devops/documenter) |
-| CLI 编辑提示词不方便，看不到最终效果 | `$EDITOR` 交互编辑 + `agents prompt` 快捷命令 + `agents preview` 预览合成提示词 |
+| Decision | Rationale |
+|----------|-----------|
+| **Enrich WaveInfo (Approach A)** over live events | User's ask is post-hoc ("解决了啥"), simplest approach that rides existing data pipeline |
+| **Add `WaveTaskDetail` interface** | Structured per-task data: id, description, assignee, status, files, result, error |
+| **Add wave-level `status`** field | Quick summary: `success` / `partial` / `failed` |
+| **Truncate result/error to 200 chars** | Prevent payload bloat in history sync |
+| **Keep `taskIds` alongside `tasks`** | Backward compatibility with old data |
+| **Remove WaveInfo duplication** | Currently in both orchestrator.ts and history.ts — consolidate to history.ts |
+| **No relay/remote changes needed** | Enriched data flows through existing history → status sync pipeline |
 
-### 文件变更
+### Files to Modify (4 files)
 
-| 文件 | 变更 |
-|------|------|
-| `src/agents.ts` | + `PROMPT_TEMPLATES`, `getPromptTemplates()`, `composePromptPreview()` |
-| `src/dashboard.ts` | + `GET /api/agents/templates`, `GET /api/agents/preview` |
-| `src/cli.ts` | + `agents prompt`, `agents preview`, `--template` flag, `$EDITOR` support |
-| `src/remote.ts` | + `agents:templates`, `agents:preview` commands |
-| `public/dashboard.html` | + 全屏编辑器、模板选择器、预览按钮、字符计数 |
-| 文档 x3 | README.md, README.zh-CN.md, BEST_PRACTICES.md |
+1. **`src/history.ts`** — Add `WaveTaskDetail` interface, enrich `WaveInfo`
+2. **`src/orchestrator.ts`** — Populate enriched WaveInfo at wave completion, remove duplicate interface
+3. **`src/dashboard.ts`** — Add `/api/history/:id/waves` convenience endpoint
+4. **`src/index.ts`** — Re-export `WaveTaskDetail`
 
-### 4 波执行计划 (7 个任务)
+### Design Document
 
-- **Wave 1**: 模板注册表 + 全屏编辑器 UI (并行)
-- **Wave 2**: API 端点 + CLI 命令 + 远程客户端 (并行)
-- **Wave 3**: Dashboard 接线 (模板选择器 + 预览按钮连接 API)
-- **Wave 4**: 文档更新
-
-### 产出文件
-- `.planning/DESIGN-custom-role-prompts.md` — 完整设计文档
-- `.planning/shared-memory.json` — 共享内存（供其他 agent 读取）
+Stored at: `.planning/designs/wave-detail-visibility.md`

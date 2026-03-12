@@ -750,7 +750,26 @@
         "reviewer"
       ],
       "maxConcurrency": 4
+    },
+    {
+      "id": "h_23",
+      "date": "2026-03-11T22:31:10.915Z",
+      "project": "awsl-agent-teams",
+      "projectPath": "C:\\Users\\11421\\awsl-agent-teams",
+      "queueTaskId": "q_3",
+      "goal": "我现在的远程面板看不到每个wave具体解决了啥",
+      "status": "failed",
+      "startedAt": "2026-03-11T22:30:46.341Z",
+      "completedAt": "2026-03-11T22:31:10.914Z",
+      "duration": 24573,
+      "tasksCompleted": 0,
+      "tasksTotal": 0,
+      "summary": "Planning failed: Exit code 1",
+      "engine": "claude-code",
+      "inputTokens": 0,
+      "outputTokens": 0,
+      "costUsd": 0
     }
   ],
-  "updatedAt": "2026-03-11T13:57:06.114Z"
+  "updatedAt": "2026-03-11T22:31:10.915Z"
 }

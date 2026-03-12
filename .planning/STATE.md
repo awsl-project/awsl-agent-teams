@@ -7,6 +7,6 @@
 (none)
 
 ## Position
-- Goal: 面板和本地终端都要加可以自定义角色提示词的功能
-- Tasks: 8/8 completed
+- Goal: Create two files in parallel using the Agent tool: (1) test/hello1.txt containing 'hello from agent 1' (2) test/hello2.txt containing 'hello from agent 2'. Use separate agents for each file.
+- Tasks: 2/2 completed
 - Status: SUCCESS

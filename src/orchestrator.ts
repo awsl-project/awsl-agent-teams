@@ -24,6 +24,7 @@ import { type RunResult, type Engine, runAgent, runParallel, detectEngine } from
 import { createPlanningDir, parseStructuredTasks, atomicCommit, saveCheckpoint, loadCheckpoint, clearCheckpoint, type StructuredTask, type PlanningDir, type CheckpointData } from "./planning.js";
 import { SkillRegistry } from "./skills.js";
 import { runFullVerification } from "./verify.js";
+import type { WaveInfo } from "./history.js";
 
 // ─── Event / Hook System ─────────────────────────────────────
 
@@ -71,12 +72,7 @@ export interface Task {
 	error?: string;
 }
 
-export interface WaveInfo {
-	wave: number;
-	taskIds: string[];
-	agents: string[];
-	parallel: number;
-}
+export type { WaveInfo };
 
 export interface TeamResult {
 	success: boolean;

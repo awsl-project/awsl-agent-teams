@@ -11,11 +11,27 @@ import { atomicWriteFileSync } from "./fs-utils.js";
 
 // ─── Interfaces ──────────────────────────────────────────────
 
+export interface WaveTaskDetail {
+	id: string;
+	description: string;
+	assignee: string;
+	status: "done" | "failed" | "verified";
+	files?: string[];
+	/** One-line result summary (truncated to 200 chars) */
+	result?: string;
+	/** Error message if failed */
+	error?: string;
+}
+
 export interface WaveInfo {
 	wave: number;
 	taskIds: string[];
 	agents: string[];
 	parallel: number;
+	/** Enriched per-task details */
+	tasks?: WaveTaskDetail[];
+	/** Wave-level outcome */
+	status?: "success" | "partial" | "failed";
 }
 
 export interface HistoryEntry {
