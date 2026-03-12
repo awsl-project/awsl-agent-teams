@@ -7,14 +7,31 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { log } from "./log.js";
+import { atomicWriteFileSync } from "./fs-utils.js";
 
 // ─── Interfaces ──────────────────────────────────────────────
+
+export interface WaveTaskDetail {
+	id: string;
+	description: string;
+	assignee: string;
+	status: "done" | "failed" | "verified";
+	files?: string[];
+	/** One-line result summary (truncated to 200 chars) */
+	result?: string;
+	/** Error message if failed */
+	error?: string;
+}
 
 export interface WaveInfo {
 	wave: number;
 	taskIds: string[];
 	agents: string[];
 	parallel: number;
+	/** Enriched per-task details */
+	tasks?: WaveTaskDetail[];
+	/** Wave-level outcome */
+	status?: "success" | "partial" | "failed";
 }
 
 export interface HistoryEntry {
@@ -42,6 +59,10 @@ export interface HistoryEntry {
 	agents?: string[];
 	/** Peak parallel agents across all waves */
 	maxConcurrency?: number;
+	/** Task mode: build (default) or discuss */
+	mode?: "build" | "discuss";
+	/** Final answer text — only set for discuss mode */
+	answer?: string;
 }
 
 export interface HistoryData {
@@ -107,7 +128,7 @@ export function appendHistory(cwd: string, entry: Omit<HistoryEntry, "id">): voi
 	const filePath = historyPath(cwd);
 	const dir = path.dirname(filePath);
 	fs.mkdirSync(dir, { recursive: true });
-	fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf-8");
+	atomicWriteFileSync(filePath, JSON.stringify(data, null, 2));
 
 	log.debug("history", `Appended ${id}: ${entry.status} — ${entry.goal}`);
 }

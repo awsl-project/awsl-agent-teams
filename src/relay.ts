@@ -62,6 +62,7 @@ interface ConnectedClient extends ClientInfo {
 	ws: WebSocket;
 	pendingCommands: Map<string, {
 		resolve: (result: CommandResultMessage) => void;
+		reject: (reason: Error) => void;
 		timer: ReturnType<typeof setTimeout>;
 	}>;
 }
@@ -143,7 +144,7 @@ export class RelayServer {
 				reject(new Error(`Command timed out: ${action}`));
 			}, timeoutMs);
 
-			client.pendingCommands.set(id, { resolve, timer });
+			client.pendingCommands.set(id, { resolve, reject, timer });
 
 			const msg: CommandMessage = { type: "command", id, action, payload };
 			client.ws.send(JSON.stringify(msg));
@@ -189,6 +190,13 @@ export class RelayServer {
 
 		ws.on("close", () => {
 			if (clientId && this.clients.has(clientId)) {
+				const client = this.clients.get(clientId)!;
+				// Cleanup pending commands: clear timers and reject promises
+				for (const [, entry] of client.pendingCommands) {
+					clearTimeout(entry.timer);
+					entry.reject(new Error("Client disconnected"));
+				}
+				client.pendingCommands.clear();
 				this.clients.delete(clientId);
 				log.info("relay", `Client disconnected: ${clientId}`);
 			}
@@ -238,7 +246,20 @@ export class RelayServer {
 				const cid = getId();
 				if (cid && this.clients.has(cid)) {
 					const client = this.clients.get(cid)!;
-					client.status = msg.data as any;
+					const data = msg.data as any;
+					if (data?.delta) {
+						// Delta update: merge into existing status
+						if (!client.status) client.status = {} as any;
+						if (data.queue) (client.status as any).queue = data.queue;
+						if (data.historyAppend && Array.isArray(data.historyAppend)) {
+							const existing = (client.status as any).history ?? [];
+							(client.status as any).history = existing.concat(data.historyAppend);
+						}
+						if (data.system) (client.status as any).system = data.system;
+					} else {
+						// Full sync: replace entire status
+						client.status = data;
+					}
 					client.lastSeen = new Date().toISOString();
 				}
 				break;

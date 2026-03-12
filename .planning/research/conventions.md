@@ -1,20 +1,19 @@
-The file already exists with comprehensive conventions. Let me check if it needs updating based on the fresh analysis.
-
-The existing `conventions.md` is already thorough and well-organized — it covers all the categories requested (naming, style, error handling, testing patterns) and more. The fresh analysis confirms the same patterns, so no updates needed.
+The conventions document already exists and is comprehensive. Here's the analysis summary:
 
 ## AWSL_RESULT
 
-The conventions document already exists at `memory/conventions.md` and is up to date. Key patterns:
+The conventions document already exists at `memory/conventions.md` and is up-to-date. Key patterns:
 
-| Area | Convention |
-|------|-----------|
-| **Naming** | camelCase vars/fns, PascalCase types/classes, UPPER_SNAKE constants, no enums (string unions) |
-| **Style** | TS strict, ES modules + `.js` ext, `node:` prefix, tabs, section dividers `// ───` |
-| **Error handling** | Bare `catch {}` when unused, fail-soft (return defaults), never throw in agent tools, `try/finally` for cleanup |
-| **Testing** | `node:test` + `node:assert/strict`, no mocks, source inspection via regex, `test/*.test.ts` |
-| **Logging** | `log.info/warn/debug(source, msg)` — never console.log |
-| **State** | File-as-state in `.planning/`, JSON for data, Markdown for plans |
-| **Async** | async/await only, sync fs, `runParallel()` worker pool, `Promise.allSettled` for non-critical parallel |
-| **Architecture** | Conductor/Guardian, dual engine, typed events, factory functions, provider pattern |
+**Naming**: camelCase functions, PascalCase interfaces/classes, UPPER_SNAKE constants, `create` prefix for factories, string literal unions (no enums), `_prefix` for unused params and cache vars.
 
-No files produced — existing `memory/conventions.md` (132 lines) is already comprehensive and accurate.
+**Style**: TypeScript strict, ES modules with `.js` extensions, `node:` prefix for builtins, `import type` for type-only, tabs, double quotes, section dividers (`// ───`), JSDoc file headers, named exports only, barrel re-export from `index.ts`.
+
+**Error Handling**: Bare `catch {}` when unused, `catch (e: any)` when message needed, fail-soft returns (null/[]/false), never throw in agent tools, throw only for precondition failures, atomic `wx` flag writes for race-safety, output truncation with `.slice(0, N)`.
+
+**Async**: async/await only, sync fs throughout, `spawn` for streaming, `Promise.all` for fail-fast, `Promise.allSettled` for fault-tolerant parallel, manual worker pool with concurrency limit, child processes wrapped in `new Promise<T>(resolve)` that never reject.
+
+**Testing**: `node:test` + `node:assert/strict`, `src/*.test.ts` location, `describe`/`test` structure, temp dirs via `fs.mkdtempSync`, no mocking framework, no semicolons in test files (relaxed style), helper functions at file top.
+
+**Architecture**: Conductor/Guardian split, dual engine (subprocess vs in-process), typed events, factory functions returning interface objects, provider pattern for verification, topo-sort wave execution, multi-strategy parsing, checkpoint/resume, RAII-style RunContext, options objects for >3 params.
+
+No changes needed — the existing `conventions.md` is accurate and comprehensive.

@@ -14,7 +14,9 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { loadAgents } from "./agents.js";
+import { createInterface } from "node:readline";
+import { loadAgents, saveAgent, deleteAgent, getAgent, serializeAgent, BUILTINS, PROMPT_TEMPLATES, getPromptTemplates, composePromptPreview } from "./agents.js";
+import { SkillRegistry } from "./skills.js";
 import { executeTeam } from "./orchestrator.js";
 import { type Engine, detectEngine } from "./runner.js";
 import { validatePlan } from "./validate.js";
@@ -26,6 +28,8 @@ import { runInstaller } from "./install.js";
 import { TaskQueue } from "./queue.js";
 import { startDashboard, isPortInUse } from "./dashboard.js";
 import { RemoteClient } from "./remote.js";
+import { ProjectManager } from "./projects.js";
+import { generateSummary, formatSummary } from "./summary.js";
 
 function usage() {
 	console.error(`
@@ -34,7 +38,7 @@ function usage() {
 
 Commands:
   start [--port N]         Start all services (dashboard + remote if configured)
-  stop                     Stop all services
+  stop                     Stop all services + release lock + reset running tasks
   status                   Show status of all services
   init [--global]          Install skills into .claude/skills/
   validate                 Validate .planning/PLAN.md → compute waves → WAVES.md
@@ -44,12 +48,41 @@ Commands:
   unlock [--force]         Release lock (--force to override others' locks)
   run <goal>               Full pipeline (terminal)
   agents                   List available agents
+  agents show <name>       Show full details for an agent (including systemPrompt)
+  agents create <name>     Create a new custom agent
+    --role <role>            Role (default: custom)
+    --description <text>     Agent description
+    --prompt <text>          Inline system prompt
+    --prompt-file <path>     Read system prompt from file
+    --template <name>        Pre-populate prompt from built-in template
+    --tools <a,b,c>          Comma-separated tools
+    --model <model>          Model override
+    --skills <a,b,c>         Comma-separated skills
+    --thinking <level>       Thinking level
+  agents edit <name>       Update an existing custom agent (same flags as create)
+  agents delete <name>     Delete a custom agent file
+  agents reset <name>      Reset a builtin agent to defaults (removes override file)
+  agents templates         List available prompt templates
+  agents prompt <name>     Edit agent prompt interactively (opens $EDITOR)
+    --show                   Print current prompt to stdout
+    --set <text>             Set prompt inline
+    --file <path>            Set prompt from file
+  agents preview <name>    Show full composed prompt (base + skills + team context)
   dashboard [--port N]     Open the sleep mode pixel dashboard (default: 3120)
   dashboard --bg           Start dashboard in background (detached)
   dashboard stop           Stop background dashboard
   remote init <url>        Connect to remote dashboard (one command setup)
   remote stop              Disconnect
   remote status            Check connection
+  summary [options]           Summarize night session activity (default: 22:00→06:00)
+    --from <HH:MM>             Start time (default: 22:00)
+    --to <HH:MM>               End time (default: 06:00)
+    --date <YYYY-MM-DD>        Anchor date
+    --all-projects             Aggregate across all registered projects
+  projects                    List all registered projects with status
+  projects add [path] [--name N]  Register a project (default: cwd)
+  projects remove <path|name>     Unregister a project
+  projects scan [dir]             Auto-discover projects
 
 CC Hybrid Mode (no API key needed):
   1. CC writes plan        → .planning/PLAN.md  (CC does the thinking)
@@ -60,13 +93,18 @@ CC Hybrid Mode (no API key needed):
 
 Queue Commands (sleep mode):
   queue add <goal> [opts]  Add a task to the queue (--at <time> --auto-push)
+    --discuss              Enable discussion mode (multi-agent reasoning)
+    --rounds <N>           Number of debate rounds (default: 1, max: 3)
   queue plan <text> [opts] Parse natural language into multiple queue tasks
+  queue split <text> [opts] Preview task splitting before adding to queue
+    --yes                  Skip confirmation, add immediately
   queue list               List queue tasks and status
   queue show <id>          Show detailed info for a queue task
   queue remove <id>        Remove a task from queue
   queue start [opts]       Start executing the queue (foreground)
   queue start --once       One-shot: process runnable tasks and exit (used by scheduler)
   queue clear              Clear all queue tasks
+  discuss <question>       Convenience alias for queue add --discuss
 
 Options:
   --cwd <path>             Working directory (default: .)
@@ -99,6 +137,47 @@ function parseCwdAndForce(args: string[]): { cwd: string; force: boolean } {
 		}
 	}
 	return { cwd, force };
+}
+
+import type { TeamAgentDef } from "./agents.js";
+
+function parseAgentFlags(flagArgs: string[]): Partial<Omit<TeamAgentDef, "name" | "source">> {
+	const result: Partial<Omit<TeamAgentDef, "name" | "source">> = {};
+	let templateName: string | undefined;
+	for (let i = 0; i < flagArgs.length; i++) {
+		const arg = flagArgs[i];
+		const next = () => {
+			if (i + 1 >= flagArgs.length) { console.error(`Missing value for ${arg}`); process.exit(1); }
+			return flagArgs[++i];
+		};
+		if (arg === "--role") result.role = next();
+		else if (arg === "--description") result.description = next();
+		else if (arg === "--prompt") result.systemPrompt = next();
+		else if (arg === "--prompt-file") {
+			const filePath = path.resolve(next());
+			if (!fs.existsSync(filePath)) { console.error(`Prompt file not found: ${filePath}`); process.exit(1); }
+			result.systemPrompt = fs.readFileSync(filePath, "utf-8");
+		}
+		else if (arg === "--template") templateName = next();
+		else if (arg === "--tools") result.tools = next().split(",").map(s => s.trim()).filter(Boolean);
+		else if (arg === "--model") result.model = next();
+		else if (arg === "--skills") result.skills = next().split(",").map(s => s.trim()).filter(Boolean);
+		else if (arg === "--thinking") result.thinkingLevel = next();
+		else if (arg === "--cwd") { i++; } // skip --cwd, handled by parseCwdAndForce
+	}
+
+	// Apply template (--prompt/--prompt-file override template; template sets role if not explicit)
+	if (templateName) {
+		const tmpl = PROMPT_TEMPLATES[templateName];
+		if (!tmpl) {
+			console.error(`Unknown template "${templateName}". Available: ${Object.keys(PROMPT_TEMPLATES).join(", ")}`);
+			process.exit(1);
+		}
+		if (!result.systemPrompt) result.systemPrompt = tmpl.prompt;
+		if (!result.role) result.role = templateName;
+	}
+
+	return result;
 }
 
 /**
@@ -166,6 +245,9 @@ async function main() {
 		const { cwd } = parseCwdAndForce(args);
 		const planDir = path.join(cwd, ".planning");
 		if (!fs.existsSync(planDir)) fs.mkdirSync(planDir, { recursive: true });
+
+		// Auto-register project
+		try { ProjectManager.add(cwd); ProjectManager.touch(cwd); } catch { /* fail-soft */ }
 
 		let port = 3120;
 		let serverUrl: string | undefined;
@@ -266,6 +348,34 @@ async function main() {
 
 		killPid(path.join(planDir, ".dashboard.pid"), "Dashboard");
 		killPid(path.join(planDir, ".remote.pid"), "Remote   ");
+
+		// Clean up stale lock to prevent stuck queue on restart
+		const lockInfo = checkLock(cwd);
+		if (lockInfo) {
+			forceReleaseLock(cwd);
+			console.log(`  Lock     : released (was pid ${lockInfo.pid})`);
+		}
+
+		// Reset any "running" tasks back to "pending" so queue can resume
+		try {
+			const qPath = path.join(planDir, "QUEUE.json");
+			if (fs.existsSync(qPath)) {
+				const data = JSON.parse(fs.readFileSync(qPath, "utf-8"));
+				let reset = 0;
+				for (const t of data.tasks ?? []) {
+					if (t.status === "running") {
+						t.status = "pending";
+						reset++;
+					}
+				}
+				if (reset > 0) {
+					data.updatedAt = new Date().toISOString();
+					fs.writeFileSync(qPath, JSON.stringify(data, null, 2), "utf-8");
+					console.log(`  Queue    : reset ${reset} running task(s) to pending`);
+				}
+			}
+		} catch { /* no queue file — nothing to reset */ }
+
 		process.exit(0);
 	}
 
@@ -310,8 +420,196 @@ async function main() {
 
 	// ── Agents command ──────────────────────────────────────
 	if (command === "agents") {
-		const cwd = process.cwd();
-		const agentsDirs = [path.join(cwd, "agents")];
+		const { cwd } = parseCwdAndForce(args);
+		const agentsDir = path.join(cwd, "agents");
+		const agentsDirs = [agentsDir];
+		const sub = args[1];
+
+		if (sub === "show") {
+			const name = args[2];
+			if (!name) { console.error("Usage: awsl agents show <name>"); process.exit(1); }
+			const agent = getAgent(agentsDirs, name);
+			if (!agent) { console.error(`Agent "${name}" not found.`); process.exit(1); }
+			console.log(`Name:        ${agent.name}`);
+			console.log(`Role:        ${agent.role}`);
+			console.log(`Description: ${agent.description}`);
+			console.log(`Source:      ${agent.source}`);
+			if (agent.model) console.log(`Model:       ${agent.model}`);
+			if (agent.tools) console.log(`Tools:       ${agent.tools.join(", ")}`);
+			if (agent.skills) console.log(`Skills:      ${agent.skills.join(", ")}`);
+			if (agent.thinkingLevel) console.log(`Thinking:    ${agent.thinkingLevel}`);
+			console.log(`\n--- System Prompt ---\n${agent.systemPrompt}`);
+			process.exit(0);
+		}
+
+		if (sub === "create") {
+			const name = args[2];
+			if (!name) { console.error("Usage: awsl agents create <name> [--role ...] [--prompt ...]"); process.exit(1); }
+			const flags = parseAgentFlags(args.slice(3));
+			try {
+				const saved = saveAgent(agentsDir, { name, ...flags });
+				console.log(`Created agent "${saved.name}" (${saved.role}) in ${agentsDir}`);
+			} catch (err: unknown) {
+				console.error(err instanceof Error ? err.message : String(err));
+				process.exit(1);
+			}
+			process.exit(0);
+		}
+
+		if (sub === "edit") {
+			const name = args[2];
+			if (!name) { console.error("Usage: awsl agents edit <name> [--role ...] [--prompt ...]"); process.exit(1); }
+			const existing = getAgent(agentsDirs, name);
+			if (!existing || (existing.source === "builtin" && !fs.existsSync(path.join(agentsDir, `${name}.md`)))) {
+				if (!existing) { console.error(`Agent "${name}" not found.`); process.exit(1); }
+			}
+			const flags = parseAgentFlags(args.slice(3));
+			try {
+				const saved = saveAgent(agentsDir, { name, ...flags });
+				console.log(`Updated agent "${saved.name}" (${saved.role})`);
+			} catch (err: unknown) {
+				console.error(err instanceof Error ? err.message : String(err));
+				process.exit(1);
+			}
+			process.exit(0);
+		}
+
+		if (sub === "delete") {
+			const name = args[2];
+			if (!name) { console.error("Usage: awsl agents delete <name>"); process.exit(1); }
+			const filePath = path.join(agentsDir, `${name}.md`);
+			if (!fs.existsSync(filePath)) {
+				const isBuiltin = BUILTINS.some(b => b.name === name);
+				if (isBuiltin) {
+					console.error(`Agent "${name}" is a builtin with no custom override file. Use "agents reset" for builtins.`);
+				} else {
+					console.error(`Agent "${name}" has no custom file to delete.`);
+				}
+				process.exit(1);
+			}
+			deleteAgent(agentsDir, name);
+			console.log(`Deleted agent "${name}" from ${agentsDir}`);
+			process.exit(0);
+		}
+
+		if (sub === "reset") {
+			const name = args[2];
+			if (!name) { console.error("Usage: awsl agents reset <name>"); process.exit(1); }
+			const isBuiltin = BUILTINS.some(b => b.name === name);
+			if (!isBuiltin) {
+				console.error(`"${name}" is not a builtin agent. Reset only works for builtins: ${BUILTINS.map(b => b.name).join(", ")}`);
+				process.exit(1);
+			}
+			const filePath = path.join(agentsDir, `${name}.md`);
+			if (!fs.existsSync(filePath)) {
+				console.log(`Agent "${name}" has no override file — already using builtin defaults.`);
+				process.exit(0);
+			}
+			deleteAgent(agentsDir, name);
+			console.log(`Reset agent "${name}" to builtin defaults (removed override file).`);
+			process.exit(0);
+		}
+
+		if (sub === "templates") {
+			const templates = getPromptTemplates();
+			console.log("Available prompt templates:\n");
+			for (const t of templates) {
+				console.log(`  ${t.name}`);
+				console.log(`    ${t.description}`);
+				console.log();
+			}
+			console.log(`Use with: awsl agents create <name> --template <template>`);
+			process.exit(0);
+		}
+
+		if (sub === "prompt") {
+			const name = args[2];
+			if (!name) { console.error("Usage: awsl agents prompt <name> [--show | --set <text> | --file <path>]"); process.exit(1); }
+			const agent = getAgent(agentsDirs, name);
+			if (!agent) { console.error(`Agent "${name}" not found.`); process.exit(1); }
+
+			// Parse prompt subcommand flags
+			let mode: "show" | "set" | "file" | "editor" = "editor";
+			let value = "";
+			for (let i = 3; i < args.length; i++) {
+				if (args[i] === "--show") mode = "show";
+				else if (args[i] === "--set" && i + 1 < args.length) { mode = "set"; value = args[++i]; }
+				else if (args[i] === "--file" && i + 1 < args.length) { mode = "file"; value = args[++i]; }
+				else if (args[i] === "--cwd") { i++; } // skip --cwd
+			}
+
+			if (mode === "show") {
+				console.log(agent.systemPrompt);
+				process.exit(0);
+			}
+
+			if (mode === "set") {
+				saveAgent(agentsDir, { name, systemPrompt: value });
+				console.log(`Updated prompt for "${name}".`);
+				process.exit(0);
+			}
+
+			if (mode === "file") {
+				const filePath = path.resolve(value);
+				if (!fs.existsSync(filePath)) { console.error(`File not found: ${filePath}`); process.exit(1); }
+				const content = fs.readFileSync(filePath, "utf-8");
+				saveAgent(agentsDir, { name, systemPrompt: content });
+				console.log(`Updated prompt for "${name}" from ${filePath}.`);
+				process.exit(0);
+			}
+
+			// mode === "editor": open $EDITOR
+			const editor = process.env.EDITOR || process.env.VISUAL || (process.platform === "win32" ? "notepad" : "vi");
+			const os = await import("node:os");
+			const tmpFile = path.join(os.tmpdir(), `awsl-prompt-${name}-${Date.now()}.md`);
+			fs.writeFileSync(tmpFile, agent.systemPrompt, "utf-8");
+			try {
+				const { spawnSync } = await import("node:child_process");
+				const result = spawnSync(editor, [tmpFile], { stdio: "inherit", shell: true });
+				if (result.status !== 0) {
+					console.error(`$EDITOR exited with code ${result.status}. No changes saved.`);
+					process.exit(1);
+				}
+				const newPrompt = fs.readFileSync(tmpFile, "utf-8");
+				if (newPrompt === agent.systemPrompt) {
+					console.log("No changes detected.");
+				} else {
+					saveAgent(agentsDir, { name, systemPrompt: newPrompt });
+					console.log(`Updated prompt for "${name}".`);
+				}
+			} finally {
+				try { fs.unlinkSync(tmpFile); } catch { /* ignore cleanup errors */ }
+			}
+			process.exit(0);
+		}
+
+		if (sub === "preview") {
+			const name = args[2];
+			if (!name) { console.error("Usage: awsl agents preview <name>"); process.exit(1); }
+			const allAgents = loadAgents(agentsDirs);
+			const agent = allAgents.find(a => a.name === name);
+			if (!agent) { console.error(`Agent "${name}" not found.`); process.exit(1); }
+
+			const registry = new SkillRegistry();
+			const skillInstructions = registry.buildInstructions(agent.role, agent.skills);
+			const { composed, sections } = composePromptPreview(agent, allAgents, skillInstructions);
+
+			console.log("=== Composed Prompt Preview ===\n");
+			console.log(composed);
+			console.log(`\n=== Section Sizes ===`);
+			console.log(`  Base prompt:  ${sections.base.length} chars`);
+			console.log(`  Skills:       ${sections.skills.length} chars`);
+			console.log(`  Team roster:  ${sections.team.length} chars`);
+			console.log(`  Total:        ${composed.length} chars`);
+			process.exit(0);
+		}
+
+		// Default: list all agents
+		if (sub && !sub.startsWith("--")) {
+			console.error(`Unknown subcommand: ${sub}. Use: show, create, edit, delete, reset, templates, prompt, preview`);
+			process.exit(1);
+		}
+
 		const agents = loadAgents(agentsDirs);
 		console.log("Available agents:\n");
 		for (const a of agents) {
@@ -683,6 +981,183 @@ async function main() {
 		process.exit(1);
 	}
 
+	// ── Summary command ─────────────────────────────────────
+	if (command === "summary") {
+		const { cwd } = parseCwdAndForce(args);
+
+		let from: string | undefined;
+		let to: string | undefined;
+		let date: string | undefined;
+		let allProjects = false;
+
+		for (let i = 1; i < args.length; i++) {
+			const a = args[i];
+			if (a === "--from" && i + 1 < args.length) { from = args[++i]; }
+			else if (a === "--to" && i + 1 < args.length) { to = args[++i]; }
+			else if (a === "--date" && i + 1 < args.length) { date = args[++i]; }
+			else if (a === "--all-projects") { allProjects = true; }
+			else if (a === "--cwd" && i + 1 < args.length) { i++; } // already parsed
+		}
+
+		try {
+			const summary = generateSummary({ from, to, date, allProjects, cwd });
+			console.log(formatSummary(summary));
+		} catch (e) {
+			log.warn("summary", e instanceof Error ? e.message : String(e));
+			process.exit(1);
+		}
+		process.exit(0);
+	}
+
+	// ── Projects command ────────────────────────────────────
+	if (command === "projects") {
+		const subCmd = args[1];
+		const { cwd } = parseCwdAndForce(args);
+
+		// projects (no sub) — list all with status
+		if (!subCmd || subCmd === "list" || subCmd.startsWith("--")) {
+			const statuses = ProjectManager.getAllStatuses();
+			if (statuses.length === 0) {
+				console.log("No projects registered. Use 'awsl projects add' or 'awsl projects scan'.");
+				process.exit(0);
+			}
+
+			console.log(`\nProjects: ${statuses.length}\n`);
+			console.log("  Name             Path                                  Queue            Last Run       Status");
+			console.log("  " + "-".repeat(100));
+			for (const s of statuses) {
+				const name = s.name.length > 16 ? s.name.slice(0, 13) + "..." : s.name.padEnd(16);
+				const pth = s.path.length > 36 ? "..." + s.path.slice(-33) : s.path.padEnd(36);
+				const q = s.queue.total > 0
+					? `${s.queue.done}/${s.queue.total} (${s.queue.running}r ${s.queue.failed}f)`.padEnd(16)
+					: "-".padEnd(16);
+				const lastRun = s.lastRun
+					? `${s.lastRun.status} ${new Date(s.lastRun.date).toLocaleDateString()}`.padEnd(14)
+					: "-".padEnd(14);
+				const status = !s.exists ? "MISSING" : s.isLocked ? "LOCKED" : "OK";
+				console.log(`  ${name} ${pth}  ${q} ${lastRun} ${status}`);
+			}
+			console.log();
+			process.exit(0);
+		}
+
+		// projects add [path] [--name N]
+		if (subCmd === "add") {
+			let projectPath = cwd;
+			let name: string | undefined;
+
+			for (let i = 2; i < args.length; i++) {
+				const a = args[i];
+				if (a === "--name" && i + 1 < args.length) { name = args[++i]; }
+				else if (a === "--cwd" && i + 1 < args.length) { i++; }
+				else if (a === "--force") { /* skip */ }
+				else if (!a.startsWith("--")) { projectPath = path.resolve(a); }
+			}
+
+			const entry = ProjectManager.add(projectPath, name);
+			console.log(`Registered: ${entry.name} (${entry.path})`);
+			process.exit(0);
+		}
+
+		// projects remove <path|name>
+		if (subCmd === "remove") {
+			const target = args[2];
+			if (!target) {
+				console.error("Usage: awsl projects remove <path|name>");
+				process.exit(1);
+			}
+
+			const found = ProjectManager.find(target);
+			if (!found) {
+				console.error(`Project not found: ${target}`);
+				process.exit(1);
+			}
+
+			ProjectManager.remove(found.path);
+			console.log(`Removed: ${found.name} (${found.path})`);
+			process.exit(0);
+		}
+
+		// projects scan [dir]
+		if (subCmd === "scan") {
+			let scanDir = path.dirname(cwd); // default: parent of cwd
+			for (let i = 2; i < args.length; i++) {
+				const a = args[i];
+				if (a === "--cwd" && i + 1 < args.length) { i++; }
+				else if (!a.startsWith("--")) { scanDir = path.resolve(a); }
+			}
+
+			console.log(`Scanning ${scanDir} for projects...\n`);
+			const found = ProjectManager.scan(scanDir);
+
+			if (found.length === 0) {
+				console.log("No projects found.");
+				process.exit(0);
+			}
+
+			let added = 0;
+			for (const p of found) {
+				const existing = ProjectManager.get(p);
+				const tag = existing ? "(already registered)" : "(new)";
+				if (!existing) {
+					ProjectManager.add(p);
+					added++;
+				}
+				console.log(`  ${path.basename(p).padEnd(24)} ${p}  ${tag}`);
+			}
+			console.log(`\nFound ${found.length} project(s), ${added} newly registered.`);
+			process.exit(0);
+		}
+
+		console.error("Unknown projects command. Use: list, add, remove, scan");
+		process.exit(1);
+	}
+
+	// ── Discuss command (convenience alias) ────────────────
+	if (command === "discuss") {
+		const { cwd } = parseCwdAndForce(args);
+		const goalParts: string[] = [];
+
+		let rounds = 1;
+		let runAt: string | undefined;
+
+		for (let i = 1; i < args.length; i++) {
+			const a = args[i];
+			if (a === "--rounds" && i + 1 < args.length) { rounds = parseInt(args[++i], 10) || 1; }
+			else if (a === "--at" && i + 1 < args.length) { runAt = args[++i]; }
+			else if (a === "--cwd" && i + 1 < args.length) { i++; }
+			else if (a === "--force") { /* skip */ }
+			else if (!a.startsWith("--")) { goalParts.push(a); }
+		}
+
+		const question = goalParts.join(" ").trim();
+
+		// Parse --at time string into ISO
+		let resolvedRunAt: string | undefined;
+		if (runAt) {
+			const parsed = parseTimeString(runAt);
+			if (!parsed) {
+				console.error(`Invalid time format: "${runAt}". Use HH:MM, YYYY-MM-DD HH:MM, or +Nm/+Nh.`);
+				process.exit(1);
+			}
+			resolvedRunAt = parsed;
+		}
+
+		if (!question || question.length < 10) {
+			console.error("Usage: awsl discuss <question> [--rounds N] [--at <time>]");
+			console.error("Question must be at least 10 characters.");
+			process.exit(1);
+		}
+
+		const queue = new TaskQueue(cwd);
+		const task = queue.add(question, { discussRounds: rounds }, { mode: "discuss", runAt: resolvedRunAt });
+		console.log(`Added discussion: ${task.id} — "${question}"`);
+		if (rounds > 1) console.log(`  Debate rounds: ${rounds}`);
+		if (resolvedRunAt) console.log(`  Scheduled: ${resolvedRunAt}`);
+		console.log(`  Mode: discuss`);
+		process.exit(0);
+	}
+
 	// ── Queue command (sleep mode) ─────────────────────────
 	if (command === "queue") {
 		const subCmd = args[1];
@@ -694,6 +1169,8 @@ async function main() {
 			let engine: Engine | undefined;
 			let quick = false;
 			let autoPush = false;
+			let discuss = false;
+			let discussRounds = 1;
 			let concurrency: number | undefined;
 			let model: string | undefined;
 			let dependsOn: string[] | undefined;
@@ -706,6 +1183,8 @@ async function main() {
 				if (a === "--engine" && i + 1 < args.length) { engine = args[++i] as Engine; }
 				else if (a === "--quick") { quick = true; }
 				else if (a === "--auto-push") { autoPush = true; }
+				else if (a === "--discuss") { discuss = true; }
+				else if (a === "--rounds" && i + 1 < args.length) { discussRounds = parseInt(args[++i], 10) || 1; }
 				else if (a === "--concurrency" && i + 1 < args.length) { concurrency = parseInt(args[++i], 10); }
 				else if (a === "--model" && i + 1 < args.length) { model = args[++i]; }
 				else if (a === "--depends-on" && i + 1 < args.length) { dependsOn = args[++i].split(",").map(s => s.trim()); }
@@ -742,11 +1221,13 @@ async function main() {
 				quick,
 				agentsDirs,
 				autoPush,
-			}, { engine, dependsOn, runAt: resolvedRunAt });
+				discussRounds: discuss ? discussRounds : undefined,
+			}, { engine, dependsOn, runAt: resolvedRunAt, mode: discuss ? "discuss" : undefined });
 
 			console.log(`Added: ${task.id} — "${goal}"`);
 			if (dependsOn) console.log(`  Depends on: ${dependsOn.join(", ")}`);
 			if (quick) console.log(`  Mode: quick`);
+			if (discuss) console.log(`  Mode: discuss (${discussRounds} round${discussRounds > 1 ? "s" : ""})`);
 			if (autoPush) console.log(`  Auto-push: enabled`);
 			if (engine) console.log(`  Engine: ${engine}`);
 			if (resolvedRunAt) console.log(`  Run at: ${new Date(resolvedRunAt).toLocaleString()}`);
@@ -886,6 +1367,9 @@ async function main() {
 			}
 		}
 		else if (subCmd === "start") {
+			// Auto-register project
+			try { ProjectManager.add(cwd); ProjectManager.touch(cwd); } catch { /* fail-soft */ }
+
 			// Parse --engine, --once, --auto-push
 			let engine: Engine | undefined;
 			let once = false;
@@ -908,8 +1392,79 @@ async function main() {
 			queue.clear();
 			console.log("Queue cleared.");
 		}
+		else if (subCmd === "split") {
+			// Parse options (same as plan + --yes)
+			let engine: Engine | undefined;
+			let quick = false;
+			let concurrency: number | undefined;
+			let model: string | undefined;
+			let yes = false;
+			const descParts: string[] = [];
+
+			for (let i = 2; i < args.length; i++) {
+				const a = args[i];
+				if (a === "--engine" && i + 1 < args.length) { engine = args[++i] as Engine; }
+				else if (a === "--quick") { quick = true; }
+				else if (a === "--concurrency" && i + 1 < args.length) { concurrency = parseInt(args[++i], 10); }
+				else if (a === "--model" && i + 1 < args.length) { model = args[++i]; }
+				else if (a === "--yes" || a === "-y") { yes = true; }
+				else if (a === "--cwd" && i + 1 < args.length) { i++; }
+				else if (a === "--force") { /* skip */ }
+				else if (!a.startsWith("--")) { descParts.push(a); }
+			}
+
+			const description = descParts.join(" ").trim();
+			if (!description) {
+				console.error('Usage: awsl queue split "先构建认证，然后加支付，最后写测试" [--yes] [--engine claude-code]');
+				process.exit(1);
+			}
+
+			console.log("Parsing tasks from natural language...\n");
+			const planned = await queue.planPreview(description);
+
+			// Print preview table
+			console.log(`拆分预览: ${planned.length} 个任务\n`);
+			console.log("  #   Deps       Goal");
+			console.log("  " + "\u2500".repeat(50));
+			for (let i = 0; i < planned.length; i++) {
+				const p = planned[i];
+				const num = String(i + 1).padEnd(3);
+				const deps = p.dependsOn?.length ? p.dependsOn.join(",") : "(none)";
+				const goal = p.goal.length > 40 ? p.goal.slice(0, 37) + "..." : p.goal;
+				console.log(`  ${num} ${deps.padEnd(10)} ${goal}`);
+			}
+			console.log();
+
+			// Confirmation prompt (unless --yes)
+			if (!yes) {
+				const answer = await new Promise<string>((resolve) => {
+					const rl = createInterface({ input: process.stdin, output: process.stdout });
+					rl.question("确认添加到队列? (y/N) ", (ans) => {
+						rl.close();
+						resolve(ans.trim());
+					});
+				});
+				if (answer !== "y" && answer !== "Y") {
+					console.log("已取消");
+					process.exit(0);
+				}
+			}
+
+			// Commit to queue
+			const added = queue.planCommit(planned, { engine, quick, concurrency, model });
+
+			console.log(`\nPlanned ${added.length} task(s):\n`);
+			console.log("  ID       Deps       Goal");
+			console.log("  " + "-".repeat(60));
+			for (const t of added) {
+				const deps = t.dependsOn?.length ? t.dependsOn.join(",") : "(none)";
+				const goal = t.goal.length > 40 ? t.goal.slice(0, 37) + "..." : t.goal;
+				console.log(`  ${t.id.padEnd(8)} ${deps.padEnd(10)} ${goal}`);
+			}
+			console.log(`\nRun 'awsl queue list' to review, then 'awsl queue start' to execute.`);
+		}
 		else {
-			console.error("Unknown queue command. Use: add, plan, list, show, remove, start, clear");
+			console.error("Unknown queue command. Use: add, plan, split, list, show, remove, start, clear");
 			process.exit(1);
 		}
 		process.exit(0);
@@ -980,6 +1535,9 @@ async function main() {
 
 	agentsDirs.push(path.join(cwd, "agents"));
 	const agents = loadAgents(agentsDirs);
+
+	// Auto-register project
+	try { ProjectManager.add(cwd); ProjectManager.touch(cwd); } catch { /* fail-soft */ }
 
 	try {
 		if (executePlan) {

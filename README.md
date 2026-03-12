@@ -38,7 +38,7 @@ AWSL's architecture splits orchestration into two independent layers:
   ┌──────────────────┐          ┌──────────────────┐
   │ Task decomposition│          │ TDD enforcement  │
   │ Wave parallelism  │          │ Systematic debug │
-  │ Fresh context     │  ─────>  │ Two-stage review │
+  │ Fresh context     │  ─────>  │ Per-task review  │
   │ State persistence │  <─────  │ Quality gates    │
   │ Atomic commits    │          │ Socratic design  │
   │ Dynamic re-plan   │          │ Micro-task sizing│
@@ -46,7 +46,7 @@ AWSL's architecture splits orchestration into two independent layers:
 ```
 
 - **Conductor** handles the **what** and **when** — decompose the goal, schedule waves, manage dependencies, checkpoint progress, recover from failures.
-- **Guardian** handles the **how** — enforce TDD for coders, run two-stage review for reviewers, guide Socratic exploration for architects. Guardian skills are injected per-role automatically.
+- **Guardian** handles the **how** — enforce TDD for coders, run per-task code review (on actual git diff) for reviewers, guide Socratic exploration for architects. Guardian skills are injected per-role automatically.
 
 This separation means orchestration logic and quality enforcement evolve independently. You can customize agents without touching the scheduler, or change the execution strategy without affecting quality gates.
 
@@ -63,7 +63,7 @@ Both modes can run on existing local CLI sessions. CC Mode uses Claude Code's bu
 | Advantage | How |
 |-----------|-----|
 | **4-10x faster for large projects** | Wave parallelism — independent tasks run concurrently via parallel agents |
-| **Higher code quality** | Writer ≠ Reviewer. Dedicated reviewer agent catches spec deviations, security issues, and code smells that the coder misses |
+| **Higher code quality** | Writer ≠ Reviewer. After each coder task, a reviewer reads the actual `git diff` line-by-line against an anti-pattern checklist (busy-waits, race conditions, missing cleanup, etc.). Critical findings block the commit before it happens |
 | **Fresh context per task** | Every agent gets a clean 200K token window. No context rot, no attention degradation |
 | **Crash recovery** | `.planning/` persists all state. Process dies → restart → resume from last checkpoint |
 | **Bisectable git history** | One atomic commit per completed task. `git bisect` works. Partial reverts work |
@@ -167,7 +167,7 @@ awsl run "goal" --engine <claude-code|codex|builtin> [options]
 | `--engine <type>` | auto | Execution engine: `claude-code`, `codex`, or `builtin` (`codex` is used only when explicitly set) |
 | `--quick` | false | Skip brainstorm & research phases |
 | `--concurrency <n>` | 2 | Max parallel agents per wave |
-| `--no-verify` | false | Skip ALL verification: reviewer agent, provider verification (tsc, npm test, eslint), and auto-fix loop. Task auto-retry still runs (handles execution failures, not verification) |
+| `--no-verify` | false | Skip ALL verification: per-task code review, provider verification (tsc, npm test, eslint), and auto-fix loop. Task auto-retry still runs (handles execution failures, not verification) |
 | `--no-commit` | false | Skip git commits |
 | `--plan-only` | false | Generate plan only, don't execute |
 | `--execute-plan` | false | Execute existing `.planning/PLAN.md` |
@@ -180,9 +180,10 @@ awsl run "goal" --engine <claude-code|codex|builtin> [options]
 Phase 0a: Brainstorm    architect agent explores requirements (Socratic method)
 Phase 0b: Research      parallel agents analyze existing codebase
 Phase 1:  Plan          planner agent creates structured task DAG
-Phase 2:  Execute       coder/tester/reviewer agents run in topological waves
-Phase 3:  Review+Verify LLM reviewer → REVIEW.md; tsc/test/eslint → VERIFICATION.md  [skipped by --no-verify]
-Phase 3b: Auto-Fix      on failure → coder reads both files → fixes → re-verify (max 3 rounds)  [skipped by --no-verify]
+Phase 2:  Execute       coder/tester agents run in topological waves
+  └─ Per-task review    after each coder task, reviewer reads actual git diff → blocks on critical findings
+Phase 3:  Verify        tsc/test/eslint → VERIFICATION.md  [skipped by --no-verify]
+Phase 3b: Auto-Fix      on failure → coder reads VERIFICATION.md → fixes → re-verify (max 3 rounds)  [skipped by --no-verify]
 Phase 4:  Re-plan       on task failure → retry 2x → replan with different approach
 ```
 
@@ -190,7 +191,8 @@ Phase 4:  Re-plan       on task failure → retry 2x → replan with different a
 
 | Feature | Description |
 |---------|-------------|
-| **Auto-fix loop** | Review/verify fails → coder reads both REVIEW.md + VERIFICATION.md → fixes → re-verify → up to 3 attempts |
+| **Per-task code review** | After each coder task, reviewer reads the actual `git diff` line-by-line with a checklist (design flaws, race conditions, busy-waits, missing cleanup, delta/merge confusion, etc.). Critical findings block the commit — the task is marked failed before code is committed |
+| **Auto-fix loop** | Verify fails → coder reads VERIFICATION.md → fixes → re-verify → up to 3 attempts |
 | **Task auto-retry** | Failed tasks retry 2x with error context before re-planning |
 | **Reviewer hard-block** | Critical severity findings = task failed, must fix |
 | **File conflict detection** | Same-wave tasks sharing files → auto-split to different waves |
@@ -200,6 +202,11 @@ Phase 4:  Re-plan       on task failure → retry 2x → replan with different a
 | **Task queue (sleep mode)** | Queue multiple goals → `awsl queue start` → unattended sequential execution with auto rate-limit recovery |
 | **Flexible plan parsing** | Planner output parsed as JSON, XML, or markdown — robust against format variations from different models |
 | **Verify providers** | Parallel execution with per-provider timeouts (tsc 120s, tests 180s, eslint 60s) and 5-minute result caching |
+| **Atomic file writes** | All state files (QUEUE.json, CHECKPOINT.json, HISTORY.json, VERIFICATION.md) written via temp-file + rename pattern, preventing corruption on crash |
+| **Queue file locking** | File-based mutex prevents concurrent read/write conflicts between dashboard API and queue executor |
+| **Real-time status push** | Task completion triggers immediate WebSocket status push instead of waiting for 30s polling interval |
+| **Reconnect state sync** | Full state snapshot pushed to dashboard immediately after WebSocket reconnection |
+| **Delta status sync** | After initial full sync, only changed queue data and new history entries are transmitted, reducing bandwidth |
 
 ### Example Output
 
@@ -231,6 +238,26 @@ awsl review            # Static code review (no LLM) — detect any, secrets, mi
 awsl lock              # Show current lock status
 awsl unlock [--force]  # Release lock
 awsl agents            # List available agents
+awsl agents show <name>           # Show full agent details
+awsl agents create <name> [flags] # Create custom agent
+awsl agents edit <name> [flags]   # Edit existing agent
+awsl agents delete <name>         # Delete custom agent
+awsl agents reset <name>          # Restore built-in default
+awsl agents templates             # List built-in prompt templates
+awsl agents prompt <name>         # Edit prompt ($EDITOR / --show / --set / --file)
+awsl agents preview <name>        # Preview composed prompt
+
+# Night session summary
+awsl summary                        # Summarize last night's session (22:00→06:00)
+awsl summary --date 2026-03-10      # Summarize a specific night
+awsl summary --from 20:00 --to 08:00  # Custom time range
+awsl summary --all-projects         # Aggregate across all registered projects
+
+# Project management
+awsl projects                       # List all registered projects with status
+awsl projects add [path] [--name N] # Register a project (default: cwd)
+awsl projects remove <path|name>    # Unregister a project
+awsl projects scan [dir]            # Auto-discover projects in a directory
 ```
 
 ## Task Queue (Sleep Mode)
@@ -253,8 +280,11 @@ awsl queue add "Deploy to staging" --at "2026-03-10 03:00" # specific datetime
 awsl queue add "Cleanup temp files" --at "+30m"            # 30 minutes from now
 awsl queue add "Heavy refactor" --at "+2h"                 # 2 hours from now
 
-# Or: describe everything in natural language — auto-split into tasks with dependencies
-awsl queue plan "First build user auth with JWT, then add payment with Stripe, finally write E2E tests" --engine codex
+# Or: describe everything in natural language — preview before committing (recommended)
+awsl queue split "Build auth, then payments, finally integration tests" --engine claude-code
+
+# Or: auto-split without preview (backward-compatible)
+awsl queue plan "First build user auth with JWT, then add payment with Stripe, finally write E2E tests" --engine claude-code
 
 # Review the queue
 awsl queue list
@@ -268,7 +298,36 @@ awsl queue start
 
 ### Natural Language Queue Planning
 
-Describe multiple tasks in one sentence — AWSL uses the selected CLI engine (`claude-code` or `codex`) to parse them into structured queue tasks with inferred dependencies.
+Describe multiple tasks in one sentence — AWSL uses Claude to parse them into structured queue tasks with inferred dependencies. Two commands are available:
+
+**`queue split` (recommended)** — Preview before committing. Shows a table of planned tasks and asks for confirmation before adding to the queue. Use `--yes` to skip the confirmation prompt.
+
+```bash
+awsl queue split "Build auth, then payments, finally integration tests" --engine claude-code
+```
+
+Output:
+```
+Planned tasks:
+
+  #   Deps       Goal
+  ─────────────────────────────────────────────────
+  1   (none)     Build auth module
+  2   1          Add payment integration
+  3   all        Write integration tests
+
+Confirm? Add 3 task(s) to queue? (y/N) y
+
+Added 3 task(s):
+
+  ID       Deps       Goal
+  ------------------------------------------------------------
+  q_1      (none)     Build auth module
+  q_2      q_1        Add payment integration
+  q_3      all        Write integration tests
+```
+
+**`queue plan`** — Adds tasks directly without preview (backward-compatible).
 
 ```bash
 awsl queue plan "先构建用户认证，然后加支付模块，最后写集成测试" --engine codex
@@ -356,13 +415,20 @@ Features:
 - **Duration trend chart** — SVG line chart showing build time trends over the last 30 days
 - **Timeline** — Vertical timeline of all runs, grouped by date, filterable by project
 - **Project sidebar** — All projects with color-coded badges and task counts
+- **Projects management** — Register, remove, scan, and view all projects with live status (queue counts, lock state, last run). Select a project to view its queue or add tasks to it directly from the dashboard
 - **Queue monitor** — Live view of current queue status with auto-refresh (30s)
 - **Queue operations** — Add, remove, and clear tasks directly from the dashboard UI
 - **Queue scheduling** — Datetime picker on the add-task form to set `runAt`; queue table shows a "Run At" column with effective time (own time shown directly, inherited from dependency chain shown with arrow indicator); click a pending task's time cell to edit/clear the scheduled time
 - **Clear History** — One-click button to clear all execution history (deletes HISTORY.json)
 - **Live log stream** — Real-time SSE-based log panel showing agent stdout/stderr as it happens
 - **Browser notifications** — Alerts on task failure and queue completion (requires permission)
+- **Agent roles management** — Visual CRUD editor for agent definitions. Create custom agents, override built-in prompts, or reset to defaults — all from the dashboard UI
+- **Prompt templates** — 7 built-in templates (coder, reviewer, architect, tester, planner, devops, documenter) loadable from a dropdown in the editor
+- **Fullscreen prompt editor** — Full-viewport overlay for editing long prompts with live character count
+- **Prompt preview** — Preview the full composed prompt (base + skills + team context) with tabbed section view
 - **Agent analysis** — Shows unique agent roles, average/peak parallelism, total waves, and per-run wave breakdown with agent badges
+- **Wave detail visibility** — Each wave now shows per-task breakdown including description, assignee, status (done/failed/verified), modified files, and result/error messages. Quickly see exactly what each wave accomplished or why it failed
+- **Date filter** — Filter statistics by day, week, month, or custom date range. All dashboard widgets update in real-time based on the selected time period
 - **Pixel art aesthetic** — Press Start 2P font, retro animations
 
 API endpoints:
@@ -375,6 +441,24 @@ API endpoints:
 - `POST /api/queue/clear` — clear all tasks
 - `POST /api/queue/set-time` — set/change/clear scheduled time `{id, runAt}`
 - `POST /api/history/clear` — clear execution history
+- `GET /api/history/:id/waves` — wave details with per-task breakdown for a specific run
+- `GET /api/projects` — list all registered projects with live status
+- `POST /api/projects/add` — register a project `{path, name?, tags?}`
+- `POST /api/projects/remove` — unregister a project `{path}`
+- `POST /api/projects/scan` — auto-discover projects `{dir, depth?}`
+- `GET /api/projects/queue?path=` — get queue for a specific project
+- `POST /api/projects/queue/add` — add task to a project's queue `{path, goal, ...}`
+- `POST /api/projects/queue/start` — start queue execution for a project `{path, engine?, once?}`
+- `POST /api/projects/queue/clear` — clear a project's queue `{path}`
+- `GET /api/projects/history?path=` — get history for a specific project
+- `GET /api/projects/stats?path=` — get stats for a specific project
+- `GET /api/agents` — list all agents (built-in + custom). `?name=X` for single agent
+- `POST /api/agents` — create custom agent `{name, role, systemPrompt, ...}`
+- `PUT /api/agents` — update agent `{name, ...fields}`
+- `DELETE /api/agents?name=X` — delete custom agent file
+- `GET /api/agents/templates` — list all 7 built-in prompt templates
+- `POST /api/agents/preview` — compose full prompt preview `{name}` → `{composed, sections}`
+- `GET /api/discussions` — discussion entries from history
 - `GET /api/clients` — list connected remote clients
 - `POST /api/clients/command` — send command to a client `{clientId, action, payload?}`
 - `WebSocket /ws/relay` — relay endpoint for remote client connections
@@ -435,9 +519,88 @@ curl -X POST http://server:3120/api/clients/command \
   -d '{"clientId":"my-laptop","action":"system:info"}'
 ```
 
-Supported relay actions: `queue:add`, `queue:remove`, `queue:clear`, `queue:list`, `queue:get`, `queue:set-time`, `queue:start`, `system:info`.
+Supported relay actions: `queue:add`, `queue:remove`, `queue:clear`, `queue:list`, `queue:get`, `queue:set-time`, `queue:start`, `agents:list`, `agents:get`, `agents:save`, `agents:delete`, `agents:templates`, `agents:preview`, `system:info`.
 
 > For full deployment guide (systemd, PM2, Docker, Nginx reverse proxy, NAT traversal), see [DEPLOY.md](DEPLOY.md).
+
+## Discussion Mode
+
+Not every question needs code. Sometimes you need your agent team to **think together** — debate architecture decisions, evaluate trade-offs, or analyze design choices.
+
+Discussion mode runs all agents in parallel to analyze a question from their specialized perspective, then optionally runs debate rounds where agents respond to each other, and finally synthesizes everything into a coherent answer.
+
+### Usage
+
+```bash
+# Direct discussion
+awsl discuss "How should we design the authentication system?"
+
+# Via queue (with debate rounds)
+awsl queue add --discuss "What database schema fits our use case?" --rounds 2
+
+# Schedule an overnight discussion
+awsl queue add --discuss --at 03:00 "Analyze microservices vs monolith trade-offs for our scale"
+```
+
+### Discussion Flow
+
+```
+Round 1: Parallel Perspectives    All agents independently analyze the question
+Round 2..N: Debate (optional)     Agents respond to each other's points
+Synthesis:                        Combined into a final coherent answer
+Persist:                          Saved to .planning/DISCUSSION-{timestamp}.md
+```
+
+### Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--rounds <n>` | 1 | Number of discussion rounds (1-3). More rounds = deeper debate |
+| `--at <time>` | — | Schedule for later (same syntax as queue tasks) |
+| `--cwd <path>` | `.` | Working directory |
+
+### Output
+
+- Discussion transcripts are saved to `.planning/DISCUSSION-{timestamp}.md`
+- Each file contains: all agent perspectives, debate rounds, and the final synthesized answer
+- Discussions appear in `awsl summary` output alongside build results
+- Dashboard API: `GET /api/discussions` returns discussion entries from history
+
+## Night Session Summary
+
+Review what happened during a night coding session. Pulls data from HISTORY.json (task queue results) and `git log` (commits) within the time range.
+
+```bash
+awsl summary
+```
+
+**Options:**
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--from <HH:MM>` | `22:00` | Session start time |
+| `--to <HH:MM>` | `06:00` | Session end time |
+| `--date <YYYY-MM-DD>` | auto | Anchor date (auto-detects based on current time) |
+| `--all-projects` | false | Aggregate across all registered projects |
+| `--cwd <path>` | `.` | Working directory |
+
+**Time range auto-detection:** If now < 06:00 → last night. If now >= 22:00 → tonight. Otherwise → last night.
+
+**Example output:**
+
+```
+┌─────────────────────────────────────┐
+│     Night Session Summary           │
+│     2026-03-10 22:00 → 03-11 06:00 │
+├─────────────────────────────────────┤
+│  Tasks: 5 total, 4 done, 1 failed  │
+│  Git:   12 commits                  │
+│  Time:  2h 34m                      │
+│  Cost:  $0.42                       │
+├─────────────────────────────────────┤
+│  Agents: coder ×8, reviewer ×2     │
+└─────────────────────────────────────┘
+```
 
 ## Enable AWSL in Any Project
 
@@ -511,10 +674,10 @@ awsl run "Build a REST API"
 ║  │   (claude -p) (claude -p)         (claude -p)     │    ║
 ║  │                                                   │    ║
 ║  │  Self-Healing:                                    │    ║
+║  │    per-task review (git diff) → block on critical │    ║
 ║  │    verify fail → auto-fix (3x)                    │    ║
 ║  │    task fail → retry (2x) → replan                │    ║
 ║  │    file conflict → auto-split waves               │    ║
-║  │    critical review → hard-block                   │    ║
 ║  └───────────────────────────────────────────────────┘    ║
 ║                                                          ║
 ║  Engine: claude-code (claude -p per task)                 ║
@@ -549,12 +712,12 @@ Guardian skills auto-activate based on agent role:
 | `coder` | TDD (red/green/refactor), Systematic Debug |
 | `architect` | Socratic Brainstorm |
 | `planner` | Micro-Task Planning |
-| `reviewer` | Two-Stage Code Review, Quality Gate |
+| `reviewer` | Per-Task Code Review (git diff + checklist), Quality Gate |
 | `tester` | Systematic Debug |
 
 **TDD** — Enforces RED-GREEN-REFACTOR. Write failing test first. Minimal code to pass. Refactor.
 
-**Two-Stage Review** — Stage 1: Does it match the spec? Stage 2: Is the code quality acceptable? Critical findings block the task.
+**Per-Task Code Review** — After each coder task completes, the reviewer immediately receives the actual `git diff` and reads it line-by-line against a specific checklist: design flaws, race conditions, busy-waits, stale locks, delta/merge confusion, missing `finally` blocks, and more. Critical findings block the commit — the task is marked failed before any code is committed. Phase 3 now focuses solely on automated verification (tsc, npm test, eslint).
 
 **Socratic Brainstorm** — Explore requirements through targeted questions. Challenge assumptions. Document decisions.
 
@@ -591,13 +754,51 @@ The builtin engine enforces a sandbox policy on every agent. Write operations ar
 |------|------|-------------|
 | planner | planner | Decomposes goals into structured micro-tasks |
 | architect | architect | Designs system architecture and interfaces |
-| coder | coder | Implements code with TDD enforcement |
-| reviewer | reviewer | Two-stage review with quality gate |
+| coder | coder | Full-stack developer with sub-agent parallelism (Agent tool enabled) |
+| reviewer | reviewer | Per-task code review with git diff checklist + quality gate |
 | tester | tester | Designs and runs tests, debugs failures |
+
+### Two-Level Parallelism
+
+AWSL achieves parallelism at two levels simultaneously:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Level 1: AWSL Orchestration (planner controls)         │
+│                                                         │
+│  Wave 1: [architect]         ← design first             │
+│  Wave 2: [coder, coder]     ← feature A + feature B    │
+│  Wave 3: [tester, reviewer] ← test + review             │
+│                                                         │
+│  Each coder is a separate claude -p process             │
+│  Planner ensures file-disjoint tasks per wave           │
+├─────────────────────────────────────────────────────────┤
+│  Level 2: Claude Code Agent Tool (coder controls)       │
+│                                                         │
+│  coder (feature A) internally spawns:                   │
+│    ├─ sub-agent 1 → API endpoint (server.ts)            │
+│    └─ sub-agent 2 → UI component (dashboard.html)       │
+│                                                         │
+│  coder (feature B) internally spawns:                   │
+│    ├─ sub-agent 1 → data model (types.ts)               │
+│    └─ sub-agent 2 → test suite (feature-b.test.ts)      │
+└─────────────────────────────────────────────────────────┘
+```
+
+- **Level 1** splits by **feature module** — planner creates independent tasks, each assigned to a coder
+- **Level 2** splits by **file layer** — coder uses the Agent tool to work on multiple files within its task concurrently
+- Parallel tasks at Level 1 MUST NOT share files (enforced by planner)
+- Sub-agents at Level 2 are coordinated by the parent coder (no file conflicts within a task)
+
+To enable the Agent tool on custom agents, add `agent` to the tools list:
+
+```yaml
+tools: read,write,edit,bash,grep,glob,agent
+```
 
 ## Custom Agents
 
-Create `agents/<name>.md` in your project:
+Create `agents/<name>.md` in your project — manually, via CLI, or through the Dashboard UI:
 
 ```markdown
 ---
@@ -619,7 +820,7 @@ Use proper HTTP status codes and error formats.
 
 | Field | Description |
 |-------|-------------|
-| `name` | Agent identifier (required) |
+| `name` | Agent identifier (required). Must match `/^[a-z][a-z0-9-]*$/`, max 50 chars |
 | `role` | `planner`, `architect`, `coder`, `reviewer`, `tester`, or `custom` |
 | `description` | What this agent does |
 | `tools` | Comma-separated string (`read,write,edit,bash`) or YAML array |
@@ -645,6 +846,76 @@ skills:
 
 > Invalid frontmatter triggers a friendly error message with the file name and specific validation issue — the agent is skipped, not silently broken.
 
+### Managing Agents via CLI
+
+```bash
+awsl agents                    # List all agents (built-in + custom)
+awsl agents show <name>        # Show full details including system prompt
+awsl agents create <name>      # Create a new custom agent
+  --role <role>                #   Role (default: custom)
+  --description <desc>         #   Short description
+  --prompt <text>              #   System prompt (inline)
+  --prompt-file <path>         #   System prompt from file
+  --template <name>            #   Pre-populate from a built-in template
+  --tools <t1,t2>             #   Tools list
+  --model <model>              #   Model override
+  --skills <s1,s2>            #   Guardian skills
+  --thinking <level>           #   Thinking level (low/medium/high)
+awsl agents edit <name>        # Edit an existing agent (same flags as create)
+awsl agents delete <name>      # Delete a custom agent file
+awsl agents reset <name>       # Delete override, restore built-in default
+awsl agents templates          # List all 7 built-in prompt templates
+awsl agents prompt <name>      # Open prompt in $EDITOR for focused editing
+awsl agents prompt <name> --show   # Print current prompt to stdout
+awsl agents prompt <name> --set "..."  # Set prompt inline
+awsl agents prompt <name> --file <path>  # Set prompt from file
+awsl agents preview <name>     # Show full composed prompt (base + skills + team)
+```
+
+**How overrides work:** Editing a built-in agent (e.g. `coder`) creates `agents/coder.md` which overrides the default. Use `agents reset coder` to delete the override and restore the original.
+
+### Prompt Templates
+
+AWSL ships with 7 built-in prompt templates for common roles: **coder**, **reviewer**, **architect**, **tester**, **planner**, **devops**, and **documenter**. Templates provide a starting point for writing effective agent prompts.
+
+```bash
+# List all templates
+awsl agents templates
+
+# Create an agent using a template as starting point
+awsl agents create my-devops --role coder --template devops
+
+# Preview the full composed prompt (base + skills + team context)
+awsl agents preview coder
+```
+
+The `--template` flag on `create`/`edit` pre-populates the system prompt and role from the template. Explicit `--prompt`/`--prompt-file` overrides the template.
+
+### Managing Agents via Dashboard
+
+The Dashboard includes an **Agent Roles** (角色管理) card with a visual editor:
+
+- **Agent cards** — Each agent displayed as a card with name, role badge (color-coded), and source badge (`built-in` grey / `custom` green / `override` yellow)
+- **Editor modal** — Click any card or `[+New]` to open the full editor with fields for Name, Role, Description, Model, Tools, Skills, Thinking Level, and System Prompt (monospace textarea)
+- **Template selector** — Dropdown above the prompt textarea loads built-in templates. "Apply" fills the prompt and auto-sets role/description
+- **Fullscreen editor** — "Expand" button opens a full-viewport overlay with a monospace textarea for editing long prompts comfortably
+- **Character count** — Live character count displayed below the textarea in both normal and fullscreen modes
+- **Preview panel** — "Preview" button (edit mode) opens a fullscreen view of the composed prompt with tabbed sections: Composed / Base / Skills / Team
+- **Actions** — `[Save]` to create/update, `[Reset to Default]` for overridden built-ins, `[Delete]` for custom agents
+
+### Agent CRUD API
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/agents` | List all agents. `?name=X` returns a single agent |
+| `POST` | `/api/agents` | Create new custom agent `{name, role, systemPrompt, ...}` |
+| `PUT` | `/api/agents` | Update existing agent `{name, ...fields}` |
+| `DELETE` | `/api/agents?name=X` | Delete custom agent file |
+| `GET` | `/api/agents/templates` | List all 7 built-in prompt templates `[{name, description, prompt}]` |
+| `POST` | `/api/agents/preview` | Compose full prompt preview `{name}` → `{composed, sections: {base, skills, team}}` |
+
+Remote clients also support agent management via relay commands: `agents:list`, `agents:get`, `agents:save`, `agents:delete`, `agents:templates`, `agents:preview`.
+
 ## .planning/ Directory
 
 State persists across sessions:
@@ -657,11 +928,12 @@ State persists across sessions:
 ├── PLAN.md               # Structured task breakdown
 ├── WAVES.md              # Computed wave schedule
 ├── VERIFICATION.md       # Deterministic check results (tsc, eslint, tests)
-├── REVIEW.md             # LLM reviewer findings (spec compliance + code quality)
+├── REVIEW.md             # Per-task reviewer findings (git diff review with anti-pattern checklist)
 ├── CHECKPOINT.json       # Rate-limit recovery checkpoint (auto-managed)
 ├── QUEUE.json            # Task queue for sleep mode (auto-managed)
 ├── HISTORY.json          # Sleep mode execution history (auto-managed)
 ├── .dashboard.pid        # Background dashboard process PID (auto-managed)
+├── DISCUSSION-*.md       # Discussion mode transcripts (auto-managed)
 ├── research/
 │   ├── architecture.md   # Codebase analysis
 │   └── conventions.md    # Code style analysis
@@ -718,6 +990,7 @@ Real benchmark comparing CC Mode vs Terminal Mode on an identical complex task:
 | Fastest delivery | CC Mode |
 | Bug fix | CC Mode (`/awsl-quick`) |
 | Overnight multi-project build | Task Queue (`awsl queue start`) |
+| Architecture decisions, design trade-offs | Discussion Mode (`awsl discuss`) |
 
 ## Library API
 
@@ -734,7 +1007,7 @@ const result = await executeTeam(
   {
     brainstorm: true,      // Socratic exploration
     research: true,        // Codebase analysis
-    verify: true,          // Two-stage review
+    verify: true,          // Per-task code review + verification
     autoCommit: true,      // Atomic commits per task
     replan: true,          // Failure recovery
     qualityGate: true,     // Block on critical findings
@@ -797,6 +1070,14 @@ awsl unlock --force          # Force release any lock
 
 # Agents
 awsl agents                  # List all agents
+awsl agents show <name>      # Show full agent details including system prompt
+awsl agents create <name>    # Create custom agent (--role, --prompt, --template, --tools, etc.)
+awsl agents edit <name>      # Edit existing agent (same flags as create)
+awsl agents delete <name>    # Delete custom agent file
+awsl agents reset <name>     # Delete override, restore built-in default
+awsl agents templates        # List all 7 built-in prompt templates
+awsl agents prompt <name>    # Edit prompt in $EDITOR (--show, --set, --file)
+awsl agents preview <name>   # Show composed prompt (base + skills + team)
 
 # Task queue (sleep mode)
 awsl queue add "Build REST API" --quick      # Add task to queue
@@ -804,23 +1085,42 @@ awsl queue add "Add auth" --depends-on q_1   # Add with dependency
 awsl queue add "Write tests" --depends-on all # Wait for all prior tasks
 awsl queue add "Nightly build" --at "03:00"  # Schedule for 3:00 AM
 awsl queue add "Later task" --at "+2h"       # Schedule 2 hours from now
-awsl queue plan "First auth, then payments, finally tests"  # Natural language → auto-split
+awsl queue split "First auth, then payments, finally tests" # Natural language → preview → confirm → add
+awsl queue split "..." --yes                             # Skip confirmation prompt
+awsl queue plan "First auth, then payments, finally tests"  # Natural language → auto-split (no preview)
 awsl queue list                               # Show queue status
 awsl queue show q_1                           # Show detailed info for a single task
 awsl queue remove q_1                         # Remove a task
 awsl queue start --engine claude-code         # Start queue execution
 awsl queue start --engine codex               # Start queue execution with Codex
 awsl queue clear                              # Clear all tasks
+
+# Discussion mode
+awsl discuss "How should we design the auth system?"              # Direct discussion
+awsl queue add --discuss "Evaluate database options" --rounds 2   # Via queue with debate
+awsl queue add --discuss --at 03:00 "Microservices vs monolith"   # Schedule overnight
+
 # Quick start — one command boots everything
 awsl start                                   # Start dashboard + remote (if configured)
 awsl start --server http://server:3120       # Start + configure remote in one shot
-awsl stop                                    # Stop all services
+awsl stop                                    # Stop all services (also releases lock + resets running tasks)
 awsl status                                  # Check what's running
 
 # Dashboard (manual control)
 awsl dashboard [--port N]                     # Open the sleep mode pixel dashboard (default: 3120)
 awsl dashboard --bg                          # Start dashboard as background process
 awsl dashboard stop                          # Stop background dashboard process
+
+# Project management
+awsl projects                                # List all registered projects with status
+awsl projects add [path] [--name N]          # Register a project (default: cwd)
+awsl projects remove <path|name>             # Unregister a project
+awsl projects scan [dir]                     # Auto-discover projects in a directory
+
+# Night session summary
+awsl summary                                 # Last night's session (22:00→06:00)
+awsl summary --date 2026-03-10               # Specific night
+awsl summary --all-projects                  # All registered projects
 
 # Remote control (connect local machine to remote dashboard)
 awsl remote init http://server:3120          # Save config + start connection
@@ -859,7 +1159,7 @@ awsl remote stop                             # Stop background client
 | **Planning** | Code-enforced DAG | Skill-guided | Manual |
 | **Parallelism** | Real (concurrent `claude -p`) | CC Agent tool | None |
 | **Self-healing** | Auto-fix + retry + replan | Manual | Manual |
-| **Code review** | Reviewer agent + static | Reviewer agent | None |
+| **Code review** | Per-task git diff review + static | Reviewer agent | None |
 | **Git history** | Per-task atomic commits | Single commit | Single commit |
 | **Spec compliance** | High (reviewer loop) | Medium | Variable |
 | **Speed** | ~20 min | ~6 min | ~5 min |

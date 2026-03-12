@@ -15,6 +15,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { execFileSync } from "node:child_process";
 import type { TeamAgentDef } from "./agents.js";
 import type { SandboxPolicy } from "./sandbox.js";
 import { SharedMemory } from "./memory.js";
@@ -23,6 +24,7 @@ import { type RunResult, type Engine, runAgent, runParallel, detectEngine } from
 import { createPlanningDir, parseStructuredTasks, atomicCommit, saveCheckpoint, loadCheckpoint, clearCheckpoint, type StructuredTask, type PlanningDir, type CheckpointData } from "./planning.js";
 import { SkillRegistry } from "./skills.js";
 import { runFullVerification } from "./verify.js";
+import type { WaveInfo, WaveTaskDetail } from "./history.js";
 
 // ─── Event / Hook System ─────────────────────────────────────
 
@@ -70,12 +72,7 @@ export interface Task {
 	error?: string;
 }
 
-export interface WaveInfo {
-	wave: number;
-	taskIds: string[];
-	agents: string[];
-	parallel: number;
-}
+export type { WaveInfo };
 
 export interface TeamResult {
 	success: boolean;
@@ -215,6 +212,67 @@ function parseReviewFindings(raw: string): ReviewFinding[] {
 	}
 
 	return findings;
+}
+
+// ─── Per-Task Code Diff ─────────────────────────────────────
+
+/** Get git diff for a task's changed files. Returns diff text or empty string. */
+function getTaskDiff(cwd: string, taskFiles?: string[]): string {
+	try {
+		// Get both staged and unstaged changes
+		const args = ["diff", "HEAD"];
+		if (taskFiles?.length) {
+			args.push("--");
+			args.push(...taskFiles);
+		}
+		const diff = execFileSync("git", args, {
+			cwd,
+			encoding: "utf-8",
+			maxBuffer: 512 * 1024, // 512KB max
+			timeout: 10000,
+		}).trim();
+		if (diff) return diff;
+
+		// Fallback: if no HEAD yet, show staged changes
+		const stagedArgs = ["diff", "--cached"];
+		if (taskFiles?.length) {
+			stagedArgs.push("--");
+			stagedArgs.push(...taskFiles);
+		}
+		return execFileSync("git", stagedArgs, {
+			cwd,
+			encoding: "utf-8",
+			maxBuffer: 512 * 1024,
+			timeout: 10000,
+		}).trim();
+	} catch {
+		return "";
+	}
+}
+
+/** Read changed file contents for review (new/untracked files not in git diff). */
+function getChangedFileContents(cwd: string, taskFiles?: string[]): string {
+	if (!taskFiles?.length) return "";
+	// Find untracked files that wouldn't appear in git diff
+	let untrackedSet: Set<string>;
+	try {
+		const untracked = execFileSync("git", ["ls-files", "--others", "--exclude-standard"], {
+			cwd, encoding: "utf-8", timeout: 5000,
+		}).trim();
+		untrackedSet = new Set(untracked.split("\n").filter(Boolean).map(f => f.replace(/\\/g, "/")));
+	} catch {
+		untrackedSet = new Set();
+	}
+	const sections: string[] = [];
+	for (const f of taskFiles.slice(0, 5)) {
+		const norm = f.replace(/\\/g, "/");
+		if (!untrackedSet.has(norm)) continue; // skip tracked files (already in diff)
+		try {
+			const content = fs.readFileSync(path.resolve(cwd, f), "utf-8");
+			sections.push(`### ${f} (new file)\n\`\`\`\n${content.slice(0, 3000)}\n\`\`\``);
+		} catch { /* skip missing files */ }
+	}
+	return sections.join("\n\n");
 }
 
 // ─── Rate Limit Backoff ──────────────────────────────────────
@@ -597,16 +655,83 @@ Do NOT output any text before or after the JSON. Do NOT use markdown prose forma
 				task.result = result.result;
 				memory.set(`result:${task.id}`, result.result, task.assignee);
 
-				// Conductor: atomic git commit per task
-				if (autoCommit) {
+				// ── Per-task code review (before commit) ──
+				// Reviewer sees actual code changes, not just task summary
+				if (qualityGate) {
+					const reviewer = agents.find(a => a.role === "reviewer");
+					if (reviewer) {
+						const diff = getTaskDiff(cwd, task.files);
+						const newFiles = getChangedFileContents(cwd, task.files);
+						const parts: string[] = [];
+						if (diff) parts.push(`## Code Changes (git diff)\n\`\`\`diff\n${diff.slice(0, 8000)}\n\`\`\``);
+						if (newFiles) parts.push(`## New Files\n${newFiles}`);
+						const codeContext = parts.join("\n\n");
+
+						if (codeContext) {
+							log.info("guardian", `Reviewing ${task.id}...`);
+							const reviewPrompt = `# Code Review: ${task.id}
+
+## Task
+${task.description}
+
+## Definition of Done
+${task.doneCriteria ?? "(none)"}
+
+${codeContext}
+
+## Review Checklist
+Review the ACTUAL CODE above. Focus on:
+1. **Design flaws**: busy-waits, missing cleanup, resource leaks, race conditions
+2. **Missing error handling**: what happens on failure? crash? corrupt state?
+3. **Edge cases**: empty input, concurrent access, reconnection, stale state
+4. **Security**: injection, secrets, unsafe deserialization
+5. **Correctness**: does the code actually do what the task requires?
+
+Do NOT just check if it compiles. Read the code line by line.
+
+Report format: [PASS/FAIL/WARN] ${task.id}: description (severity: critical/major/minor)
+Critical findings MUST explain what's wrong and suggest a fix.`;
+
+							const reviewResult = await runAgent(
+								reviewer, reviewPrompt, cwd, memory, roster,
+								defaultModel, 15, skills, engine, undefined, sandbox,
+							);
+							totalInputTokens += reviewResult.inputTokens ?? 0;
+							totalOutputTokens += reviewResult.outputTokens ?? 0;
+							totalCostUsd += reviewResult.costUsd ?? 0;
+
+							if (reviewResult.status === "done" || reviewResult.status === "no_report") {
+								planning.write(`${task.id}-REVIEW.md`, reviewResult.result);
+								memory.set(`review:${task.id}`, reviewResult.result, reviewer.name);
+
+								const findings = parseReviewFindings(reviewResult.result);
+								const hasCritical = findings.some(f => f.severity === "critical");
+								if (hasCritical) {
+									task.status = "failed";
+									task.error = `Code review: ${findings.filter(f => f.severity === "critical").map(f => f.message).join("; ")}`;
+									log.warn("guardian", `${task.id} BLOCKED by review: ${task.error}`);
+								} else {
+									const warnings = findings.filter(f => f.severity === "warning");
+									if (warnings.length > 0) {
+										log.info("guardian", `${task.id}: ${warnings.length} warning(s)`);
+									}
+									log.info("guardian", `${task.id}: review PASSED`);
+								}
+							}
+						}
+					}
+				}
+
+				// Conductor: atomic git commit per task (only if review passed)
+				if (task.status === "done" && autoCommit) {
 					const committed = atomicCommit(cwd, task.id, task.description.slice(0, 50), task.files);
 					if (committed) log.info("git", `Committed: ${task.id}`);
 				}
 
 				// Save task summary to .planning/
-				planning.write(`${task.id}-SUMMARY.md`, `# ${task.id}: ${task.description.slice(0, 60)}\n\nAssignee: ${task.assignee}\nStatus: done\n\n## Result\n${task.result}`);
+				planning.write(`${task.id}-SUMMARY.md`, `# ${task.id}: ${task.description.slice(0, 60)}\n\nAssignee: ${task.assignee}\nStatus: ${task.status}\n\n## Result\n${task.result}`);
 
-				await emit(hooks, { type: "task_done", task, memory });
+				await emit(hooks, { type: task.status === "done" ? "task_done" : "task_failed", task, memory });
 			} else {
 				task.status = "failed";
 				task.error = result.error ?? result.result;
@@ -655,11 +780,25 @@ Do NOT output any text before or after the JSON. Do NOT use markdown prose forma
 
 		// Record wave execution info
 		const waveAgents = [...new Set(wave.map(t => t.assignee))];
+		const waveTaskDetails: WaveTaskDetail[] = wave.map(t => ({
+			id: t.id,
+			description: t.description,
+			assignee: t.assignee,
+			status: t.status as "done" | "failed" | "verified",
+			files: t.files,
+			result: t.result ? t.result.slice(0, 200) : undefined,
+			error: t.error ? t.error.slice(0, 200) : undefined,
+		}));
+		const allDone = wave.every(t => t.status === "done" || t.status === "verified");
+		const allFailed = wave.every(t => t.status === "failed");
+		const waveStatus = allDone ? "success" as const : allFailed ? "failed" as const : "partial" as const;
 		waveInfos.push({
 			wave: wi + 1,
 			taskIds: wave.map(t => t.id),
 			agents: waveAgents,
 			parallel: wave.length,
+			tasks: waveTaskDetails,
+			status: waveStatus,
 		});
 
 		// Save checkpoint after every wave (enables full resume)
@@ -678,47 +817,29 @@ Do NOT output any text before or after the JSON. Do NOT use markdown prose forma
 	}
 
 	// ── Phase 3: Verify ───────────────────────────────────────
+	// Code review already happened per-task in Phase 2.
+	// Phase 3 focuses on automated verification (tsc, npm test, etc.)
+	// and collects per-task review results into a summary.
 	const doneTasks = tasks.filter(t => t.status === "done");
-	if (verifyEnabled && doneTasks.some(t => t.verify)) {
+	if (verifyEnabled) {
 		log.section("Phase 3: Verification");
 		await emit(hooks, { type: "verify_start", tasks: doneTasks, memory });
 
-		const verifier = agents.find(a => a.role === "tester" || a.role === "reviewer")
-			?? agents.find(a => a.name !== "planner");
-
-		if (verifier) {
-			const verifyItems = doneTasks
-				.filter(t => t.verify)
-				.map(t => `### [${t.id}] ${t.description.slice(0, 60)}\nVerify: ${t.verify}\nDone criteria: ${t.doneCriteria ?? "(none)"}\nResult: ${(t.result ?? "").slice(0, 200)}`)
-				.join("\n\n");
-
-			const verifyResult = await runAgent(
-				verifier,
-				`# Guardian Verification (Two-Stage Review)\n\nVerify the following completed tasks using two stages:\n\n## Stage 1: Spec Compliance\nDoes each task meet its definition of done?\n\n## Stage 2: Code Quality\nAre there bugs, security issues, or quality problems?\n\n${verifyItems}\n\nFor each task, report PASS, FAIL, or WARN with category and details. Critical findings should be marked [CRITICAL]. Call report with your findings.`,
-				cwd, memory, roster, defaultModel, 30, skills, engine, undefined, sandbox,
-			);
-			totalInputTokens += verifyResult.inputTokens ?? 0;
-			totalOutputTokens += verifyResult.outputTokens ?? 0;
-			totalCostUsd += verifyResult.costUsd ?? 0;
-
-			if (verifyResult.status === "done" || verifyResult.status === "no_report") {
-				planning.write("REVIEW.md", verifyResult.result);
-				memory.set("review", verifyResult.result, verifier.name);
-
-				// Parse structured findings from the verifier result
-				const findings = parseReviewFindings(verifyResult.result);
-				for (const t of doneTasks) {
-					const taskFindings = findings.filter(f => f.taskId === t.id);
-					const hasCritical = taskFindings.some(f => f.severity === "critical");
-					if (qualityGate && hasCritical) {
-						t.status = "failed";
-						t.error = `Quality gate: ${taskFindings.filter(f => f.severity === "critical").map(f => f.message).join("; ")}`;
-						log.warn("guardian", `${t.id} BLOCKED: ${t.error}`);
-					} else if (taskFindings.every(f => f.severity === "pass" || f.severity === "warning")) {
-						t.status = "verified";
-					}
-				}
+		// Collect per-task review results into REVIEW.md
+		const reviewSections: string[] = [];
+		for (const t of tasks) {
+			const review = memory.get(`review:${t.id}`);
+			if (review) {
+				reviewSections.push(`## ${t.id}\n${review}`);
 			}
+		}
+		if (reviewSections.length > 0) {
+			planning.write("REVIEW.md", `# Code Review Summary\n\n${reviewSections.join("\n\n---\n\n")}`);
+		}
+
+		// Mark reviewed tasks as verified
+		for (const t of doneTasks) {
+			t.status = "verified";
 		}
 
 		await emit(hooks, { type: "verify_done", tasks: doneTasks, memory });

@@ -8,6 +8,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { log } from "./log.js";
+import { atomicWriteFileSync } from "./fs-utils.js";
 
 export interface PlanningDir {
 	root: string;
@@ -54,7 +55,7 @@ export function createPlanningDir(cwd: string): PlanningDir {
 		write(filename: string, content: string) {
 			const filePath = path.join(root, filename);
 			fs.mkdirSync(path.dirname(filePath), { recursive: true });
-			fs.writeFileSync(filePath, content);
+			atomicWriteFileSync(filePath, content);
 		},
 
 		read(filename: string): string | null {
@@ -409,7 +410,7 @@ export interface CheckpointData {
 export function saveCheckpoint(cwd: string, data: CheckpointData): void {
 	const dir = path.join(cwd, ".planning");
 	fs.mkdirSync(dir, { recursive: true });
-	fs.writeFileSync(
+	atomicWriteFileSync(
 		path.join(dir, "CHECKPOINT.json"),
 		JSON.stringify(data, null, 2),
 	);

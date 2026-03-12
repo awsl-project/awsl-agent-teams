@@ -1,45 +1,54 @@
 {
   "design": {
-    "title": "Fix Dashboard Stats: Aggregate All Machines on Initial Load",
-    "problem": "When user first opens dashboard (no machine selected), stats only show local history. Remote clients' history is ignored. Stats cards (Done, Failed, Total Time, Success Rate, Tokens, Cost) plus heatmap, trend, projects, and timeline all show local-only data.",
-    "root_cause": "render() in public/dashboard.html line 1333 uses `hist.entries` (local only) when selectedClient is null. Remote clients' status.history data is never merged into the aggregate view.",
-    "solution": {
-      "approach": "Client-side aggregation in render() function",
-      "file": "public/dashboard.html",
-      "function": "render() — lines 1333-1356",
-      "changes": [
-        "When selectedClient is null: copy local entries, then merge all clients[i].status.history entries",
-        "Deduplicate by composite key: (entry.id || '') + '|' + (entry.startedAt || '')",
-        "Queue stays local-only in aggregate view (queue is machine-specific)"
-      ],
-      "no_backend_changes": true
-    },
-    "decisions": {
-      "client_side_aggregation": "Data already in clients array from /api/clients; no new API needed",
-      "dedup_by_id_startedAt": "Prevents duplicates if dashboard machine also connects as remote client",
-      "queue_stays_local": "Queue is action-oriented; aggregating would confuse add/remove/start actions",
-      "single_file_change": "Only public/dashboard.html render() needs modification"
-    },
-    "affected_stats": [
-      "Done count",
-      "Failed count",
-      "Total Time",
-      "Success Rate",
-      "Input Tokens",
-      "Output Tokens",
-      "Total Tokens",
-      "Cost (USD)",
-      "Activity Heatmap",
-      "Duration Trend",
-      "Projects sidebar",
-      "Timeline"
+    "title": "Enhanced Custom Role Prompts (自定义角色提示词增强)",
+    "designDoc": ".planning/DESIGN-custom-role-prompts.md",
+    "summary": "Enhance the existing agent prompt editing experience on both dashboard and CLI. Add: (1) prompt templates registry with 7 built-in role templates, (2) fullscreen prompt editor overlay in dashboard, (3) template picker dropdown, (4) prompt preview showing composed prompt with skills/team context, (5) character count, (6) CLI $EDITOR support for interactive editing, (7) `agents prompt` shortcut subcommand, (8) `agents preview` subcommand, (9) `--template` flag for create/edit.",
+    "approach": "enhance-existing-crud",
+    "modifiedFiles": [
+      "src/agents.ts",
+      "src/dashboard.ts",
+      "src/cli.ts",
+      "src/remote.ts",
+      "src/index.ts",
+      "public/dashboard.html",
+      "README.md",
+      "README.zh-CN.md",
+      "BEST_PRACTICES.md"
     ],
-    "edge_cases": [
-      "Dashboard machine also connected as remote client → dedup handles this",
-      "Remote client disconnects → its data leaves clients array, stats decrease (shows live state)",
-      "Empty local history + rich remote history → now correctly shows remote data",
-      "No clients connected → behaves exactly as before (local only)"
+    "newExports": {
+      "PROMPT_TEMPLATES": "Record<string, { description: string; prompt: string }> — 7 built-in role templates",
+      "getPromptTemplates()": "Returns template list as array",
+      "composePromptPreview()": "Composes full agent prompt (base + skills + team context)"
+    },
+    "newApiEndpoints": {
+      "GET /api/agents/templates": "Returns list of prompt templates",
+      "GET /api/agents/preview?name=X": "Returns composed prompt preview for an agent"
+    },
+    "newCliCommands": {
+      "agents prompt <name>": "Focused prompt editing (opens $EDITOR or --show/--set/--file)",
+      "agents preview <name>": "Show full composed prompt with section breakdown",
+      "--template <name>": "Flag for create/edit to pre-populate from template"
+    },
+    "dashboardUiChanges": [
+      "Fullscreen prompt editor overlay (fixed, z-index 500)",
+      "Expand button (⛶) next to System Prompt label",
+      "Template picker <select> dropdown",
+      "Preview button in modal actions",
+      "Real-time character count"
     ],
-    "existing_design_doc": ".planning/design-stats-machines.md"
+    "waves": {
+      "wave_1": ["task_1: PROMPT_TEMPLATES + getPromptTemplates + composePromptPreview in agents.ts", "task_2: Fullscreen editor + char count in dashboard.html"],
+      "wave_2": ["task_3: /api/agents/templates + /api/agents/preview in dashboard.ts", "task_4: CLI agents prompt + preview + --template + $EDITOR", "task_5: agents:templates + agents:preview in remote.ts"],
+      "wave_3": ["task_6: Wire dashboard template picker + preview to API"],
+      "wave_4": ["task_7: Update README.md, README.zh-CN.md, BEST_PRACTICES.md"]
+    },
+    "keyDecisions": {
+      "templates_as_constants": "Hardcoded in agents.ts, not files — simpler, version-controlled",
+      "fullscreen_as_overlay": "Fixed overlay, not new page — preserves SPA architecture",
+      "editor_fallback_windows": "$EDITOR → VISUAL → notepad on Windows",
+      "preview_shows_all_sections": "Base + skills + team context for debugging",
+      "templates_only_set_prompt": "Templates don't set tools/model/skills — orthogonal concerns",
+      "bidirectional_textarea_sync": "Modal textarea ↔ fullscreen textarea stay in sync"
+    }
   }
 }

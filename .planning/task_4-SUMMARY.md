@@ -1,4 +1,4 @@
-# task_4: Expand coder bash denylist
+# task_4: 1. Add CSS styles after the existing .entry-wave styles (~li
 
 Assignee: coder
 Status: done
@@ -6,24 +6,22 @@ Status: done
 ## Result
 ## AWSL_RESULT
 
-### Task 4: Expand CODER_DENY_PATTERNS — Complete
+All changes implemented and verified. TDD RED-GREEN cycle complete.
 
-**File modified:** `src/sandbox.ts`
+### Files Modified
+- **`public/dashboard.html`** — Added 11 CSS rules for wave task rendering (`.wave-tasks`, `.wave-task`, `.wave-task-status`, `.wave-task-desc`, `.wave-task-files`, `.wave-status-badge` with success/partial/failed variants). Updated `renderEntryWaves()` function to:
+  1. Render **wave-level status badge** (success/partial/failed) next to the wave label
+  2. Render **per-task details** under each wave when `w.tasks` exists:
+     - Status icon: ✓ for done/verified, ✗ for failed (color-coded)
+     - Task description (truncated to 60 chars)
+     - Assignee badge (colored)
+     - Files count when available (e.g. "2 files")
+     - Error text in red for failed tasks (truncated to 80 chars)
+     - Result text for completed tasks (truncated to 80 chars)
 
-**19 new patterns added** (21 existing → 40 total), organized by category:
+### Files Created
+- **`tests/dashboard-wave-render.test.ts`** — 11 tests covering CSS classes and JS rendering logic
 
-| Category | Patterns Added |
-|----------|---------------|
-| Dangerous permissions / ownership | `chmod +s`, `chmod u+s`, `chown ` |
-| Remote access / file transfer | `ssh `, `scp `, `sftp `, `rsync `, `ftp ` |
-| Shell escapes (Windows) | `powershell`, `pwsh ` |
-| Git push (prevent autonomous pushes) | `git push` |
-| Package publishing | `npm publish` |
-| System control | `shutdown`, `reboot` |
-| Process / service control | `killall `, `systemctl ` |
-| Scheduled task manipulation | `crontab` |
-| Environment variable leaking | `printenv` |
-
-**Verification:** `npx tsc --noEmit` passes with zero errors.
-
-**Files modified:** `src/sandbox.ts`
+### Verification
+- `npx tsx --test tests/dashboard-wave-render.test.ts` — **11/11 pass**
+- `npx tsc --noEmit` — **0 errors**

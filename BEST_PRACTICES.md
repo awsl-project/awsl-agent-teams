@@ -20,10 +20,10 @@ awsl run "goal" --engine claude-code
   → architect brainstorm        (claude -p: 苏格拉底探索)
   → architect research ×2       (claude -p ×2 并行: 分析代码库)
   → planner plan                (claude -p: 生成结构化任务 DAG)
-  → coder/tester/reviewer ×N    (claude -p ×N: 按 wave 并行执行)
-  → LLM review → REVIEW.md      (claude -p: 审查者检查规格合规+代码质量)
+  → coder/tester ×N              (claude -p ×N: 按 wave 并行执行)
+    └─ 每个 coder 任务完成后 → reviewer 读取 git diff → 严重问题阻断提交
   → verify → VERIFICATION.md   (代码：tsc + npm test + eslint)
-  → auto-fix (最多3轮)          (claude -p: 读取两份报告 → 修复 → 重新验证)
+  → auto-fix (最多3轮)          (claude -p: 读取 VERIFICATION.md → 修复 → 重新验证)
   → git checkpoint per wave     (代码：原子提交)
 ```
 
@@ -52,14 +52,24 @@ awsl run "goal" --engine claude-code
 检查代码质量             →  awsl review
 排队多任务，通宵执行     →  awsl queue add "goal" + awsl queue start
 定时调度任务             →  awsl queue add "goal" --at "03:00"
-一句话排队多任务         →  awsl queue plan "先做A，然后B，最后C"
+一句话排队（先预览）     →  awsl queue split "先做A，然后B，最后C"
+一句话排队（直接添加）   →  awsl queue plan "先做A，然后B，最后C"
 一键启动所有服务          →  awsl start
 启动并配置远程面板        →  awsl start --server http://server:3120
 停止所有服务              →  awsl stop
 查看服务状态              →  awsl status
+讨论架构/设计问题          →  awsl discuss "question"
+定时讨论（带辩论）         →  awsl queue add --discuss "question" --rounds 2
 查看睡前模式仪表盘        →  awsl dashboard
 后台启动仪表盘            →  awsl dashboard --bg
 停止后台仪表盘            →  awsl dashboard stop
+查看昨晚工作总结          →  awsl summary
+查看指定日期的夜间工作    →  awsl summary --date 2026-03-10
+管理多项目                →  awsl projects
+自动发现项目              →  awsl projects scan ~/dev
+查看提示词模板            →  awsl agents templates
+编辑提示词（$EDITOR）     →  awsl agents prompt coder
+预览合成提示词            →  awsl agents preview coder
 ```
 
 ### 怎么选模式？
@@ -72,6 +82,7 @@ awsl run "goal" --engine claude-code
 | 追求最高代码质量 | 终端模式 — reviewer 循环审查 + 自动修复 |
 | 通宵多项目构建 | 任务队列 (`awsl queue start`) — 排队 + 限额恢复，真正的睡前模式 |
 | 改 bug | CC 模式 (`/awsl-quick`) — 最快 |
+| 架构决策、设计权衡 | 讨论模式 (`awsl discuss`) — 多角度分析 |
 
 ## 2. 写好 Goal
 
@@ -234,13 +245,14 @@ Wave 2: task-2          ← 依赖 task-1，等 Wave 1 完成
 
 | 文件 | 写入者 | 内容 |
 |------|--------|------|
-| `REVIEW.md` | Phase 3 LLM 审查者 | `[CRITICAL]`/`[PASS]`/`[WARN]` 级别的发现（规格合规 + 代码质量） |
-| `VERIFICATION.md` | Phase 3b 确定性检查 | tsc、eslint、npm test 的通过/失败结果 |
+| `REVIEW.md` | 逐任务代码审查（Phase 2 中每个 coder 任务完成后） | 审查者读取真实 `git diff`，逐行检查反模式清单。`[CRITICAL]` 发现阻断提交，任务标记失败 |
+| `VERIFICATION.md` | Phase 3 确定性检查 | tsc、eslint、npm test 的通过/失败结果 |
 
-**为什么分离？** 之前两者都写入 `VERIFICATION.md`，确定性检查会覆盖 LLM 审查者的发现。分离后：
-- LLM 审查者的代码质量发现不会丢失
-- Auto-fix 读取 **两个** 文件，同时修复代码质量问题和测试/类型错误
-- 两种报告独立演进，互不干扰
+**审查时机变化：** 之前审查者在 Phase 3 末尾批量审查所有任务（只看 200 字摘要）。现在审查者在每个 coder 任务完成后**立即**介入，读取**真实 git diff** 逐行检查。这意味着：
+- 问题在提交**之前**就被发现并阻断
+- 审查者看到的是实际代码变更，不是摘要
+- Phase 3 现在专注于自动化验证（tsc、npm test、eslint）
+- Auto-fix 循环只需要读取 VERIFICATION.md
 
 **验证器超时和缓存：**
 - TypeScript 类型检查：120 秒超时
@@ -252,7 +264,155 @@ Wave 2: task-2          ← 依赖 task-1，等 Wave 1 完成
 
 在 `agents/` 目录放 markdown 文件，CC 会读取并注入到对应 role 的子 agent prompt。
 
-**示例：前端项目团队**
+### 三种管理方式
+
+| 方式 | 适用场景 |
+|------|---------|
+| **手动创建文件** | 需要 git 追踪、团队协作 |
+| **CLI 命令** | 终端快速操作、脚本自动化 |
+| **仪表盘 UI** | 可视化编辑、不熟悉文件格式时 |
+
+### 文件格式
+
+Agent 定义文件是 **YAML frontmatter + Markdown body** 格式：
+
+```markdown
+---
+name: api-expert
+role: coder
+description: 精通 OpenAPI 的 REST API 专家
+tools: read,write,edit,bash
+skills: tdd,debug
+thinking: high
+model: anthropic:claude-sonnet-4-20250514
+---
+
+你是一位 REST API 专家。遵循 OpenAPI 3.0 规范。
+始终在实现代码的同时生成 OpenAPI 规格文件。
+使用正确的 HTTP 状态码和错误格式。
+```
+
+- `---` 之间是 YAML frontmatter，定义元数据（name、role、tools 等）
+- `---` 之后的 Markdown 正文就是 **系统提示词**（systemPrompt）— 这是用户最需要自定义的部分
+- 文件名必须是 `{name}.md`，name 只允许小写字母、数字和连字符（`/^[a-z][a-z0-9-]*$/`，最长 50 字符）
+
+### 用 CLI 管理智能体
+
+**创建新智能体：**
+```bash
+# 最简方式 — 用内联 prompt
+awsl agents create my-expert --role coder --prompt "你是 Rust 专家。只用 safe Rust，不用 unsafe。"
+
+# 从文件读取 prompt（适合长提示词）
+awsl agents create my-expert --role coder --prompt-file ./prompts/rust-expert.md
+
+# 用内置模板作为起点
+awsl agents create my-devops --role coder --template devops
+
+# 完整参数
+awsl agents create api-dev \
+  --role coder \
+  --description "REST API 开发专家" \
+  --prompt "你是 REST API 专家。遵循 RESTful 最佳实践。" \
+  --tools read,write,edit,bash \
+  --skills tdd,debug \
+  --thinking high \
+  --model anthropic:claude-sonnet-4-20250514
+```
+
+**查看和编辑：**
+```bash
+# 查看完整详情（含系统提示词）
+awsl agents show coder
+
+# 编辑已有智能体（只更新指定字段，其他保留）
+awsl agents edit coder --prompt "你是一位资深 Go 开发者。只用标准库。"
+awsl agents edit coder --thinking high --tools read,write,bash
+```
+
+**提示词专用编辑命令（`agents prompt`）：**
+```bash
+# 在 $EDITOR 中打开提示词编辑（Windows 默认 notepad，Unix 默认 vi）
+awsl agents prompt coder
+
+# 打印当前提示词到 stdout
+awsl agents prompt coder --show
+
+# 内联设置提示词
+awsl agents prompt coder --set "你是 Go 专家。只用标准库。"
+
+# 从文件设置提示词
+awsl agents prompt coder --file ./prompts/go-expert.md
+```
+
+**预览合成提示词（`agents preview`）：**
+```bash
+# 查看 coder 最终接收到的完整提示词（基础 + Guardian 技能 + 团队上下文）
+awsl agents preview coder
+```
+
+预览会显示各段落的字符数，帮助你了解提示词的组成和长度。
+
+**覆盖内置智能体：**
+```bash
+# 编辑内置 coder 的提示词 → 创建 agents/coder.md 覆盖文件
+awsl agents edit coder --prompt "你是 Python 专家。使用 pytest 而不是 Jest。"
+
+# 不满意？恢复内置默认值（删除覆盖文件）
+awsl agents reset coder
+```
+
+**删除：**
+```bash
+# 删除自定义智能体
+awsl agents delete my-expert
+
+# 注意：不能删除内置智能体（planner/architect/coder/reviewer/tester），只能 reset
+```
+
+### 内置提示词模板
+
+AWSL 提供 7 个内置提示词模板，覆盖常见角色：
+
+| 模板 | 说明 |
+|------|------|
+| `coder` | 全栈开发者（内置 Agent tool 子 agent 并行） |
+| `reviewer` | 安全导向的代码审查者 |
+| `architect` | 系统架构设计师 |
+| `tester` | 测试设计与执行 |
+| `planner` | 任务分解与规划 |
+| `devops` | CI/CD、容器化、基础设施 |
+| `documenter` | 技术文档撰写 |
+
+```bash
+# 列出所有模板及描述
+awsl agents templates
+
+# 用模板创建智能体（模板预填充 prompt 和 role）
+awsl agents create my-tester --template tester
+
+# 显式 --prompt 覆盖模板内容
+awsl agents create my-tester --template tester --prompt "自定义提示词..."
+```
+
+**什么时候用模板：**
+- 不知道怎么写提示词 → 先用模板，再微调
+- 需要快速创建标准角色 → 一行命令搞定
+- 仪表盘上也可以通过下拉菜单选择模板应用
+
+### 用仪表盘 UI 管理
+
+打开 `awsl dashboard`，找到 **角色管理** 卡片：
+
+1. **查看** — 所有智能体显示为卡片，含角色徽章和来源标识（`built-in` 灰色 / `custom` 绿色 / `override` 黄色）
+2. **创建** — 点击 `[+New]`，填写名称、角色、描述和系统提示词，保存
+3. **模板** — 提示词文本框上方有模板下拉菜单，选择后点 "Apply" 一键填充提示词并设置角色/描述
+4. **编辑** — 点击卡片打开编辑器，修改后保存。长提示词可点 "Expand" 切换全屏编辑（等宽字体大文本框 + 实时字符计数）
+5. **预览** — 编辑模式点击 "Preview" 查看合成后的完整提示词（分页：合成结果 / 基础 / 技能 / 团队上下文）
+6. **恢复默认** — 被覆盖的内置智能体显示 `[Reset to Default]` 按钮
+7. **删除** — 自定义智能体显示 `[Delete]` 按钮
+
+### 示例：前端项目团队
 
 `agents/react-dev.md`:
 ```markdown
@@ -286,8 +446,17 @@ description: 前端代码审查 + 无障碍检查
 - 响应式：移动端适配
 ```
 
-**YAML 数组语法（推荐）：**
-tools 和 skills 现在支持 YAML 数组格式：
+或者用 CLI 快速创建（等效）：
+```bash
+awsl agents create react-dev --role coder --description "React + TypeScript 前端开发" \
+  --prompt-file ./prompts/react-dev.md
+awsl agents create ui-reviewer --role reviewer --description "前端代码审查 + 无障碍检查" \
+  --prompt-file ./prompts/ui-reviewer.md
+```
+
+### YAML 数组语法
+
+tools 和 skills 支持 YAML 数组格式（推荐）：
 ```yaml
 tools:
   - read
@@ -296,13 +465,26 @@ tools:
 ```
 传统逗号分隔格式仍然兼容：`tools: read,write,bash`
 
-**Schema 校验：**
-frontmatter 现在会做 TypeBox schema 校验。无效配置会输出友好错误（含文件名和具体问题），该 agent 被跳过。
+### Schema 校验
 
-**规则：**
-- role 决定 Guardian 技能注入（`coder` → TDD，`reviewer` → 两阶段审查，`tester` → 系统化调试）
+frontmatter 会做 TypeBox schema 校验。无效配置会输出友好错误（含文件名和具体问题），该 agent 被跳过。
+
+### 什么时候自定义 vs 创建新的
+
+| 场景 | 推荐做法 |
+|------|---------|
+| 希望 coder 用不同的语言/框架 | **覆盖内置** — `awsl agents edit coder --prompt "..."` |
+| 需要多个不同专长的 coder | **创建新的** — `awsl agents create rust-dev --role coder ...` |
+| 需要更严格的审查标准 | **覆盖内置** — `awsl agents edit reviewer --prompt "..."` |
+| 需要领域专家（安全、DBA、前端） | **创建新的** — 给每个领域一个专属 agent |
+| 临时调整后想恢复 | **先覆盖，用完 reset** — `awsl agents reset coder` |
+
+### 规则
+
+- role 决定 Guardian 技能注入（`coder` → TDD，`reviewer` → 逐任务代码审查，`tester` → 系统化调试）
 - 自定义 agent 的 system prompt 会附加到 Guardian 技能之后
-- 用 `/awsl-agents create <name>` 快速创建
+- 覆盖文件保存在 `agents/` 目录，原始内置定义不会被修改
+- 建议把 `agents/` 目录提交到 git — 团队共享自定义智能体配置
 
 ## 6. 利用 .planning/ 做持续开发
 
@@ -316,7 +498,7 @@ frontmatter 现在会做 TypeBox schema 校验。无效配置会输出友好错�
 - `.planning/PLAN.md` — 任务计划
 - `.planning/WAVES.md` — 执行波次
 - `.planning/STATE.md` — 进度和决策
-- `.planning/REVIEW.md` — LLM 审查者发现（规格合规 + 代码质量）
+- `.planning/REVIEW.md` — 逐任务审查者发现（git diff 审查 + 反模式清单）
 - `.planning/VERIFICATION.md` — 确定性检查结果（tsc、eslint、测试）
 
 **第二天：**
@@ -377,16 +559,27 @@ Guardian 是质量保证层，按 role 自动注入到每个子 agent：
 | Role | 自动注入的 Guardian 技能 |
 |------|------------------------|
 | coder | TDD (RED-GREEN-REFACTOR) — 先写测试，再写实现 |
-| reviewer | 两阶段审查 — 先查 spec 合规，再查代码质量 |
+| reviewer | 逐任务代码审查 — 每个 coder 任务完成后立即读取 git diff，逐行检查反模式清单 |
 | tester | 系统化调试 — 复现→隔离→根因→修复 |
 
 **TDD 流程（coder 自动执行）：**
 1. 写失败测试 → 2. 确认 RED → 3. 写最少代码通过 → 4. 确认 GREEN → 5. 重构
 
-**两阶段审查（reviewer 自动执行）：**
-1. Stage 1：spec 合规（是否满足需求）
-2. Stage 2：代码质量（安全、性能、可维护性）
-3. Critical 发现 → 任务失败，必须修复
+**逐任务代码审查（reviewer 自动执行）：**
+
+每个 coder 任务完成后，审查者立即收到该任务的真实 `git diff`，逐行检查以下反模式清单：
+- 设计缺陷（职责不清、接口不合理）
+- 竞态条件（race conditions）
+- Busy-wait（忙等待循环，应改用事件/信号）
+- 过期锁/缺失释放（stale locks，缺少 `finally` 块）
+- Delta/merge 混淆（增量更新 vs 全量覆盖搞混）
+- 缺失 cleanup/error 处理
+- 其他常见反模式
+
+审查结果：
+- `[CRITICAL]` → 任务**在提交前**就被标记失败，阻断 commit
+- `[WARN]` → 记录但不阻断
+- `[PASS]` → 通过
 
 ## 9. 沙箱配置（内置引擎）
 
@@ -541,17 +734,20 @@ verify 字段决定了 `awsl verify` 能否自动跑测试。**必须是可执�
 - Markdown 格式要求：`## task-1: 名称` 标题 + `- **Role:** coder` 等字段
 - 排查：查看 `.planning/` 目录下是否有 PLAN.md，手动确认格式是否正确
 
-**verify 失败（测试/lint/类型检查不过）或 review 发现 critical 问题：**
-- **终端模式：** 代码自动启动修复 agent（读取 REVIEW.md + VERIFICATION.md）→ 重新 verify → 最多 3 轮，全自动
-- **CC 模式：** CC 读取 REVIEW.md + VERIFICATION.md → Agent 修复 → 重新 verify
+**verify 失败（测试/lint/类型检查不过）：**
+- **终端模式：** 代码自动启动修复 agent（读取 VERIFICATION.md）→ 重新 verify → 最多 3 轮，全自动
+- **CC 模式：** CC 读取 VERIFICATION.md → Agent 修复 → 重新 verify
 
 **单个 task Agent 失败：**
 - **终端模式：** 自动重试 2 次，用不同 prompt（包含上次错误信息）→ 再失败才 replan
 - **CC 模式：** 修改 PLAN.md 中该 task 的 Action 字段 → `/awsl-go`
 
-**reviewer 发现 critical 问题：**
-- **终端模式：** 代码自动阻断该 task，标记 failed，触发重试/replan
+**逐任务审查发现 critical 问题：**
+- **终端模式：** 审查者在 coder 任务完成后立即读取 git diff，发现 critical 问题时直接阻断提交，任务标记 failed，触发重试/replan
 - **CC 模式：** 依赖 CC 遵守 SKILL.md 指令
+
+**排查失败的波次：**
+- 仪表盘的波次详情现在展示每个任务的描述、状态、修改文件和错误信息（`GET /api/history/:id/waves`）。通宵构建失败时，不用翻日志 — 直接在面板上看到是哪个波次的哪个任务出了问题以及具体错误原因。
 
 **全部失败：**
 - Goal 写得太模糊 → 重写，更具体
@@ -606,7 +802,7 @@ awsl run "Build a REST API with auth" --engine claude-code
 - 失败自动重试 2 次，再失败 replan
 - 每个 wave 成功后 git checkpoint
 - verify 失败自动修复（最多 3 轮）
-- reviewer critical 发现直接阻断
+- 逐任务 reviewer 读取 git diff，critical 发现在提交前阻断
 - 文件冲突自动检测，冲突 task 串行化
 
 **实测数据（User Auth + TODO API 复杂项目）：**
@@ -615,8 +811,9 @@ Phase 0a Brainstorm:   ~2.5 min (1 architect agent)
 Phase 0  Research:     ~2.3 min (2 architect agents 并行)
 Phase 1  Planning:     ~2.3 min (1 planner agent)
 Phase 2  Execution:    ~8 min   (7 waves, 10 tasks, 并行度 2)
-Phase 3  Review+Verify:~1.5 min (LLM reviewer → REVIEW.md; tsc + npm test → VERIFICATION.md)
-Phase 3b Auto-Fix:     ~6 min   (reads both files; 3 rounds: 6/8 → 6/8 → 7/8 passed)
+Phase 2  Per-task review:        (每个 coder 任务完成后 reviewer 读取 git diff，阻断严重问题)
+Phase 3  Verify:       ~1.5 min (tsc + npm test → VERIFICATION.md)
+Phase 3b Auto-Fix:     ~6 min   (reads VERIFICATION.md; 3 rounds: 6/8 → 6/8 → 7/8 passed)
 Total:                 ~23 min
 Result:                SUCCESS (10/10 tasks verified)
 Git:                   17 commits (per-task + wave checkpoints)
@@ -657,7 +854,7 @@ awsl run "goal" --engine claude-code --no-verify
 
 | 跳过的阶段 | 说明 |
 |-----------|------|
-| Phase 3: Reviewer agent | 不启动 LLM 审查者（不生成 REVIEW.md） |
+| Phase 2: 逐任务代码审查 | 不启动 reviewer 审查 git diff（不生成 REVIEW.md） |
 | Phase 3: Provider verify | 不执行 tsc、npm test、eslint（不生成 VERIFICATION.md） |
 | Phase 3b: Auto-fix loop | 不进入自动修复循环 |
 
@@ -672,7 +869,7 @@ awsl run "goal" --engine claude-code --no-verify
 
 **何时不要用：**
 - 通宵无人值守构建（验证是质量保障的核心）
-- 多模块大项目（需要 reviewer 捕获跨模块问题）
+- 多模块大项目（需要逐任务 reviewer 通过 git diff 捕获反模式）
 - 任何需要高代码质量的场景
 
 ### 终端使用 builtin 引擎（需要 ANTHROPIC_API_KEY）
@@ -716,7 +913,7 @@ Review: 0 critical, 3 warnings, 1 info across 14 files.
 
 报告自动保存到 `.planning/REVIEW.md`。
 
-> **注意区分：** `awsl review`（CLI 静态扫描）和 Phase 3 LLM 审查者都写入 `REVIEW.md`，但终端模式流水线中是 LLM 审查者写入。确定性检查（tsc、eslint、测试）的结果写入 `VERIFICATION.md`。Auto-fix 读取两个文件。
+> **注意区分：** `awsl review`（CLI 静态扫描）和逐任务代码审查都写入 `REVIEW.md`，但终端模式流水线中是逐任务审查者（读取 git diff）写入。确定性检查（tsc、eslint、测试）的结果写入 `VERIFICATION.md`。Auto-fix 读取 VERIFICATION.md。
 
 ## 14. 断点续跑（崩溃恢复）
 
@@ -747,9 +944,12 @@ CC 崩溃后锁不会永远卡住，系统有三重保障：
 
 | 检测方式 | 说明 |
 |---------|------|
-| **进程存活检查** | 用 `kill(pid, 0)` 探测锁持有进程是否还活着，已死则自动清除 |
-| **30 分钟超时** | 锁持有超过 30 分钟自动判定过期，清除 |
+| **进程存活检查** | 用 `kill(pid, 0)` 探测锁持有进程是否还活着，已死则自动清除（最主要的防护） |
+| **3 小时超时** | 锁持有超过 3 小时自动判定过期，清除（长任务安全） |
 | **手动强制释放** | `awsl unlock --force` 立即清除 |
+| **信号处理** | SIGINT/SIGTERM 时自动释放锁 + 重置 running 任务为 pending |
+| **异常捕获** | uncaughtException/unhandledRejection 时自动释放锁 |
+| **awsl stop** | 停止所有服务时自动释放锁 + 重置队列状态 |
 
 ### 恢复操作步骤
 
@@ -786,7 +986,7 @@ awsl run --execute-plan --engine claude-code
   │
   ├─ 检测 .planning/.lock
   │   ├─ PID 已死 → 自动清除锁 ✓
-  │   ├─ 超过 30 分钟 → 自动清除锁 ✓
+  │   ├─ 超过 3 小时 → 自动清除锁 ✓
   │   └─ 仍在运行 → 拒绝启动（防冲突）
   │
   ├─ 读取 STATE.md → 知道上次做到哪了
@@ -923,7 +1123,194 @@ my-project/
 | 放 agents/*.md | 领域专家定义 | 可选 |
 | 分点甩需求 | 直接列出，自动走队列 | 每次使用 |
 
-## 16. 不要做的事
+## 16. 夜间工作总结（`awsl summary`）
+
+通宵构建后，用 `awsl summary` 快速回顾昨晚做了什么。
+
+### 基本用法
+
+```bash
+# 早上醒来第一件事 — 查看昨晚的成果
+awsl summary
+
+# 查看前天晚上的工作
+awsl summary --date 2026-03-09
+
+# 多项目概览（汇总所有注册项目的数据）
+awsl summary --all-projects
+
+# 自定义时间范围（比如通宵到早上 8 点）
+awsl summary --from 20:00 --to 08:00
+```
+
+### 数据来源
+
+| 数据 | 来源 |
+|------|------|
+| 任务完成/失败数 | `.planning/HISTORY.json`（队列执行历史） |
+| Git 提交记录 | `git log`（指定时间范围内的提交） |
+| 耗时、token 消耗 | HISTORY.json 中的任务统计 |
+| 智能体分布 | HISTORY.json 中的 wave 信息 |
+
+### 时间范围自动检测
+
+不指定 `--date` 时，AWSL 自动判断：
+
+| 当前时间 | 行为 |
+|---------|------|
+| 凌晨（< 06:00） | 总结"昨晚"：昨天 22:00 → 今天 06:00 |
+| 夜间（>= 22:00） | 总结"今晚"：今天 22:00 → 明天 06:00 |
+| 白天（06:00-22:00） | 总结"昨晚"：昨天 22:00 → 今天 06:00 |
+
+### 推荐工作流
+
+**睡前：**
+```bash
+awsl queue start              # 启动队列，去睡觉
+```
+
+**早上：**
+```bash
+awsl summary                  # 一眼看昨晚成果
+awsl queue list               # 查看还有没有任务在跑
+git log --oneline -20         # 看详细提交
+awsl dashboard                # 打开仪表盘看更多细节
+```
+
+**复盘过去几天：**
+```bash
+awsl summary --date 2026-03-08
+awsl summary --date 2026-03-09
+awsl summary --date 2026-03-10
+```
+
+### 提示
+
+- `--all-projects` 适合管理多个项目的开发者，一条命令看所有项目的夜间进度
+- 如果 HISTORY.json 为空但有 git 提交，summary 仍然能统计 git 活动
+- summary 输出的格式适合复制到 Slack/日报中作为工作汇报
+
+## 17. 讨论模式 vs 构建模式
+
+AWSL 不只能写代码，还能让多个智能体协作讨论。关键是选对模式。
+
+### 什么时候用讨论模式
+
+| 场景 | 推荐 |
+|------|------|
+| 架构决策："微服务还是单体？" | 讨论模式 |
+| 设计权衡："SQL vs NoSQL 对我们的场景哪个合适？" | 讨论模式 |
+| 算法选择："用什么搜索策略？" | 讨论模式 |
+| 技术评估："React vs Vue vs Svelte 怎么选？" | 讨论模式 |
+| 代码审查策略："如何组织测试结构？" | 讨论模式 |
+| 直接写代码："构建 REST API" | 构建模式（`/awsl`） |
+| 修 bug："修复登录 500 错误" | 构建模式（`/awsl-quick`） |
+| 添加功能："加个支付模块" | 构建模式 |
+
+**规则：** 需要 **思考和决策** 的问题用讨论模式，需要 **写代码** 的任务用构建模式。
+
+### 用法
+
+```bash
+# 直接讨论
+awsl discuss "How should we design the authentication system?"
+
+# 通过队列（适合排队多个讨论 + 构建任务）
+awsl queue add --discuss "What database schema fits our use case?" --rounds 2
+
+# 通宵讨论（适合复杂问题，让 agent 慢慢想）
+awsl queue add --discuss --at 03:00 "Analyze microservices vs monolith trade-offs"
+```
+
+### 讨论轮次（`--rounds`）
+
+| 轮次 | 效果 | 适用场景 |
+|------|------|---------|
+| 1（默认） | 每个 agent 独立给出观点，直接综合 | 简单问题、信息收集 |
+| 2 | agent 互相回应，有一轮辩论 | 大多数架构/设计问题 |
+| 3 | 两轮辩论，观点充分碰撞 | 复杂权衡、有争议的决策 |
+
+**提示：** 复杂问题建议用 `--rounds 2` 或 `--rounds 3`，让 agent 有机会互相挑战和补充。
+
+### 查看结果
+
+讨论结果保存在 `.planning/DISCUSSION-{timestamp}.md`，包含：
+- 每个 agent 的独立观点
+- 辩论轮次中的互相回应
+- 最终综合答案（共识、分歧、建议、待解决问题）
+
+```bash
+# 查看最近的讨论记录
+ls .planning/DISCUSSION-*.md
+
+# 讨论也会出现在夜间总结中
+awsl summary
+```
+
+### 提示
+
+- **定时讨论** — 复杂问题用 `--at` 安排在夜间，不占用白天的使用额度
+- **讨论 + 构建** — 先用讨论模式做决策，再用构建模式实现：
+  ```bash
+  awsl queue add --discuss "设计数据库 schema" --rounds 2
+  awsl queue add "按照讨论结果实现数据库模块" --depends-on q_1
+  ```
+- **多问题排队** — 可以排队多个讨论，通宵一起处理
+- **仪表盘查看** — `GET /api/discussions` 端点可以在仪表盘上查看讨论历史
+
+## 18. 双层并行架构
+
+AWSL 在两个层级同时实现并行开发：
+
+### 第一层：AWSL 编排并行（planner 控制）
+
+planner 将目标拆成多个独立任务，按波次（wave）并行执行。每个任务是一个独立的 `claude -p` 进程。
+
+```
+Wave 1: [architect]         ← 先做设计
+Wave 2: [coder, coder]     ← 功能 A + 功能 B 同时跑
+Wave 3: [tester, reviewer] ← 测试 + 审查同时跑
+```
+
+**关键规则：** 同一 wave 内的任务**文件不能重叠**。planner 会按功能模块拆分（不是按前后端），确保每个 coder 独占自己的文件。
+
+### 第二层：CC Agent Tool 并行（coder 内部控制）
+
+coder 默认启用了 Claude Code 的 Agent tool，可以在任务内部再开子 agent 并行工作：
+
+```
+coder 接到任务："实现用户设置页面"
+  ├─ 子 agent 1 → 后端 API (src/settings.ts)
+  └─ 子 agent 2 → 前端界面 (public/settings.html)
+```
+
+coder 自己决定什么时候用子 agent，不需要你干预。
+
+### 两层叠加效果
+
+```
+AWSL 启动 3 个 coder 并行（第一层）
+  coder-1（认证模块）内部开 2 个子 agent（第二层）
+  coder-2（支付模块）内部开 2 个子 agent（第二层）
+  coder-3（通知模块）内部开 1 个子 agent（第二层）
+= 实际同时工作的 agent 可达 3 + 5 = 8 个
+```
+
+### 怎么确认 CC 有并行
+
+1. coder 的 `tools` 包含 `Agent`（内置默认开启）
+2. 自定义 agent 想启用：`tools: read,write,edit,bash,grep,glob,agent`
+3. coder 提示词里已有并行指引，CC 会在有多个独立文件变更时主动开子 agent
+
+### 什么时候不要并行
+
+| 场景 | 原因 |
+|------|------|
+| 修改同一个文件的不同部分 | 子 agent 可能产生冲突 |
+| 后一步依赖前一步的输出 | 必须串行 |
+| 简单的单文件修改 | 开子 agent 反而更慢（有启动开销） |
+
+## 19. 不要做的事
 
 | 不要 | 为什么 | 应该 |
 |------|--------|------|
@@ -936,8 +1323,9 @@ my-project/
 | verify 字段写自然语言 | 代码无法自动执行 | 写可执行命令：`npm test`、`tsc --noEmit` |
 | 不写测试框架 | Agent 可能选错框架 | 在 goal 里明确：用 Vitest / Jest / pytest |
 | 大项目不加集成测试 task | 单元测试通过不代表整体工作 | PLAN.md 最后加一个集成测试 task |
+| 用构建模式做决策 | 写出来的代码可能方向错 | 先用讨论模式确定方案，再构建 |
 
-## 17. 限额自动恢复
+## 19. 限额自动恢复
 
 AWSL 自动检测 token 限额错误并等待恢复，不需要手动干预。
 
@@ -1012,7 +1400,14 @@ await executeTeam(goal, agents, cwd, model, concurrency, {
 - 崩溃后重启，检查点仍然有效 — 自动恢复
 - 退避等待期间进程保持前台运行（不要关终端！）
 
-## 18. 任务队列（睡前模式）
+### 数据完整性与实时同步
+
+- **原子文件写入** — QUEUE.json、CHECKPOINT.json、HISTORY.json、VERIFICATION.md 等状态文件通过「写临时文件 → rename」模式落盘，即使进程崩溃也不会产生半写文件
+- **队列文件锁** — 面板 API 和队列执行器通过文件互斥锁协调读写，避免并发冲突导致数据丢失
+- **实时推送 + 增量同步** — 任务完成后立即通过 WebSocket 推送状态变更（不等 30 秒轮询）；初次连接全量同步后，后续只传输 diff，降低带宽消耗
+- **重连快照** — WebSocket 断线重连后自动推送完整状态快照，确保面板数据一致
+
+## 20. 任务队列（睡前模式）
 
 排队多个目标，一键启动，通宵执行。每个任务自带限额恢复能力。
 
@@ -1034,20 +1429,47 @@ awsl queue show q_1
 awsl queue start
 ```
 
-### 自然语言排队（推荐）
+### 自然语言排队
 
-不想一条条 `queue add`？一句话搞定：
+不想一条条 `queue add`？一句话搞定。有三种方式添加任务，适用不同场景：
+
+| 命令 | 说明 | 适用场景 |
+|------|------|---------|
+| `queue split` | **推荐。** 先预览再确认，不满意可以取消 | 日常使用，想确认拆分结果再添加 |
+| `queue plan` | 直接添加，无预览（向后兼容） | 脚本自动化、确定不需要预览 |
+| `queue add` | 手动添加单个任务 | 精确控制每个任务的 goal 和依赖 |
+
+**`queue split`（推荐）：**
 
 ```bash
-awsl queue plan "先构建用户认证 REST API（Express + JWT），然后在认证基础上加 RBAC 权限，最后写集成测试" --engine claude-code
+awsl queue split "先构建用户认证 REST API（Express + JWT），然后在认证基础上加 RBAC 权限，最后写集成测试" --engine claude-code
 ```
 
-AWSL 会调用 Claude 自动解析为：
+输出预览表格，等待确认：
 ```
-  q_1  (none)  构建用户认证 REST API（Express + JWT）
-  q_2  q_1     在认证基础上添加 RBAC 权限系统
-  q_3  all     写集成测试
+Planned tasks:
+
+  #   Deps       Goal
+  ─────────────────────────────────────────────────
+  1   (none)     构建用户认证 REST API（Express + JWT）
+  2   1          在认证基础上添加 RBAC 权限系统
+  3   all        写集成测试
+
+确认添加 3 个任务到队列？(y/N)
 ```
+
+输入 `y` 后才添加到队列。使用 `--yes` 跳过确认（适合脚本）：
+```bash
+awsl queue split "..." --yes
+```
+
+**`queue plan`（无预览，向后兼容）：**
+
+```bash
+awsl queue plan "先构建用户认证，然后加支付，最后测试" --engine claude-code
+```
+
+直接添加到队列，不显示预览，不要求确认。
 
 **关键词推断规则：**
 - "先...然后...最后" → 顺序依赖链
@@ -1057,7 +1479,7 @@ AWSL 会调用 Claude 自动解析为：
 
 **选项继承：** `--engine`、`--quick`、`--concurrency` 会应用到所有解析出的任务。
 
-**提示：** 解析后先 `awsl queue list` 确认，不满意可以 `awsl queue clear` 重来。
+**提示：** `queue split` 自带预览，不满意直接输入 `n` 取消。`queue plan` 添加后可用 `awsl queue list` 确认，不满意用 `awsl queue clear` 重来。
 
 ### 依赖管理
 
@@ -1157,8 +1579,8 @@ awsl queue add "goal" \
 ```bash
 # 1. 排好队列（二选一）
 
-# 方式 A：一句话自然语言
-awsl queue plan "先用 Express+TS 构建电商 API（商品、购物车、订单、支付），然后加用户系统（注册登录个人中心），再加后台管理，最后全面集成测试" --engine claude-code
+# 方式 A：一句话自然语言（推荐用 split，先预览再确认）
+awsl queue split "先用 Express+TS 构建电商 API（商品、购物车、订单、支付），然后加用户系统（注册登录个人中心），再加后台管理，最后全面集成测试" --engine claude-code
 
 # 方式 B：逐条添加（精确控制依赖）
 awsl queue add "用 Express+TS 构建电商 API：商品、购物车、订单、支付" --engine claude-code
@@ -1234,6 +1656,12 @@ awsl dashboard
 - 后端接口：`POST /api/queue/set-time`，body 为 `{ id, runAt }`（`runAt` 为 null 时清除）
 - 底层调用 `queue.ts` 的 `setRunAt(id, runAt)` 方法
 
+**日期筛选器：**
+- 使用日期筛选器分析生产力趋势：按天查看每日完成量，按月对比不同月份的效率，自定义范围聚焦特定项目周期
+- 快捷按钮：今日、本周、本月、全部 — 一键切换常用时间范围
+- 月份选择器和自定义起止日期支持更精确的筛选
+- 所有面板组件（统计卡片、热力图、耗时趋势、时间线）都会根据筛选条件实时更新
+
 **多机聚合性能优化：**
 - 聚合阶段使用原地 `push` 代替重复 `concat`，减少内存分配
 - 队列依赖查找通过 ID→task 映射表 + 缓存，从 O(Q²) 降到 O(Q)
@@ -1248,6 +1676,32 @@ awsl dashboard
   - 波次分解（每波并行了哪些角色、几个 agent 同时跑）
 - 数据来源：orchestrator 执行时收集 wave 和 agent 信息，写入 HISTORY.json
 - 远程客户端的数据同样参与聚合统计
+
+**项目管理面板：**
+
+管理多个 AWSL 项目的统一入口。所有项目注册到 `~/.awsl/projects.json`，面板实时展示每个项目的状态。
+
+- **项目卡片** — 每个已注册项目显示为一张卡片，包含：
+  - 状态指示灯（idle/active/running/locked/missing）
+  - 队列进度条（pending/done/failed 比例）
+  - 上次运行信息（时间、状态、耗时）
+- **选中项目** — 点击项目卡片后：
+  - 显示操作按钮（查看队列、添加任务、启动执行）
+  - 可直接在面板上操作该项目的任务队列
+- **注册项目** — 三种方式：
+  - CLI：`awsl projects add /path/to/project --name my-app`
+  - API：`POST /api/projects/add {path, name?, tags?}`
+  - 自动注册：运行 `awsl run` 或 `awsl queue start` 时自动注册当前目录
+- **自动发现** — `awsl projects scan ~/dev` 递归扫描目录，自动注册含 `.planning/` 或 `.git` 的项目
+- **跨项目队列操作** — 通过面板 API 向任意已注册项目添加任务、启动执行，无需切换目录
+
+CLI 命令：
+```bash
+awsl projects                            # 列出所有项目及状态
+awsl projects add [path] [--name N]      # 注册项目
+awsl projects remove <path|name>         # 取消注册
+awsl projects scan [dir]                 # 自动发现
+```
 
 **后台启动仪表盘：**
 ```bash
@@ -1279,7 +1733,7 @@ awsl start --server http://server-ip:3120 --id my-laptop
 # 查看状态
 awsl status
 
-# 全部停止
+# 全部停止（释放锁 + 重置 running 任务为 pending）
 awsl stop
 ```
 

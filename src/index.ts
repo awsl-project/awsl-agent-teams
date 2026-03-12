@@ -4,8 +4,8 @@
  * import { executeTeam, loadAgents, SharedMemory } from "awsl-agent-core";
  */
 
-export { loadAgents, type TeamAgentDef } from "./agents.js";
-export { executeTeam, planOnly, type Task, type TeamResult, type TeamEvent, type TeamEventType, type TeamHook, type ExecuteOptions, type PlanOnlyResult, type WaveInfo } from "./orchestrator.js";
+export { loadAgents, serializeAgent, saveAgent, deleteAgent, getAgent, resolveEnvValue, BUILTINS, PROMPT_TEMPLATES, getPromptTemplates, composePromptPreview, type TeamAgentDef } from "./agents.js";
+export { executeTeam, planOnly, type Task, type TeamResult, type TeamEvent, type TeamEventType, type TeamHook, type ExecuteOptions, type PlanOnlyResult } from "./orchestrator.js";
 export { validatePlan, type ValidatedTask, type ValidationResult } from "./validate.js";
 export { runFullVerification, runStaticReview, type VerifyResult, type VerifyItem, type ReviewResult, type ReviewFinding } from "./verify.js";
 export { runAgent, runParallel, detectEngine, isRateLimitError, type RunResult, type Engine } from "./runner.js";
@@ -28,10 +28,14 @@ export {
 	createSendMessageTool,
 	createReportTool,
 } from "./tools.js";
-export { appendHistory, loadHistory, clearHistory, getHistoryStats, type HistoryEntry, type HistoryData, type HistoryStats, type WaveInfo as HistoryWaveInfo } from "./history.js";
+export { appendHistory, loadHistory, clearHistory, getHistoryStats, type HistoryEntry, type HistoryData, type HistoryStats, type WaveInfo, type WaveTaskDetail, type WaveInfo as HistoryWaveInfo } from "./history.js";
 export { startDashboard, isPortInUse } from "./dashboard.js";
 export { scheduleQueueRun, cancelScheduledRun, listScheduledRuns } from "./scheduler.js";
 export { RelayServer, type RelayMessage, type CommandMessage, type CommandResultMessage, type ClientInfo } from "./relay.js";
 export { RemoteClient, type RemoteClientOptions } from "./remote.js";
 export { LogStream, getLogStream, type LogLine } from "./logstream.js";
 export { type SandboxPolicy, type BashPolicy, defaultPolicy, checkReadPath, checkWritePath, checkBashCommand } from "./sandbox.js";
+export { ProjectManager, type ProjectEntry, type ProjectRegistry, type ProjectStatus } from "./projects.js";
+export { generateSummary, formatSummary, computeTimeRange, type SessionSummary, type SummaryOptions, type TimeRange, type CommitInfo } from "./summary.js";
+export { discussTeam, type DiscussionRound, type DiscussionResult, type DiscussOptions } from "./discuss.js";
+export { atomicWriteFileSync, withFileLock, withFileLockAsync } from "./fs-utils.js";

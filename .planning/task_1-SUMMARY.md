@@ -1,25 +1,23 @@
-# task_1: Aggregate all-machines stats in render
+# task_1: 1. In src/history.ts, add a new interface BEFORE WaveInfo:
+
+
 
 Assignee: coder
 Status: done
 
 ## Result
-Build passes clean. The implementation is already complete:
-
-**`public/dashboard.html` lines 1343-1354** — When no specific client is selected (`!selectedClient`) and remote clients exist (`clients.length > 0`), the `render()` function:
-
-1. Starts with local data: `allEntries = (hist.entries || []).slice()` and `allQt = qt.slice()`
-2. Iterates all remote clients and concatenates their `status.history` and `status.queue`
-3. Assigns aggregated arrays back: `entries = allEntries; qt = allQt`
-
-This feeds aggregated data into `stats()`, `renderTimeline()`, `renderQueue()`, etc.
-
 ## AWSL_RESULT
 
-**Task: Aggregate all-machines stats in render** — Complete.
+All changes implemented and verified. TDD RED-GREEN cycle complete.
 
-The `render()` function in `public/dashboard.html` (lines 1343-1354) already contains the aggregation logic. When no client is selected and remote clients exist, it concatenates history entries and queue tasks from local + all remote sources before passing them to stats/rendering.
+### Files Modified
+- **`src/history.ts`** — Added `WaveTaskDetail` interface (id, description, assignee, status, files, result, error) and enriched `WaveInfo` with optional `tasks?: WaveTaskDetail[]` and `status?: "success" | "partial" | "failed"` fields
+- **`src/orchestrator.ts`** — Removed duplicate `WaveInfo` interface (was lines 74-79), replaced with `import type { WaveInfo } from "./history.js"` and `export type { WaveInfo }`
+- **`src/index.ts`** — Removed `type WaveInfo` from orchestrator export (line 8), added `type WaveInfo, type WaveTaskDetail` to history.ts export (line 31)
 
-**Tests:** 6/6 pass (`npx tsx --test test/aggregate-stats.test.ts`)
-**Build:** `tsc --noEmit` passes clean.
-**Files:** `public/dashboard.html` (no changes needed — already implemented in commit dc5b623)
+### Files Created
+- **`src/history-types.test.ts`** — 4 tests covering WaveTaskDetail required/optional fields, WaveInfo enriched fields, and backward compatibility
+
+### Verification
+- `npx tsc --noEmit` — **0 errors**
+- `npx tsx --test src/history-types.test.ts` — **4/4 pass**

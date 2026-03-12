@@ -17,7 +17,7 @@ export class RunContext {
 	readonly cwd: string
 	readonly sessionId: string
 	private released = false
-	private signalHandlers: Map<string, () => void> = new Map()
+	private signalHandlers: Map<string, (...args: any[]) => void> = new Map()
 
 	private constructor(cwd: string, sessionId: string) {
 		this.cwd = cwd
@@ -102,6 +102,24 @@ export class RunContext {
 			this.signalHandlers.set(signal, handler)
 			process.on(signal, handler)
 		}
+
+		// Catch uncaught exceptions to release lock before crashing
+		const exceptionHandler = (err: Error) => {
+			log.warn("context", `Uncaught exception, releasing lock: ${err.message}`)
+			this.release()
+			process.exit(1)
+		}
+		this.signalHandlers.set("uncaughtException", exceptionHandler)
+		process.on("uncaughtException", exceptionHandler)
+
+		// Catch unhandled rejections
+		const rejectionHandler = (reason: unknown) => {
+			log.warn("context", `Unhandled rejection, releasing lock: ${reason}`)
+			this.release()
+			process.exit(1)
+		}
+		this.signalHandlers.set("unhandledRejection", rejectionHandler)
+		process.on("unhandledRejection", rejectionHandler)
 	}
 
 	private deregisterSignalHandlers(): void {

@@ -10,8 +10,12 @@ import * as net from "node:net";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import * as child_process from "node:child_process";
 import { loadHistory, getHistoryStats, clearHistory } from "./history.js";
 import { TaskQueue } from "./queue.js";
+import { ProjectManager } from "./projects.js";
+import { loadAgents, saveAgent, deleteAgent, getAgent, BUILTINS, getPromptTemplates, composePromptPreview } from "./agents.js";
+import { SkillRegistry } from "./skills.js";
 import { log } from "./log.js";
 import { RelayServer } from "./relay.js";
 
@@ -64,7 +68,7 @@ export function startDashboard(cwd: string, port: number = 3120, host: string = 
 		const allowedOrigin = origin && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin) ? origin : undefined
 		if (allowedOrigin) {
 			res.setHeader("Access-Control-Allow-Origin", allowedOrigin)
-			res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+			res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 			res.setHeader("Access-Control-Allow-Headers", "Content-Type")
 		}
 
@@ -88,6 +92,20 @@ export function startDashboard(cwd: string, port: number = 3120, host: string = 
 		if (url.pathname === "/api/info") {
 			res.writeHead(200, { "Content-Type": "application/json" });
 			res.end(JSON.stringify({ cwd, project: path.basename(cwd) }));
+			return;
+		}
+
+		if (url.pathname.startsWith("/api/history/") && url.pathname.endsWith("/waves")) {
+			const entryId = url.pathname.split("/")[3];
+			const data = loadHistory(cwd);
+			const entry = data.entries.find(e => e.id === entryId);
+			if (!entry) {
+				res.writeHead(404, { "Content-Type": "application/json" });
+				res.end(JSON.stringify({ error: "not found" }));
+			} else {
+				res.writeHead(200, { "Content-Type": "application/json" });
+				res.end(JSON.stringify({ id: entry.id, goal: entry.goal, waves: entry.waves ?? [] }));
+			}
 			return;
 		}
 
@@ -119,18 +137,36 @@ export function startDashboard(cwd: string, port: number = 3120, host: string = 
 			return;
 		}
 
+		if (url.pathname === "/api/discussions" && req.method === "GET") {
+			const data = loadHistory(cwd);
+			const discussions = data.entries
+				.filter((e: any) => e.mode === "discuss" && e.answer)
+				.map((e: any) => ({
+					id: e.queueTaskId,
+					question: e.goal,
+					answer: e.answer,
+					agents: e.agents ?? [],
+					date: e.completedAt,
+					duration: e.duration,
+					costUsd: e.costUsd ?? 0,
+				}));
+			res.writeHead(200, { "Content-Type": "application/json" });
+			res.end(JSON.stringify(discussions));
+			return;
+		}
+
 		// ── Queue mutations ───────────────────────────────
 		if (req.method === "POST" && url.pathname === "/api/queue/add") {
 			collectBody(req, res, (body) => {
 				try {
-					const { goal, engine, quick, dependsOn, runAt } = JSON.parse(body);
+					const { goal, engine, quick, dependsOn, runAt, mode, discussRounds } = JSON.parse(body);
 					if (!goal || typeof goal !== "string") {
 						res.writeHead(400, { "Content-Type": "application/json" });
 						res.end(JSON.stringify({ error: "goal is required" }));
 						return;
 					}
 					const queue = new TaskQueue(cwd);
-					const task = queue.add(goal, { quick: !!quick }, { engine, dependsOn, runAt });
+					const task = queue.add(goal, { quick: !!quick, discussRounds }, { engine, dependsOn, runAt, mode });
 					res.writeHead(200, { "Content-Type": "application/json" });
 					res.end(JSON.stringify(task));
 				} catch {
@@ -237,6 +273,404 @@ export function startDashboard(cwd: string, port: number = 3120, host: string = 
 			return;
 		}
 
+		// ── Projects APIs ────────────────────────────────
+		if (url.pathname === "/api/projects" && req.method === "GET") {
+			try {
+				const statuses = ProjectManager.getAllStatuses();
+				res.writeHead(200, { "Content-Type": "application/json" });
+				res.end(JSON.stringify(statuses));
+			} catch (e: any) {
+				res.writeHead(500, { "Content-Type": "application/json" });
+				res.end(JSON.stringify({ error: e.message }));
+			}
+			return;
+		}
+
+		if (req.method === "POST" && url.pathname === "/api/projects/add") {
+			collectBody(req, res, (body) => {
+				try {
+					const parsed = JSON.parse(body);
+					const { path: projPath, name, tags } = parsed;
+					if (!projPath || typeof projPath !== "string") {
+						res.writeHead(400, { "Content-Type": "application/json" });
+						res.end(JSON.stringify({ error: "path is required and must be a string" }));
+						return;
+					}
+					if (!path.isAbsolute(projPath)) {
+						res.writeHead(400, { "Content-Type": "application/json" });
+						res.end(JSON.stringify({ error: "path must be absolute" }));
+						return;
+					}
+					const entry = ProjectManager.add(projPath, name, tags);
+					res.writeHead(200, { "Content-Type": "application/json" });
+					res.end(JSON.stringify(entry));
+				} catch {
+					res.writeHead(400, { "Content-Type": "application/json" });
+					res.end(JSON.stringify({ error: "Invalid JSON body" }));
+				}
+			});
+			return;
+		}
+
+		if (req.method === "POST" && url.pathname === "/api/projects/remove") {
+			collectBody(req, res, (body) => {
+				try {
+					const { path: projPath } = JSON.parse(body);
+					if (!projPath || typeof projPath !== "string") {
+						res.writeHead(400, { "Content-Type": "application/json" });
+						res.end(JSON.stringify({ error: "path is required" }));
+						return;
+					}
+					if (!path.isAbsolute(projPath)) {
+						res.writeHead(400, { "Content-Type": "application/json" });
+						res.end(JSON.stringify({ error: "path must be absolute" }));
+						return;
+					}
+					const removed = ProjectManager.remove(projPath);
+					res.writeHead(200, { "Content-Type": "application/json" });
+					res.end(JSON.stringify({ removed }));
+				} catch {
+					res.writeHead(400, { "Content-Type": "application/json" });
+					res.end(JSON.stringify({ error: "Invalid JSON body" }));
+				}
+			});
+			return;
+		}
+
+		if (req.method === "POST" && url.pathname === "/api/projects/scan") {
+			collectBody(req, res, (body) => {
+				try {
+					const { dir, depth } = JSON.parse(body);
+					if (!dir || typeof dir !== "string") {
+						res.writeHead(400, { "Content-Type": "application/json" });
+						res.end(JSON.stringify({ error: "dir is required" }));
+						return;
+					}
+					if (!path.isAbsolute(dir)) {
+						res.writeHead(400, { "Content-Type": "application/json" });
+						res.end(JSON.stringify({ error: "dir must be absolute" }));
+						return;
+					}
+					const results = ProjectManager.scan(dir, depth);
+					res.writeHead(200, { "Content-Type": "application/json" });
+					res.end(JSON.stringify(results));
+				} catch {
+					res.writeHead(400, { "Content-Type": "application/json" });
+					res.end(JSON.stringify({ error: "Invalid JSON body" }));
+				}
+			});
+			return;
+		}
+
+		if (url.pathname === "/api/projects/queue" && req.method === "GET") {
+			const projPath = url.searchParams.get("path");
+			if (!projPath) {
+				res.writeHead(400, { "Content-Type": "application/json" });
+				res.end(JSON.stringify({ error: "path query parameter required" }));
+				return;
+			}
+			if (!path.isAbsolute(projPath)) {
+				res.writeHead(400, { "Content-Type": "application/json" });
+				res.end(JSON.stringify({ error: "path must be absolute" }));
+				return;
+			}
+			const queuePath = path.join(projPath, ".planning", "QUEUE.json");
+			try {
+				const queueData = fs.readFileSync(queuePath, "utf-8");
+				res.writeHead(200, { "Content-Type": "application/json" });
+				res.end(queueData);
+			} catch {
+				res.writeHead(200, { "Content-Type": "application/json" });
+				res.end(JSON.stringify({ tasks: [] }));
+			}
+			return;
+		}
+
+		if (req.method === "POST" && url.pathname === "/api/projects/queue/add") {
+			collectBody(req, res, (body) => {
+				try {
+					const { path: projPath, goal, quick, engine, dependsOn, runAt } = JSON.parse(body);
+					if (!projPath || typeof projPath !== "string") {
+						res.writeHead(400, { "Content-Type": "application/json" });
+						res.end(JSON.stringify({ error: "path is required" }));
+						return;
+					}
+					if (!path.isAbsolute(projPath)) {
+						res.writeHead(400, { "Content-Type": "application/json" });
+						res.end(JSON.stringify({ error: "path must be absolute" }));
+						return;
+					}
+					if (!goal || typeof goal !== "string") {
+						res.writeHead(400, { "Content-Type": "application/json" });
+						res.end(JSON.stringify({ error: "goal is required" }));
+						return;
+					}
+					const queue = new TaskQueue(projPath);
+					const task = queue.add(goal, { quick: !!quick }, { engine, dependsOn, runAt });
+					res.writeHead(200, { "Content-Type": "application/json" });
+					res.end(JSON.stringify(task));
+				} catch {
+					res.writeHead(400, { "Content-Type": "application/json" });
+					res.end(JSON.stringify({ error: "Invalid JSON body" }));
+				}
+			});
+			return;
+		}
+
+		if (req.method === "POST" && url.pathname === "/api/projects/queue/start") {
+			collectBody(req, res, (body) => {
+				try {
+					const { path: projPath, engine, once } = JSON.parse(body);
+					if (!projPath || typeof projPath !== "string") {
+						res.writeHead(400, { "Content-Type": "application/json" });
+						res.end(JSON.stringify({ error: "path is required" }));
+						return;
+					}
+					if (!path.isAbsolute(projPath)) {
+						res.writeHead(400, { "Content-Type": "application/json" });
+						res.end(JSON.stringify({ error: "path must be absolute" }));
+						return;
+					}
+					const cliPath = process.argv[1] ?? path.join(__dirname, "..", "dist", "cli.js");
+					const args = ["queue", "start", "--cwd", projPath];
+					if (engine) args.push("--engine", engine);
+					if (once) args.push("--once");
+					const child = child_process.spawn(process.execPath, [cliPath, ...args], {
+						detached: true,
+						stdio: "ignore",
+						cwd: projPath,
+					});
+					child.unref();
+					res.writeHead(200, { "Content-Type": "application/json" });
+					res.end(JSON.stringify({ started: true, pid: child.pid }));
+				} catch (e: any) {
+					res.writeHead(400, { "Content-Type": "application/json" });
+					res.end(JSON.stringify({ error: e.message }));
+				}
+			});
+			return;
+		}
+
+		if (req.method === "POST" && url.pathname === "/api/projects/queue/clear") {
+			collectBody(req, res, (body) => {
+				try {
+					const { path: projPath } = JSON.parse(body);
+					if (!projPath || typeof projPath !== "string") {
+						res.writeHead(400, { "Content-Type": "application/json" });
+						res.end(JSON.stringify({ error: "path is required" }));
+						return;
+					}
+					if (!path.isAbsolute(projPath)) {
+						res.writeHead(400, { "Content-Type": "application/json" });
+						res.end(JSON.stringify({ error: "path must be absolute" }));
+						return;
+					}
+					const queue = new TaskQueue(projPath);
+					queue.clear();
+					res.writeHead(200, { "Content-Type": "application/json" });
+					res.end(JSON.stringify({ cleared: true }));
+				} catch {
+					res.writeHead(400, { "Content-Type": "application/json" });
+					res.end(JSON.stringify({ error: "Invalid JSON body" }));
+				}
+			});
+			return;
+		}
+
+		if (url.pathname === "/api/projects/history" && req.method === "GET") {
+			const projPath = url.searchParams.get("path");
+			if (!projPath) {
+				res.writeHead(400, { "Content-Type": "application/json" });
+				res.end(JSON.stringify({ error: "path query parameter required" }));
+				return;
+			}
+			if (!path.isAbsolute(projPath)) {
+				res.writeHead(400, { "Content-Type": "application/json" });
+				res.end(JSON.stringify({ error: "path must be absolute" }));
+				return;
+			}
+			const data = loadHistory(projPath);
+			res.writeHead(200, { "Content-Type": "application/json" });
+			res.end(JSON.stringify(data));
+			return;
+		}
+
+		if (url.pathname === "/api/projects/stats" && req.method === "GET") {
+			const projPath = url.searchParams.get("path");
+			if (!projPath) {
+				res.writeHead(400, { "Content-Type": "application/json" });
+				res.end(JSON.stringify({ error: "path query parameter required" }));
+				return;
+			}
+			if (!path.isAbsolute(projPath)) {
+				res.writeHead(400, { "Content-Type": "application/json" });
+				res.end(JSON.stringify({ error: "path must be absolute" }));
+				return;
+			}
+			const data = loadHistory(projPath);
+			const stats = getHistoryStats(data);
+			res.writeHead(200, { "Content-Type": "application/json" });
+			res.end(JSON.stringify(stats));
+			return;
+		}
+
+		// ── Agent Templates & Preview APIs ───────────────
+		if (url.pathname === "/api/agents/templates" && req.method === "GET") {
+			res.writeHead(200, { "Content-Type": "application/json" });
+			res.end(JSON.stringify(getPromptTemplates()));
+			return;
+		}
+
+		if (req.method === "POST" && url.pathname === "/api/agents/preview") {
+			collectBody(req, res, (body) => {
+				try {
+					const { name } = JSON.parse(body);
+					if (!name || typeof name !== "string") {
+						res.writeHead(400, { "Content-Type": "application/json" });
+						res.end(JSON.stringify({ error: "name is required" }));
+						return;
+					}
+					const agentsDir = path.join(cwd, "agents");
+					const agent = getAgent([agentsDir], name);
+					if (!agent) {
+						res.writeHead(404, { "Content-Type": "application/json" });
+						res.end(JSON.stringify({ error: `Agent "${name}" not found` }));
+						return;
+					}
+					const allAgents = loadAgents([agentsDir]);
+					const registry = new SkillRegistry();
+					const skillInstructions = registry.buildInstructions(agent.role, agent.skills);
+					const preview = composePromptPreview(agent, allAgents, skillInstructions);
+					res.writeHead(200, { "Content-Type": "application/json" });
+					res.end(JSON.stringify(preview));
+				} catch {
+					res.writeHead(400, { "Content-Type": "application/json" });
+					res.end(JSON.stringify({ error: "Invalid JSON body" }));
+				}
+			});
+			return;
+		}
+
+		// ── Agent CRUD APIs ──────────────────────────────
+		const agentsDir = path.join(cwd, "agents");
+
+		if (url.pathname === "/api/agents" && req.method === "GET") {
+			const name = url.searchParams.get("name");
+			if (name) {
+				const agent = getAgent([agentsDir], name);
+				if (!agent) {
+					res.writeHead(404, { "Content-Type": "application/json" });
+					res.end(JSON.stringify({ error: `Agent "${name}" not found` }));
+					return;
+				}
+				res.writeHead(200, { "Content-Type": "application/json" });
+				res.end(JSON.stringify(agent));
+			} else {
+				const agents = loadAgents([agentsDir]);
+				res.writeHead(200, { "Content-Type": "application/json" });
+				res.end(JSON.stringify(agents));
+			}
+			return;
+		}
+
+		if (req.method === "POST" && url.pathname === "/api/agents") {
+			collectBody(req, res, (body) => {
+				try {
+					const parsed = JSON.parse(body);
+					if (!parsed.name || typeof parsed.name !== "string") {
+						res.writeHead(400, { "Content-Type": "application/json" });
+						res.end(JSON.stringify({ error: "name is required" }));
+						return;
+					}
+					if (!parsed.systemPrompt || typeof parsed.systemPrompt !== "string" || !parsed.systemPrompt.trim()) {
+						res.writeHead(400, { "Content-Type": "application/json" });
+						res.end(JSON.stringify({ error: "systemPrompt is required and must be non-empty" }));
+						return;
+					}
+					const nameRe = /^[a-z][a-z0-9-]*$/;
+					if (!nameRe.test(parsed.name) || parsed.name.length > 50) {
+						res.writeHead(400, { "Content-Type": "application/json" });
+						res.end(JSON.stringify({ error: `Invalid agent name "${parsed.name}": must match /^[a-z][a-z0-9-]*$/ and be at most 50 chars` }));
+						return;
+					}
+					// Check for duplicates in custom agents dir
+					fs.mkdirSync(agentsDir, { recursive: true });
+					if (fs.existsSync(path.join(agentsDir, `${parsed.name}.md`))) {
+						res.writeHead(409, { "Content-Type": "application/json" });
+						res.end(JSON.stringify({ error: `Agent "${parsed.name}" already exists` }));
+						return;
+					}
+					const saved = saveAgent(agentsDir, parsed);
+					res.writeHead(201, { "Content-Type": "application/json" });
+					res.end(JSON.stringify(saved));
+				} catch {
+					res.writeHead(400, { "Content-Type": "application/json" });
+					res.end(JSON.stringify({ error: "Invalid JSON body" }));
+				}
+			});
+			return;
+		}
+
+		if (req.method === "PUT" && url.pathname === "/api/agents") {
+			collectBody(req, res, (body) => {
+				try {
+					const parsed = JSON.parse(body);
+					if (!parsed.name || typeof parsed.name !== "string") {
+						res.writeHead(400, { "Content-Type": "application/json" });
+						res.end(JSON.stringify({ error: "name is required" }));
+						return;
+					}
+					// Agent must exist (in builtins or files)
+					const existing = getAgent([agentsDir], parsed.name);
+					if (!existing) {
+						res.writeHead(404, { "Content-Type": "application/json" });
+						res.end(JSON.stringify({ error: `Agent "${parsed.name}" not found` }));
+						return;
+					}
+					fs.mkdirSync(agentsDir, { recursive: true });
+					const saved = saveAgent(agentsDir, parsed);
+					res.writeHead(200, { "Content-Type": "application/json" });
+					res.end(JSON.stringify(saved));
+				} catch {
+					res.writeHead(400, { "Content-Type": "application/json" });
+					res.end(JSON.stringify({ error: "Invalid JSON body" }));
+				}
+			});
+			return;
+		}
+
+		if (req.method === "DELETE" && url.pathname === "/api/agents") {
+			const name = url.searchParams.get("name");
+			if (!name) {
+				res.writeHead(400, { "Content-Type": "application/json" });
+				res.end(JSON.stringify({ error: "name query parameter required" }));
+				return;
+			}
+			const nameRe = /^[a-z][a-z0-9-]*$/;
+			if (!nameRe.test(name) || name.length > 50) {
+				res.writeHead(400, { "Content-Type": "application/json" });
+				res.end(JSON.stringify({ error: `Invalid agent name "${name}"` }));
+				return;
+			}
+			// Cannot delete if only exists as builtin
+			const isBuiltin = BUILTINS.some(b => b.name === name);
+			const customExists = fs.existsSync(path.join(agentsDir, `${name}.md`));
+			if (isBuiltin && !customExists) {
+				res.writeHead(400, { "Content-Type": "application/json" });
+				res.end(JSON.stringify({ error: `Cannot delete built-in agent "${name}"` }));
+				return;
+			}
+			if (!customExists) {
+				res.writeHead(404, { "Content-Type": "application/json" });
+				res.end(JSON.stringify({ error: `Agent "${name}" not found in custom agents` }));
+				return;
+			}
+			const deleted = deleteAgent(agentsDir, name);
+			res.writeHead(200, { "Content-Type": "application/json" });
+			res.end(JSON.stringify({ deleted }));
+			return;
+		}
+
 		// ── 404 ───────────────────────────────────────────
 		res.writeHead(404, { "Content-Type": "application/json" });
 		res.end(JSON.stringify({ error: "Not found" }));
@@ -244,6 +678,11 @@ export function startDashboard(cwd: string, port: number = 3120, host: string = 
 
 	// Attach WebSocket relay server for remote client connections
 	const relay = new RelayServer(server);
+
+	// Clean up relay (heartbeat interval, WebSocket connections) when server closes
+	server.on("close", () => {
+		relay.close();
+	});
 
 	server.on("error", (err: NodeJS.ErrnoException) => {
 		if (err.code === "EADDRINUSE") {
@@ -255,7 +694,7 @@ export function startDashboard(cwd: string, port: number = 3120, host: string = 
 
 	server.listen(port, host, () => {
 		log.info("dashboard", `Dashboard running at http://${host}:${port}`);
-		log.info("dashboard", `API: /api/history, /api/stats, /api/queue, /api/queue/add|remove|clear|start, /api/history/clear`);
+		log.info("dashboard", `API: /api/history, /api/history/:id/waves, /api/stats, /api/queue, /api/queue/add|remove|clear|start, /api/history/clear, /api/agents/*, /api/projects/*`);
 		log.info("dashboard", `Relay: /ws/relay (WebSocket), /api/clients, /api/clients/command`);
 	});
 

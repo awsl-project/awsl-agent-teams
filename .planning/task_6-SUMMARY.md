@@ -1,23 +1,15 @@
-# task_6: Run full build and type-check to verify all changes compile 
+# task_6: Update all three documentation files to mention the new wave
 
-Assignee: tester
+Assignee: coder
 Status: done
 
 ## Result
-All verifications pass.
-
 ## AWSL_RESULT
 
-**Build & Type-Check: ALL PASS**
+All three documentation files updated with wave detail visibility feature descriptions.
 
-| Check | Result |
-|-------|--------|
-| `npx tsc --noEmit` | Zero errors |
-| `npm run build` | Clean build to `dist/` |
-| `dist/sandbox.js` exists | Yes — exports `defaultPolicy`, `checkWritePath`, `checkBashCommand` |
-| `checkWritePath` in `dist/tools.js` | Present — guards write (line 55) and edit (line 83) tools |
-| `checkBashCommand` in `dist/tools.js` | Present — guards bash tool (line 112) |
-| `defaultPolicy` in `dist/runner.js` | Present — wired into `runWithBuiltin()` (line 250) |
-| Sandbox exports in `dist/index.js` | `defaultPolicy`, `checkWritePath`, `checkBashCommand` all re-exported |
+### Files Modified
 
-**No type errors, no build failures, all sandbox guards present in compiled output.**
+- **`README.md`** — Added "Wave detail visibility" feature bullet (per-task breakdown: description, assignee, status, files, result/error) and new `GET /api/history/:id/waves` API endpoint
+- **`README.zh-CN.md`** — Mirrored same changes in Chinese: "波次任务详情" feature bullet and API endpoint
+- **`BEST_PRACTICES.md`** — Added "排查失败的波次" paragraph in section 11 (处理失败), explaining how enriched wave data helps debug failed overnight builds without digging through logs

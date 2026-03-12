@@ -116,31 +116,37 @@ export const SKILL_CODE_REVIEW: Skill = {
 	activatesFor: ["reviewer"],
 	instructions: `## Guardian Skill: Two-Stage Code Review
 
-### Stage 1: Spec Compliance
-1. Read the original task requirements (from shared memory or context)
-2. Check: does the implementation match the spec?
-3. Check: are all requirements addressed?
-4. Check: are the done criteria met?
-5. Check: do the verification steps pass?
-6. If ANY spec requirement is missed → FAIL with specific details
+You will receive the actual git diff or file contents. READ THE CODE LINE BY LINE.
+Do NOT rubber-stamp. If you only check "does it compile?" you are failing at your job.
 
-### Stage 2: Code Quality
-7. Security: OWASP Top 10, input validation, auth checks, no secrets in code
-8. Correctness: edge cases, error handling, null checks
-9. Maintainability: naming, structure, complexity, DRY
-10. Performance: obvious bottlenecks, N+1 queries, unnecessary allocations
-11. Tests: coverage, meaningful assertions, edge case tests
+### Stage 1: Spec Compliance
+1. Does the implementation match the task requirements?
+2. Are all done criteria met?
+3. Are there missing features or incomplete implementations?
+
+### Stage 2: Code Quality (read the actual code!)
+4. **Design flaws**: busy-waits, polling loops, missing cleanup/dispose, resource leaks
+5. **Concurrency**: race conditions, missing locks, stale state, deadlock potential
+6. **Error handling**: what happens on crash? partial failure? does it corrupt state?
+7. **Edge cases**: empty input, reconnection, timeout, concurrent access
+8. **Security**: injection, unsafe deserialization, secrets in code, missing validation
+9. **Performance**: O(n²) where O(n) suffices, unnecessary allocations, blocking I/O in async
+
+### Common Anti-Patterns to Catch
+- \`while (Date.now() - start < N)\` → busy-wait, use Atomics.wait or setTimeout
+- Lock files without stale detection → process crash leaves permanent lock
+- \`status = newData\` when newData is a delta → overwrites instead of merging
+- Missing finally/cleanup blocks → resource leak on error path
+- Ignoring return values of async operations → silent failures
 
 ### Output Format
-For each finding:
-- [PASS/FAIL/WARN] Category: Description
-- Location: file:line
-- Severity: critical/major/minor
-- Suggestion: specific fix
+[PASS/FAIL/WARN] task_id: Description (severity: critical/major/minor)
+Location: file:line
+Suggestion: specific fix
 
 ### Quality Gate
-- ANY critical finding → task FAILS (must be fixed)
-- Major findings → task WARN (should be fixed)
+- ANY critical finding → task FAILS (must be fixed before commit)
+- Major findings → WARN (should be fixed)
 - Minor findings → noted but doesn't block`,
 };
 

@@ -18,6 +18,8 @@ import * as path from "node:path";
 import { TaskQueue } from "./queue.js";
 import { type Engine, detectEngine } from "./runner.js";
 import { loadHistory } from "./history.js";
+import { loadAgents, saveAgent, deleteAgent, getPromptTemplates, composePromptPreview } from "./agents.js";
+import { SkillRegistry } from "./skills.js";
 import { log } from "./log.js";
 
 export interface RemoteClientOptions {
@@ -42,11 +44,19 @@ export class RemoteClient {
 	private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 	private statusTimer: ReturnType<typeof setInterval> | null = null;
 	private reconnectAttempts = 0;
+	/** When true, next sendStatus() should push full state (used by delta sync). */
+	private fullSyncNeeded = true;
+	/** Tracks how many history entries were last sent (for delta sync). */
+	private lastSyncedHistoryCount = 0;
+	/** Tracks the last queue state JSON for change detection (for delta sync). */
+	private lastQueueJson = "";
 
 	constructor(options: RemoteClientOptions) {
 		this.options = options;
 		this.clientId = options.clientId ?? `${os.hostname()}-${path.basename(options.cwd)}`;
-		this.queue = new TaskQueue(options.cwd);
+		this.queue = new TaskQueue(options.cwd, {
+			onStatusChange: () => this.sendStatus(),
+		});
 	}
 
 	/** Start connecting to the remote server. */
@@ -79,6 +89,10 @@ export class RemoteClient {
 				platform: process.platform,
 				cwd: this.options.cwd,
 			});
+
+			// Full state sync on (re)connect
+			this.fullSyncNeeded = true;
+			this.sendStatus();
 
 			// Start periodic status updates
 			this.startStatusUpdates();
@@ -222,6 +236,50 @@ export class RemoteClient {
 					};
 					break;
 
+				case "agents:list": {
+					const agentsDir = path.join(this.options.cwd, "agents");
+					result = loadAgents([agentsDir]);
+					break;
+				}
+
+				case "agents:get": {
+					const agentsDir = path.join(this.options.cwd, "agents");
+					const agents = loadAgents([agentsDir]);
+					result = agents.find(a => a.name === (payload as any).name) ?? null;
+					break;
+				}
+
+				case "agents:save": {
+					const agentsDir = path.join(this.options.cwd, "agents");
+					result = saveAgent(agentsDir, payload as any);
+					break;
+				}
+
+				case "agents:delete": {
+					const agentsDir = path.join(this.options.cwd, "agents");
+					const deleted = deleteAgent(agentsDir, (payload as any).name);
+					result = { deleted };
+					break;
+				}
+
+				case "agents:templates": {
+					result = getPromptTemplates();
+					break;
+				}
+
+				case "agents:preview": {
+					const agentName = (payload as any)?.name;
+					if (!agentName || typeof agentName !== "string") throw new Error("payload.name is required");
+					const agentsDir = path.join(this.options.cwd, "agents");
+					const agents = loadAgents([agentsDir]);
+					const agent = agents.find(a => a.name === agentName);
+					if (!agent) throw new Error(`Agent not found: ${agentName}`);
+					const registry = new SkillRegistry();
+					const skillInstructions = registry.buildInstructions(agent.role, agent.skills);
+					result = composePromptPreview(agent, agents, skillInstructions);
+					break;
+				}
+
 				default:
 					throw new Error(`Unknown action: ${action}`);
 			}
@@ -262,23 +320,64 @@ export class RemoteClient {
 
 	private sendStatus(): void {
 		const historyData = loadHistory(this.options.cwd);
-		this.send({
-			type: "status",
-			data: {
-				queue: this.queue.list(),
-				history: historyData.entries,
-				system: {
-					hostname: os.hostname(),
-					platform: process.platform,
-					arch: os.arch(),
-					uptime: os.uptime(),
-					memory: {
-						total: os.totalmem(),
-						free: os.freemem(),
-					},
-				},
+		const queueItems = this.queue.list();
+		const currentQueueJson = JSON.stringify(queueItems);
+		const historyEntries = historyData.entries;
+
+		const system = {
+			hostname: os.hostname(),
+			platform: process.platform,
+			arch: os.arch(),
+			uptime: os.uptime(),
+			memory: {
+				total: os.totalmem(),
+				free: os.freemem(),
 			},
-		});
+		};
+
+		if (this.fullSyncNeeded) {
+			// Full sync: send everything
+			this.send({
+				type: "status",
+				data: {
+					queue: queueItems,
+					history: historyEntries,
+					system,
+				},
+			});
+			this.fullSyncNeeded = false;
+			this.lastQueueJson = currentQueueJson;
+			this.lastSyncedHistoryCount = historyEntries.length;
+			return;
+		}
+
+		// Delta sync: only send what changed
+		const queueChanged = currentQueueJson !== this.lastQueueJson;
+		const newHistoryCount = historyEntries.length - this.lastSyncedHistoryCount;
+		const historyChanged = newHistoryCount > 0;
+
+		if (!queueChanged && !historyChanged) {
+			// Nothing changed — send minimal heartbeat
+			this.send({
+				type: "status",
+				data: { delta: true, unchanged: true, system },
+			});
+			return;
+		}
+
+		const deltaData: Record<string, unknown> = { delta: true, system };
+
+		if (queueChanged) {
+			deltaData.queue = queueItems;
+			this.lastQueueJson = currentQueueJson;
+		}
+
+		if (historyChanged) {
+			deltaData.historyAppend = historyEntries.slice(this.lastSyncedHistoryCount);
+			this.lastSyncedHistoryCount = historyEntries.length;
+		}
+
+		this.send({ type: "status", data: deltaData });
 	}
 
 	// ─── Helpers ────────────────────────────────────────

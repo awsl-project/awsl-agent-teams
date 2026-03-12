@@ -1,36 +1,28 @@
-# task_5: Verify all fixes build correctly
+# task_5: Add test cases (can be in a new test file or existing test f
 
 Assignee: tester
 Status: done
 
 ## Result
+All green. `tsc --noEmit` passes with 0 errors, all 29 tests pass (10 new wave tests + 19 existing API tests).
+
 ## AWSL_RESULT
 
-### Build & Test Verification — All Passes
+All tests pass. 10 new test cases added, all verifying wave detail enrichment.
 
-**Build**: `npx tsc --noEmit` — **0 errors**
+### Files Modified
+- **`src/dashboard-agents.test.ts`** — Added 10 wave-related tests before the existing API tests:
+  1. `testWaveTaskDetailShape` — verifies all WaveTaskDetail fields (id, description, assignee, status, files, result, error)
+  2. `testWaveTaskDetailFailedWithError` — failed status with error field, optional fields undefined
+  3. `testWaveTaskDetailVerifiedStatus` — verified status variant
+  4. `testWaveInfoEnrichmentWithTasks` — WaveInfo with populated tasks[], correct field values
+  5. `testWaveInfoResultTruncation` — result and error truncated to 200 chars
+  6. `testWaveStatusAllSuccess` — all done/verified → `"success"`
+  7. `testWaveStatusAllFailed` — all failed → `"failed"`
+  8. `testWaveStatusPartialMixed` — mixed statuses → `"partial"`
+  9. `testWaveInfoBackwardCompatNoTasks` — WaveInfo without tasks/status fields (old data still valid)
+  10. `testWaveInfoMultipleWaves` — array of WaveInfo with different statuses across waves
 
-**Tests**: 79/79 pass, 0 failures (203ms)
-
-| Suite | Tests | Status |
-|-------|-------|--------|
-| Task 1: checkReadPath — sensitive file blocking | 8 | PASS |
-| Task 1: checkReadPath — directory allowlist | 3 | PASS |
-| Task 1: checkReadPath — fallback to writePaths | 2 | PASS |
-| Task 1: defaultPolicy — all roles get readPaths + blockedReadPatterns | 10 | PASS |
-| Task 2: Dashboard CORS regex | 9 | PASS |
-| Task 2: Dashboard startDashboard signature | 3 | PASS |
-| Task 3: planning.ts — no execSync (shell injection fix) | 4 | PASS |
-| Task 4: Expanded deny patterns — coder bash denylist | 30 | PASS |
-| Task 4: Role-based bash policies | 8 | PASS |
-| checkWritePath — baseline | 2 | PASS |
-
-### Test Coverage by Task
-
-- **Task 1** (read path validation): 23 tests — sensitive file blocking (`.env`, `credentials.json`, SSH keys, case-insensitive), directory allowlist enforcement, path escape prevention, writePaths fallback, all 5 roles verified
-- **Task 2** (dashboard security): 12 tests — CORS regex allows localhost/127.0.0.1 only, rejects external origins + subdomain spoofing, default host is `127.0.0.1`, body limit is 1MB
-- **Task 3** (shell injection fix): 4 tests — no `execSync` import, `execFileSync` used for `git status` and `git diff`, zero shell-spawning calls remain
-- **Task 4** (expanded denylist): 38 tests — all 19 new patterns blocked (chmod +s, ssh, scp, sftp, rsync, ftp, powershell, pwsh, git push, npm publish, shutdown, reboot, killall, systemctl, crontab, printenv, chown), safe commands still allowed (npm test, git status/add/commit, ls, cat, npx tsc), role-based policy modes verified
-
-### Files Produced
-- `test/security-fixes.test.ts` — comprehensive test suite (79 tests, 10 suites)
+### Verification
+- `npx tsc --noEmit` — **0 errors**
+- `npx tsx src/dashboard-agents.test.ts` — **29/29 pass** (10 wave + 19 API)
