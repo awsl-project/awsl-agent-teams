@@ -1,32 +1,15 @@
-# task_6: Unit tests for agent CRUD
+# task_6: Update all three documentation files to mention the new wave
 
-Assignee: tester
+Assignee: coder
 Status: done
 
 ## Result
-Type check clean.
-
 ## AWSL_RESULT
 
-### Task 6: Unit Tests for Agent CRUD — Complete
-
-Enhanced `tests/agents.test.ts` with comprehensive coverage. Added **7 new describe blocks** and **32 new tests** (25 existing → 57 total).
-
-### Test Suites Added
-
-| Suite | Tests | Coverage |
-|-------|-------|----------|
-| `loadAgents` | 9 | Multiple dirs, precedence, non-existent dirs, non-.md files, missing name, invalid schema, no frontmatter |
-| `PROMPT_TEMPLATES` | 4 | 7 roles, shape validation, Guidelines section, report instruction |
-| `getPromptTemplates` | 4 | Array conversion, fields, key matching, value matching |
-| `composePromptPreview` | 7 | All sections, self-exclusion, sections breakdown, empty skills, roster format, solo agent, 10-agent roster |
-| `saveAgent defaults` | 5 | Default role/description/prompt, empty tools array, full overwrite |
-| `deleteAgent edge cases` | 3 | Delete→get undefined, re-create after delete, double delete |
-
-### Test Results
-- **57/57 tests pass** (12 suites, 0 failures)
-- TypeScript type-check: clean
-- Existing `src/agents.test.ts`: 24/24 still pass
+All three documentation files updated with wave detail visibility feature descriptions.
 
 ### Files Modified
-- **`tests/agents.test.ts`** — Added imports for `PROMPT_TEMPLATES`, `getPromptTemplates`, `composePromptPreview` + 7 new describe blocks with 32 tests
+
+- **`README.md`** — Added "Wave detail visibility" feature bullet (per-task breakdown: description, assignee, status, files, result/error) and new `GET /api/history/:id/waves` API endpoint
+- **`README.zh-CN.md`** — Mirrored same changes in Chinese: "波次任务详情" feature bullet and API endpoint
+- **`BEST_PRACTICES.md`** — Added "排查失败的波次" paragraph in section 11 (处理失败), explaining how enriched wave data helps debug failed overnight builds without digging through logs
