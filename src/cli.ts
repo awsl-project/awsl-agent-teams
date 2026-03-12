@@ -5,7 +5,7 @@
  * Hybrid mode (for CC skills — no API key needed):
  *   CC writes PLAN.md → awsl validate → WAVES.md → CC executes → awsl verify
  *
- * Full pipeline (terminal use, needs API key):
+ * Full pipeline (terminal use):
  *   awsl run "Build a REST API"
  *
  * Install Claude Code skills:
@@ -46,7 +46,7 @@ Commands:
   review                   Static code review (no LLM) — detect any, secrets, missing tests
   lock                     Show current lock status
   unlock [--force]         Release lock (--force to override others' locks)
-  run <goal>               Full pipeline (terminal, needs API key)
+  run <goal>               Full pipeline (terminal)
   agents                   List available agents
   agents show <name>       Show full details for an agent (including systemPrompt)
   agents create <name>     Create a new custom agent
@@ -110,12 +110,12 @@ Options:
   --cwd <path>             Working directory (default: .)
   --force                  Override existing lock
 
-Terminal Full Pipeline (no API key needed with --engine claude-code):
+Terminal Full Pipeline (no API key needed with --engine claude-code/codex):
   run <goal>               Full autonomous pipeline — real agent teams
   --quick                  Skip brainstorm & research
   --model <provider:model> Default: anthropic:claude-sonnet-4-20250514
   --concurrency <n>        Default: 2
-  --engine <type>          "claude-code" or "builtin"
+  --engine <type>          "claude-code", "codex", or "builtin"
 
 Examples:
   awsl init --global
@@ -1253,7 +1253,7 @@ async function main() {
 
 			const description = descParts.join(" ").trim();
 			if (!description) {
-				console.error('Usage: awsl queue plan "先构建认证，然后加支付，最后写测试" [--engine claude-code]');
+				console.error('Usage: awsl queue plan "先构建认证，然后加支付，最后写测试" [--engine claude-code|codex]');
 				process.exit(1);
 			}
 

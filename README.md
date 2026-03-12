@@ -56,7 +56,7 @@ All critical state lives in the `.planning/` directory as plain files — task p
 
 **Zero API Key Required**
 
-Both modes piggyback on your existing Claude Code subscription. CC Mode uses Claude Code's built-in Agent tool; Terminal Mode spawns `claude -p` subprocesses. No separate Anthropic API key, no token billing surprises.
+Both modes can run on existing local CLI sessions. CC Mode uses Claude Code's built-in Agent tool; Terminal Mode can spawn `claude -p` or `codex exec` subprocesses. No separate provider API key is required for these CLI engines.
 
 ### What You Get
 
@@ -100,8 +100,8 @@ AWSL supports two modes of operation:
 
 | | CC Mode (Claude Code Skills) | Terminal Mode (Agent Teams) |
 |---|---|---|
-| **How** | `/awsl` in Claude Code | `awsl run --engine claude-code` in terminal |
-| **API Key** | Not needed (CC subscription) | Not needed (uses `claude -p`) |
+| **How** | `/awsl` in Claude Code | `awsl run --engine claude-code` or `--engine codex` in terminal |
+| **API Key** | Not needed (CC subscription) | Not needed (uses `claude -p` or `codex exec`) |
 | **Control** | Skill prompts guide CC | Code controls everything |
 | **Autonomy** | Human in the loop | Fully autonomous |
 | **Self-healing** | Manual fix cycle | Auto-fix loop (3 attempts) |
@@ -129,6 +129,8 @@ node dist/cli.js init --global
 # No API key needed — uses your Claude Code subscription
 cd my-project && git init
 awsl run "Build a REST API with auth" --engine claude-code
+# or
+awsl run "Build a REST API with auth" --engine codex
 ```
 
 The full pipeline runs automatically:
@@ -155,14 +157,14 @@ Terminal mode is the **real agent teams** experience. Code controls the entire o
 ### Usage
 
 ```bash
-awsl run "goal" --engine claude-code [options]
+awsl run "goal" --engine <claude-code|codex|builtin> [options]
 ```
 
 ### Options
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `--engine claude-code` | auto | Use Claude Code CLI as execution engine |
+| `--engine <type>` | auto | Execution engine: `claude-code`, `codex`, or `builtin` (`codex` is used only when explicitly set) |
 | `--quick` | false | Skip brainstorm & research phases |
 | `--concurrency <n>` | 2 | Max parallel agents per wave |
 | `--no-verify` | false | Skip ALL verification: per-task code review, provider verification (tsc, npm test, eslint), and auto-fix loop. Task auto-retry still runs (handles execution failures, not verification) |
@@ -267,6 +269,8 @@ Queue multiple goals and let AWSL execute them overnight — fully unattended wi
 ```bash
 # Add tasks to the queue
 awsl queue add "Build user auth module" --engine claude-code
+# or
+awsl queue add "Build user auth module" --engine codex
 awsl queue add "Add payment integration" --depends-on q_1
 awsl queue add "Write E2E tests" --depends-on all  # waits for ALL prior tasks
 
@@ -326,7 +330,7 @@ Added 3 task(s):
 **`queue plan`** — Adds tasks directly without preview (backward-compatible).
 
 ```bash
-awsl queue plan "先构建用户认证，然后加支付模块，最后写集成测试" --engine claude-code
+awsl queue plan "先构建用户认证，然后加支付模块，最后写集成测试" --engine codex
 ```
 
 Output:
@@ -350,7 +354,7 @@ Ordering keywords are automatically detected:
 | Option | Description |
 |--------|-------------|
 | `--quick` | Skip brainstorm & research for this task |
-| `--engine <type>` | Execution engine (claude-code or builtin) |
+| `--engine <type>` | Execution engine (`claude-code`, `codex`, or `builtin`) |
 | `--concurrency <n>` | Max parallel agents |
 | `--model <model>` | Override default model |
 | `--depends-on <ids>` | Comma-separated task IDs, or `all` |
@@ -980,7 +984,7 @@ Real benchmark comparing CC Mode vs Terminal Mode on an identical complex task:
 |----------|-----------------|
 | Quick feature, human available | CC Mode (`/awsl`) |
 | Large project, want to review plan | CC Mode (`/awsl-plan` → `/awsl-go`) |
-| Overnight build, no human | Terminal Mode (`--engine claude-code`) |
+| Overnight build, no human | Terminal Mode (`--engine claude-code` or `--engine codex`) |
 | CI/CD integration | Terminal Mode |
 | Highest code quality | Terminal Mode (reviewer loop) |
 | Fastest delivery | CC Mode |
@@ -1044,6 +1048,8 @@ node dist/cli.js init --global           # Global (~/.claude/skills/)
 awsl run "goal" --engine claude-code
 awsl run "goal" --engine claude-code --quick
 awsl run "goal" --engine claude-code --concurrency 4
+awsl run "goal" --engine codex
+awsl run "goal" --engine codex --quick
 
 # Plan-only workflow
 awsl run --plan-only "goal"
@@ -1086,6 +1092,7 @@ awsl queue list                               # Show queue status
 awsl queue show q_1                           # Show detailed info for a single task
 awsl queue remove q_1                         # Remove a task
 awsl queue start --engine claude-code         # Start queue execution
+awsl queue start --engine codex               # Start queue execution with Codex
 awsl queue clear                              # Clear all tasks
 
 # Discussion mode
@@ -1129,7 +1136,7 @@ awsl remote stop                             # Stop background client
 | `OPENAI_API_KEY` | Only for OpenAI models | OpenAI API key |
 | `DEBUG=1` | No | Enable debug logging |
 
-> **Note:** `--engine claude-code` does NOT need an API key. It uses your Claude Code subscription via `claude -p`.
+> **Note:** `--engine claude-code` and `--engine codex` do NOT need a separate API key in AWSL. They use your local CLI session (`claude -p` or `codex exec`).
 
 ## Static Code Review
 
