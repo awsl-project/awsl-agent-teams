@@ -1542,7 +1542,15 @@ a { color: var(--blue); text-decoration: none; }
       </div>
       <div class="modal-field">
         <label>Model (optional)</label>
-        <input type="text" id="aeModelInput" placeholder="e.g. sonnet">
+        <input type="text" id="aeModelInput" placeholder="e.g. sonnet, glm-4-flash">
+      </div>
+      <div class="modal-field">
+        <label>API Base URL (optional, for non-Anthropic providers)</label>
+        <input type="text" id="aeBaseUrlInput" placeholder="e.g. https://open.bigmodel.cn/api/paas/v4">
+      </div>
+      <div class="modal-field">
+        <label>API Key (optional, use env:VAR_NAME for env variable)</label>
+        <input type="text" id="aeApiKeyInput" placeholder="e.g. env:GLM_API_KEY">
       </div>
       <div class="modal-field">
         <label>Tools (comma-separated, optional)</label>
@@ -3072,6 +3080,8 @@ async function openAgentEditor(name) {
     roleSelect.value = agent.role || 'custom';
     descInput.value = agent.description || '';
     modelInput.value = agent.model || '';
+    document.getElementById('aeBaseUrlInput').value = agent.baseUrl || '';
+    document.getElementById('aeApiKeyInput').value = agent.apiKey || '';
     toolsInput.value = (agent.tools || []).join(', ');
     skillsInput.value = (agent.skills || []).join(', ');
     thinkingSelect.value = agent.thinkingLevel || '';
@@ -3094,6 +3104,8 @@ async function openAgentEditor(name) {
     roleSelect.value = 'custom';
     descInput.value = '';
     modelInput.value = '';
+    document.getElementById('aeBaseUrlInput').value = '';
+    document.getElementById('aeApiKeyInput').value = '';
     toolsInput.value = '';
     skillsInput.value = '';
     thinkingSelect.value = '';
@@ -3144,8 +3156,13 @@ async function saveAgentFromEditor() {
     return;
   }
 
+  var baseUrl = document.getElementById('aeBaseUrlInput').value.trim() || undefined;
+  var apiKey = document.getElementById('aeApiKeyInput').value.trim() || undefined;
+
   var payload = { name: name, role: role, description: description, systemPrompt: systemPrompt };
   if (model) payload.model = model;
+  if (baseUrl) payload.baseUrl = baseUrl;
+  if (apiKey) payload.apiKey = apiKey;
   if (tools) payload.tools = tools;
   if (skills) payload.skills = skills;
   if (thinkingLevel) payload.thinkingLevel = thinkingLevel;

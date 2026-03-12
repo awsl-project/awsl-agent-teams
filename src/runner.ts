@@ -17,7 +17,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { Agent, type AgentEvent, type AgentMessage } from "@mariozechner/pi-agent-core";
 import { getModel } from "@mariozechner/pi-ai";
-import type { TeamAgentDef } from "./agents.js";
+import { type TeamAgentDef, resolveEnvValue } from "./agents.js";
 import type { SharedMemory } from "./memory.js";
 import { createAgentTools } from "./tools.js";
 import { SkillRegistry } from "./skills.js";
@@ -160,6 +160,12 @@ ${memSummary === "(empty)" ? "No shared data yet." : memSummary}
 	return new Promise<RunResult>((resolve) => {
 		const cleanEnv = { ...process.env };
 		delete cleanEnv.CLAUDECODE;
+
+		// Per-agent provider override (e.g. route to GLM's Anthropic-compatible API)
+		const resolvedBaseUrl = resolveEnvValue(agentDef.baseUrl);
+		const resolvedApiKey = resolveEnvValue(agentDef.apiKey);
+		if (resolvedBaseUrl) cleanEnv.ANTHROPIC_BASE_URL = resolvedBaseUrl;
+		if (resolvedApiKey) cleanEnv.ANTHROPIC_API_KEY = resolvedApiKey;
 
 		const child = spawn(claudeCmd, args, {
 			cwd,

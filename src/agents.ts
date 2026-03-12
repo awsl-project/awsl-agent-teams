@@ -20,6 +20,10 @@ export interface TeamAgentDef {
 	role: string;
 	description: string;
 	model?: string;
+	/** API base URL override (e.g. GLM's Anthropic-compatible endpoint). */
+	baseUrl?: string;
+	/** API key override. Use "env:VAR_NAME" to read from environment variable. */
+	apiKey?: string;
 	tools?: string[];
 	/** Explicit skill names to activate (in addition to role-based auto-activation) */
 	skills?: string[];
@@ -30,11 +34,23 @@ export interface TeamAgentDef {
 	source: "file" | "builtin";
 }
 
+/** Resolve "env:VAR_NAME" to actual value from process.env. */
+export function resolveEnvValue(val: string | undefined): string | undefined {
+	if (!val) return undefined;
+	if (val.startsWith("env:")) {
+		const envName = val.slice(4);
+		return process.env[envName];
+	}
+	return val;
+}
+
 const AgentFrontmatterSchema = Type.Object({
 	name: Type.String(),
 	role: Type.Optional(Type.String()),
 	description: Type.Optional(Type.String()),
 	model: Type.Optional(Type.String()),
+	baseUrl: Type.Optional(Type.String()),
+	apiKey: Type.Optional(Type.String()),
 	tools: Type.Optional(Type.Union([Type.String(), Type.Array(Type.String())])),
 	skills: Type.Optional(Type.Union([Type.String(), Type.Array(Type.String())])),
 	thinking: Type.Optional(Type.Union([Type.String(), Type.Boolean(), Type.Number()])),
@@ -90,6 +106,8 @@ function loadFromDir(dir: string): TeamAgentDef[] {
 			role: (typeof meta.role === "string" ? meta.role : undefined) ?? "custom",
 			description: (typeof meta.description === "string" ? meta.description : undefined) ?? "",
 			model: typeof meta.model === "string" ? meta.model : undefined,
+			baseUrl: typeof meta.baseUrl === "string" ? meta.baseUrl : undefined,
+			apiKey: typeof meta.apiKey === "string" ? meta.apiKey : undefined,
 			tools: tools.length > 0 ? tools : undefined,
 			skills: skills.length > 0 ? skills : undefined,
 			thinkingLevel: meta.thinking !== undefined ? String(meta.thinking) : undefined,
@@ -220,6 +238,8 @@ export function serializeAgent(agent: TeamAgentDef): string {
 		description: agent.description,
 	};
 	if (agent.model !== undefined) fm.model = agent.model;
+	if (agent.baseUrl !== undefined) fm.baseUrl = agent.baseUrl;
+	if (agent.apiKey !== undefined) fm.apiKey = agent.apiKey;
 	if (agent.tools !== undefined && agent.tools.length > 0) fm.tools = agent.tools;
 	if (agent.skills !== undefined && agent.skills.length > 0) fm.skills = agent.skills;
 	if (agent.thinkingLevel !== undefined) fm.thinking = agent.thinkingLevel;
@@ -251,6 +271,8 @@ export function saveAgent(dir: string, agent: Partial<TeamAgentDef> & { name: st
 		role: agent.role ?? base.role ?? "custom",
 		description: agent.description ?? base.description ?? "",
 		model: agent.model ?? base.model,
+		baseUrl: agent.baseUrl ?? base.baseUrl,
+		apiKey: agent.apiKey ?? base.apiKey,
 		tools: agent.tools ?? base.tools,
 		skills: agent.skills ?? base.skills,
 		thinkingLevel: agent.thinkingLevel ?? base.thinkingLevel,
