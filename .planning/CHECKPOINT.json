@@ -1,15 +1,21 @@
 {
-  "wave": 0,
+  "wave": 1,
   "completedTasks": [
-    "task_1"
+    "task_1",
+    "task_2",
+    "task_3",
+    "task_4"
   ],
   "taskResults": {
-    "task_1": "## AWSL_RESULT\n\nAll changes implemented and verified. TDD RED-GREEN cycle complete.\n\n### Files Modified\n- **`src/history.ts`** — Added `WaveTaskDetail` interface (id, description, assignee, status, files, result, error) and enriched `WaveInfo` with optional `tasks?: WaveTaskDetail[]` and `status?: \"success\" | \"partial\" | \"failed\"` fields\n- **`src/orchestrator.ts`** — Removed duplicate `WaveInfo` interface (was lines 74-79), replaced with `import type { WaveInfo } from \"./history.js\"` and `export type { WaveInfo }`\n- **`src/index.ts`** — Removed `type WaveInfo` from orchestrator export (line 8), added `type WaveInfo, type WaveTaskDetail` to history.ts export (line 31)\n\n### Files Created\n- **`src/history-types.test.ts`** — 4 tests covering WaveTaskDetail required/optional fields, WaveInfo enriched fields, and backward compatibility\n\n### Verification\n- `npx tsc --noEmit` — **0 errors**\n- `npx tsx --test src/history-types.test.ts` — **4/4 pass**"
+    "task_1": "## AWSL_RESULT\n\nAll changes implemented and verified. TDD RED-GREEN cycle complete.\n\n### Files Modified\n- **`src/history.ts`** — Added `WaveTaskDetail` interface (id, description, assignee, status, files, result, error) and enriched `WaveInfo` with optional `tasks?: WaveTaskDetail[]` and `status?: \"success\" | \"partial\" | \"failed\"` fields\n- **`src/orchestrator.ts`** — Removed duplicate `WaveInfo` interface (was lines 74-79), replaced with `import type { WaveInfo } from \"./history.js\"` and `export type { WaveInfo }`\n- **`src/index.ts`** — Removed `type WaveInfo` from orchestrator export (line 8), added `type WaveInfo, type WaveTaskDetail` to history.ts export (line 31)\n\n### Files Created\n- **`src/history-types.test.ts`** — 4 tests covering WaveTaskDetail required/optional fields, WaveInfo enriched fields, and backward compatibility\n\n### Verification\n- `npx tsc --noEmit` — **0 errors**\n- `npx tsx --test src/history-types.test.ts` — **4/4 pass**",
+    "task_2": "All 10 tests pass. \n\n## AWSL_RESULT\n\nTask complete. TDD RED-GREEN cycle done.\n\n### Files Modified\n- **`src/orchestrator.ts`** — Updated import to include `WaveTaskDetail` from `./history.js`. Replaced the simple `waveInfos.push()` block (~line 782) with enriched version that:\n  1. Builds `WaveTaskDetail[]` array from wave tasks (mapping id, description, assignee, status, files, result truncated to 200 chars, error truncated to 200 chars)\n  2. Computes wave-level status: `\"success\"` (all done/verified), `\"failed\"` (all failed), or `\"partial\"` (mixed)\n  3. Pushes both `tasks` and `status` into the `WaveInfo` object\n\n### Files Created\n- **`src/wave-details.test.ts`** — 6 tests covering field mapping, truncation, all three status outcomes, and full WaveInfo integration\n\n### Verification\n- `npx tsc --noEmit` — **0 errors**\n- `npx tsx --test src/wave-details.test.ts src/history-types.test.ts` — **10/10 pass**",
+    "task_3": "All green. `tsc --noEmit` passes with 0 errors, all 3 tests pass.\n\n## AWSL_RESULT\n\nTask complete. TDD RED-GREEN cycle verified.\n\n### Files Modified\n- **`src/dashboard.ts`** — Added `/api/history/:id/waves` route handler before the existing `/api/history` handler. Updated the log.info API listing to include the new endpoint.\n\n### Files Created\n- **`src/dashboard-waves.test.ts`** — 3 tests: returns wave details for valid entry, returns 404 for unknown entry, returns empty array when entry has no waves.\n\n### Verification\n- `npx tsc --noEmit` — **0 errors**\n- `npx tsx src/dashboard-waves.test.ts` — **3/3 pass**",
+    "task_4": "## AWSL_RESULT\n\nAll changes implemented and verified. TDD RED-GREEN cycle complete.\n\n### Files Modified\n- **`public/dashboard.html`** — Added 11 CSS rules for wave task rendering (`.wave-tasks`, `.wave-task`, `.wave-task-status`, `.wave-task-desc`, `.wave-task-files`, `.wave-status-badge` with success/partial/failed variants). Updated `renderEntryWaves()` function to:\n  1. Render **wave-level status badge** (success/partial/failed) next to the wave label\n  2. Render **per-task details** under each wave when `w.tasks` exists:\n     - Status icon: ✓ for done/verified, ✗ for failed (color-coded)\n     - Task description (truncated to 60 chars)\n     - Assignee badge (colored)\n     - Files count when available (e.g. \"2 files\")\n     - Error text in red for failed tasks (truncated to 80 chars)\n     - Result text for completed tasks (truncated to 80 chars)\n\n### Files Created\n- **`tests/dashboard-wave-render.test.ts`** — 11 tests covering CSS classes and JS rendering logic\n\n### Verification\n- `npx tsx --test tests/dashboard-wave-render.test.ts` — **11/11 pass**\n- `npx tsc --noEmit` — **0 errors**"
   },
   "failedTasks": [],
   "taskErrors": {},
   "rateLimitRetries": 0,
-  "savedAt": "2026-03-12T00:30:06.992Z",
+  "savedAt": "2026-03-12T00:34:02.059Z",
   "memory": {
     "result:architect:session": {
       "value": "3112db4a-d0ce-446e-ab62-9d031e0b3a68",
@@ -42,14 +48,29 @@
       "timestamp": 1773275256421
     },
     "result:coder:session": {
-      "value": "bfdd1f83-61a0-4c77-a17a-853e1a326edf",
+      "value": "883f245b-14d2-4b9c-bcb8-62c75134d927",
       "author": "coder",
-      "timestamp": 1773275401773
+      "timestamp": 1773275640861
     },
     "result:task_1": {
       "value": "## AWSL_RESULT\n\nAll changes implemented and verified. TDD RED-GREEN cycle complete.\n\n### Files Modified\n- **`src/history.ts`** — Added `WaveTaskDetail` interface (id, description, assignee, status, files, result, error) and enriched `WaveInfo` with optional `tasks?: WaveTaskDetail[]` and `status?: \"success\" | \"partial\" | \"failed\"` fields\n- **`src/orchestrator.ts`** — Removed duplicate `WaveInfo` interface (was lines 74-79), replaced with `import type { WaveInfo } from \"./history.js\"` and `export type { WaveInfo }`\n- **`src/index.ts`** — Removed `type WaveInfo` from orchestrator export (line 8), added `type WaveInfo, type WaveTaskDetail` to history.ts export (line 31)\n\n### Files Created\n- **`src/history-types.test.ts`** — 4 tests covering WaveTaskDetail required/optional fields, WaveInfo enriched fields, and backward compatibility\n\n### Verification\n- `npx tsc --noEmit` — **0 errors**\n- `npx tsx --test src/history-types.test.ts` — **4/4 pass**",
       "author": "coder",
       "timestamp": 1773275401773
+    },
+    "result:task_2": {
+      "value": "All 10 tests pass. \n\n## AWSL_RESULT\n\nTask complete. TDD RED-GREEN cycle done.\n\n### Files Modified\n- **`src/orchestrator.ts`** — Updated import to include `WaveTaskDetail` from `./history.js`. Replaced the simple `waveInfos.push()` block (~line 782) with enriched version that:\n  1. Builds `WaveTaskDetail[]` array from wave tasks (mapping id, description, assignee, status, files, result truncated to 200 chars, error truncated to 200 chars)\n  2. Computes wave-level status: `\"success\"` (all done/verified), `\"failed\"` (all failed), or `\"partial\"` (mixed)\n  3. Pushes both `tasks` and `status` into the `WaveInfo` object\n\n### Files Created\n- **`src/wave-details.test.ts`** — 6 tests covering field mapping, truncation, all three status outcomes, and full WaveInfo integration\n\n### Verification\n- `npx tsc --noEmit` — **0 errors**\n- `npx tsx --test src/wave-details.test.ts src/history-types.test.ts` — **10/10 pass**",
+      "author": "coder",
+      "timestamp": 1773275493190
+    },
+    "result:task_3": {
+      "value": "All green. `tsc --noEmit` passes with 0 errors, all 3 tests pass.\n\n## AWSL_RESULT\n\nTask complete. TDD RED-GREEN cycle verified.\n\n### Files Modified\n- **`src/dashboard.ts`** — Added `/api/history/:id/waves` route handler before the existing `/api/history` handler. Updated the log.info API listing to include the new endpoint.\n\n### Files Created\n- **`src/dashboard-waves.test.ts`** — 3 tests: returns wave details for valid entry, returns 404 for unknown entry, returns empty array when entry has no waves.\n\n### Verification\n- `npx tsc --noEmit` — **0 errors**\n- `npx tsx src/dashboard-waves.test.ts` — **3/3 pass**",
+      "author": "coder",
+      "timestamp": 1773275502909
+    },
+    "result:task_4": {
+      "value": "## AWSL_RESULT\n\nAll changes implemented and verified. TDD RED-GREEN cycle complete.\n\n### Files Modified\n- **`public/dashboard.html`** — Added 11 CSS rules for wave task rendering (`.wave-tasks`, `.wave-task`, `.wave-task-status`, `.wave-task-desc`, `.wave-task-files`, `.wave-status-badge` with success/partial/failed variants). Updated `renderEntryWaves()` function to:\n  1. Render **wave-level status badge** (success/partial/failed) next to the wave label\n  2. Render **per-task details** under each wave when `w.tasks` exists:\n     - Status icon: ✓ for done/verified, ✗ for failed (color-coded)\n     - Task description (truncated to 60 chars)\n     - Assignee badge (colored)\n     - Files count when available (e.g. \"2 files\")\n     - Error text in red for failed tasks (truncated to 80 chars)\n     - Result text for completed tasks (truncated to 80 chars)\n\n### Files Created\n- **`tests/dashboard-wave-render.test.ts`** — 11 tests covering CSS classes and JS rendering logic\n\n### Verification\n- `npx tsx --test tests/dashboard-wave-render.test.ts` — **11/11 pass**\n- `npx tsc --noEmit` — **0 errors**",
+      "author": "coder",
+      "timestamp": 1773275640861
     }
   },
   "goal": "我现在的远程面板看不到每个wave具体解决了啥"

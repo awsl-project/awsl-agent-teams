@@ -1,28 +1,27 @@
-# task_4: Dashboard UI agent editor
+# task_4: 1. Add CSS styles after the existing .entry-wave styles (~li
 
 Assignee: coder
 Status: done
 
 ## Result
-Everything looks correct and well-formed.
-
 ## AWSL_RESULT
 
-### Task 4: Dashboard UI Agent Editor — Complete
-
-Enhanced the agent editor in `public/dashboard.html` with 4 new features:
-
-| Feature | Description |
-|---------|-------------|
-| **Template Selector** | Dropdown above textarea loads 7 built-in templates from `/api/agents/templates`. "Apply" button fills prompt + auto-sets role/description |
-| **Fullscreen Editor** | "Expand" button opens full-viewport overlay with monospace textarea. "Done" saves back, "Cancel" discards. Escape key closes. |
-| **Character Count** | Live character count shown below textarea in both normal and fullscreen modes |
-| **Preview Panel** | "Preview" button (edit mode only) opens fullscreen editor + loads composed prompt from `/api/agents/preview`. Tabbed view: Composed / Base / Skills / Team |
+All changes implemented and verified. TDD RED-GREEN cycle complete.
 
 ### Files Modified
-- **`public/dashboard.html`** — Added ~220 lines CSS (fullscreen overlay, template bar, char count, preview pane) + ~30 lines HTML (template selector, expand button, char count, fullscreen overlay with preview pane) + ~140 lines JS (loadTemplates, populateTemplateSelect, applyTemplate, updateCharCount, openFullscreenEditor, closeFullscreenEditor, saveFullscreenEditor, showAgentPreview, loadPreview, switchPreviewTab)
+- **`public/dashboard.html`** — Added 11 CSS rules for wave task rendering (`.wave-tasks`, `.wave-task`, `.wave-task-status`, `.wave-task-desc`, `.wave-task-files`, `.wave-status-badge` with success/partial/failed variants). Updated `renderEntryWaves()` function to:
+  1. Render **wave-level status badge** (success/partial/failed) next to the wave label
+  2. Render **per-task details** under each wave when `w.tasks` exists:
+     - Status icon: ✓ for done/verified, ✗ for failed (color-coded)
+     - Task description (truncated to 60 chars)
+     - Assignee badge (colored)
+     - Files count when available (e.g. "2 files")
+     - Error text in red for failed tasks (truncated to 80 chars)
+     - Result text for completed tasks (truncated to 80 chars)
 
-### Test Results
-- **19/19 dashboard-agents tests pass** (unchanged)
-- **57/57 agents tests pass** (unchanged)
-- TypeScript build: clean
+### Files Created
+- **`tests/dashboard-wave-render.test.ts`** — 11 tests covering CSS classes and JS rendering logic
+
+### Verification
+- `npx tsx --test tests/dashboard-wave-render.test.ts` — **11/11 pass**
+- `npx tsc --noEmit` — **0 errors**
