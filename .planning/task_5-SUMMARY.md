@@ -1,24 +1,28 @@
-# task_5: Remote relay agent commands
+# task_5: Add test cases (can be in a new test file or existing test f
 
-Assignee: coder
+Assignee: tester
 Status: done
 
 ## Result
+All green. `tsc --noEmit` passes with 0 errors, all 29 tests pass (10 new wave tests + 19 existing API tests).
+
 ## AWSL_RESULT
 
-### Task 5: Remote Relay Agent Commands — Complete
-
-Added 2 new remote commands to `src/remote.ts`:
-
-1. **`agents:templates`** — Returns all 7 built-in prompt templates via `getPromptTemplates()`. No payload required.
-2. **`agents:preview`** — Accepts `{ name }` payload, resolves the agent (builtin or custom), composes full prompt with skills + team roster via `composePromptPreview()`. Returns `{ composed, sections: { base, skills, team } }`. Throws if agent not found.
+All tests pass. 10 new test cases added, all verifying wave detail enrichment.
 
 ### Files Modified
-- **`src/remote.ts`** — Added `agents:templates` and `agents:preview` command cases + imported `getPromptTemplates`, `composePromptPreview`, `SkillRegistry`
-- **`src/remote-agents.test.ts`** — Added 2 new test functions with 26 assertions (templates shape, all 7 names present, preview composition, custom agent preview, missing agent error)
+- **`src/dashboard-agents.test.ts`** — Added 10 wave-related tests before the existing API tests:
+  1. `testWaveTaskDetailShape` — verifies all WaveTaskDetail fields (id, description, assignee, status, files, result, error)
+  2. `testWaveTaskDetailFailedWithError` — failed status with error field, optional fields undefined
+  3. `testWaveTaskDetailVerifiedStatus` — verified status variant
+  4. `testWaveInfoEnrichmentWithTasks` — WaveInfo with populated tasks[], correct field values
+  5. `testWaveInfoResultTruncation` — result and error truncated to 200 chars
+  6. `testWaveStatusAllSuccess` — all done/verified → `"success"`
+  7. `testWaveStatusAllFailed` — all failed → `"failed"`
+  8. `testWaveStatusPartialMixed` — mixed statuses → `"partial"`
+  9. `testWaveInfoBackwardCompatNoTasks` — WaveInfo without tasks/status fields (old data still valid)
+  10. `testWaveInfoMultipleWaves` — array of WaveInfo with different statuses across waves
 
-### Test Results
-- **45/45 remote-agents tests pass** (20 existing + 25 new)
-- **24/24 agents tests pass** (no regressions)
-- TypeScript type-check: clean
-- Build: clean
+### Verification
+- `npx tsc --noEmit` — **0 errors**
+- `npx tsx src/dashboard-agents.test.ts` — **29/29 pass** (10 wave + 19 API)
