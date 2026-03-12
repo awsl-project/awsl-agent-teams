@@ -423,6 +423,7 @@ awsl dashboard stop         # 停止后台仪表盘进程
 - **全屏提示词编辑器** — 全视口覆盖层，编辑长提示词更舒适，实时字符计数
 - **提示词预览** — 预览合成后的完整提示词（基础 + 技能 + 团队上下文），分页显示
 - **Agent 分析** — 展示使用的 agent 角色、平均/峰值并行度、总波次数，每次运行可展开查看波次详情和 agent 徽章
+- **波次任务详情** — 每个波次现在展示逐任务明细：描述、负责人、状态（done/failed/verified）、修改的文件、结果/错误信息。一眼看清每个波次完成了什么或为什么失败
 - **日期筛选** — 支持按天、周、月或自定义日期范围筛选统计数据。所有面板组件根据所选时间段实时更新
 - **像素艺术风格** — Press Start 2P 字体、复古动画
 
@@ -436,6 +437,7 @@ API 端点：
 - `POST /api/queue/clear` — 清空所有任务
 - `POST /api/queue/set-time` — 设置/修改/清除调度时间 `{id, runAt}`
 - `POST /api/history/clear` — 清除执行历史
+- `GET /api/history/:id/waves` — 指定运行的波次详情，含逐任务明细
 - `GET /api/projects` — 所有已注册项目的实时状态
 - `POST /api/projects/add` — 注册项目 `{path, name?, tags?}`
 - `POST /api/projects/remove` — 取消注册项目 `{path}`

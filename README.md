@@ -423,6 +423,7 @@ Features:
 - **Fullscreen prompt editor** — Full-viewport overlay for editing long prompts with live character count
 - **Prompt preview** — Preview the full composed prompt (base + skills + team context) with tabbed section view
 - **Agent analysis** — Shows unique agent roles, average/peak parallelism, total waves, and per-run wave breakdown with agent badges
+- **Wave detail visibility** — Each wave now shows per-task breakdown including description, assignee, status (done/failed/verified), modified files, and result/error messages. Quickly see exactly what each wave accomplished or why it failed
 - **Date filter** — Filter statistics by day, week, month, or custom date range. All dashboard widgets update in real-time based on the selected time period
 - **Pixel art aesthetic** — Press Start 2P font, retro animations
 
@@ -436,6 +437,7 @@ API endpoints:
 - `POST /api/queue/clear` — clear all tasks
 - `POST /api/queue/set-time` — set/change/clear scheduled time `{id, runAt}`
 - `POST /api/history/clear` — clear execution history
+- `GET /api/history/:id/waves` — wave details with per-task breakdown for a specific run
 - `GET /api/projects` — list all registered projects with live status
 - `POST /api/projects/add` — register a project `{path, name?, tags?}`
 - `POST /api/projects/remove` — unregister a project `{path}`

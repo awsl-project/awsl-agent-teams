@@ -746,6 +746,9 @@ verify 字段决定了 `awsl verify` 能否自动跑测试。**必须是可执�
 - **终端模式：** 审查者在 coder 任务完成后立即读取 git diff，发现 critical 问题时直接阻断提交，任务标记 failed，触发重试/replan
 - **CC 模式：** 依赖 CC 遵守 SKILL.md 指令
 
+**排查失败的波次：**
+- 仪表盘的波次详情现在展示每个任务的描述、状态、修改文件和错误信息（`GET /api/history/:id/waves`）。通宵构建失败时，不用翻日志 — 直接在面板上看到是哪个波次的哪个任务出了问题以及具体错误原因。
+
 **全部失败：**
 - Goal 写得太模糊 → 重写，更具体
 - `/awsl-status` 或 `.planning/STATE.md` 查看详情
