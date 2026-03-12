@@ -24,7 +24,7 @@ import { type RunResult, type Engine, runAgent, runParallel, detectEngine } from
 import { createPlanningDir, parseStructuredTasks, atomicCommit, saveCheckpoint, loadCheckpoint, clearCheckpoint, type StructuredTask, type PlanningDir, type CheckpointData } from "./planning.js";
 import { SkillRegistry } from "./skills.js";
 import { runFullVerification } from "./verify.js";
-import type { WaveInfo } from "./history.js";
+import type { WaveInfo, WaveTaskDetail } from "./history.js";
 
 // ─── Event / Hook System ─────────────────────────────────────
 
@@ -780,11 +780,25 @@ Critical findings MUST explain what's wrong and suggest a fix.`;
 
 		// Record wave execution info
 		const waveAgents = [...new Set(wave.map(t => t.assignee))];
+		const waveTaskDetails: WaveTaskDetail[] = wave.map(t => ({
+			id: t.id,
+			description: t.description,
+			assignee: t.assignee,
+			status: t.status as "done" | "failed" | "verified",
+			files: t.files,
+			result: t.result ? t.result.slice(0, 200) : undefined,
+			error: t.error ? t.error.slice(0, 200) : undefined,
+		}));
+		const allDone = wave.every(t => t.status === "done" || t.status === "verified");
+		const allFailed = wave.every(t => t.status === "failed");
+		const waveStatus = allDone ? "success" as const : allFailed ? "failed" as const : "partial" as const;
 		waveInfos.push({
 			wave: wi + 1,
 			taskIds: wave.map(t => t.id),
 			agents: waveAgents,
 			parallel: wave.length,
+			tasks: waveTaskDetails,
+			status: waveStatus,
 		});
 
 		// Save checkpoint after every wave (enables full resume)
