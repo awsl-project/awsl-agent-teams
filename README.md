@@ -116,6 +116,9 @@ AWSL supports two modes of operation:
 git clone https://github.com/awsl-project/awsl-agent-teams.git
 cd awsl-agent-teams && npm install && npm run build
 
+# (Optional) Enable global `awsl` command
+npm link
+
 # Install skills into Claude Code
 node dist/cli.js init --global
 

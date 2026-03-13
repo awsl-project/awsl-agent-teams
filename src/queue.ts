@@ -639,7 +639,10 @@ export class TaskQueue {
 	 * Preview: call LLM to parse a natural language description into PlannedTask[],
 	 * WITHOUT modifying the queue. Allows inspection before committing.
 	 */
-	async planPreview(description: string): Promise<PlannedTask[]> {
+	async planPreview(
+		description: string,
+		defaults?: { engine?: Engine; model?: string },
+	): Promise<PlannedTask[]> {
 		log.info("queue", "Parsing natural language into queue tasks...");
 
 		const prompt = `You are a task planner. Parse the following natural language description into a list of independent build tasks for a software project queue.
@@ -744,7 +747,7 @@ ${description}`;
 		description: string,
 		defaults?: { engine?: Engine; quick?: boolean; concurrency?: number; model?: string },
 	): Promise<QueueTask[]> {
-		const planned = await this.planPreview(description);
+		const planned = await this.planPreview(description, defaults);
 		return this.planCommit(planned, defaults);
 	}
 
@@ -821,6 +824,7 @@ ${description}`;
 		const args = [
 			...baseArgs,
 			"exec",
+			"--json",
 			"--ephemeral",
 			"--full-auto",
 			"--sandbox",

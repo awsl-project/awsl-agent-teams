@@ -44,6 +44,8 @@ awsl run "goal" --engine claude-code
 
 ### 终端模式（在终端中）
 
+> **提示：** 先执行 `npm link`（在 awsl-agent-teams 目录下），即可在任意目录直接使用 `awsl` 命令。
+
 ```
 完全放权，无人值守构建    →  awsl run "goal" --engine claude-code
 快速构建，跳过研究        →  awsl run "goal" --engine claude-code --quick

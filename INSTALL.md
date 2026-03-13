@@ -90,6 +90,33 @@ npm run build
 node dist/cli.js init --global
 ```
 
+### 全局命令（npm link）
+
+通过 `npm link` 可以在任意目录直接使用 `awsl` 命令，无需每次输入完整路径：
+
+```bash
+cd awsl-agent-teams
+npm link
+```
+
+链接后即可全局使用：
+
+```bash
+# 在任意项目目录中
+awsl run "构建带认证的 REST API" --engine claude-code
+awsl queue list
+awsl verify
+awsl --help
+```
+
+> **注意：** `npm link` 创建的是符号链接，指向当前源码目录。不要删除或移动 `awsl-agent-teams` 目录，否则全局命令会失效。如果移动了目录，重新执行 `npm link` 即可。
+
+卸载全局链接：
+
+```bash
+npm unlink -g awsl-agent-core
+```
+
 ---
 
 ## 安装后的文件结构
@@ -118,6 +145,8 @@ node dist/cli.js init --global
 ### 关于路径
 
 Skills 里硬编码了 `dist/cli.js` 的绝对路径。**不要移动 `awsl-agent-teams` 目录**，移动后需重新运行 `node dist/cli.js init --global`。
+
+> **推荐：** 使用 `npm link`（见上方）后可直接运行 `awsl` 命令，不再依赖硬编码路径。
 
 ---
 
@@ -228,3 +257,4 @@ rm -rf awsl-agent-teams
 - [ ] `node dist/cli.js --help` 显示帮助
 - [ ] `~/.claude/skills/awsl/SKILL.md` 存在
 - [ ] Claude Code 中 `/awsl-status` 无报错
+- [ ] （可选）`npm link` 后 `awsl --help` 显示帮助

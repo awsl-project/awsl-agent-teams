@@ -116,6 +116,9 @@ AWSL 支持两种运行模式：
 git clone https://github.com/awsl-project/awsl-agent-teams.git
 cd awsl-agent-teams && npm install && npm run build
 
+# （可选）启用全局 awsl 命令
+npm link
+
 # 将技能安装到 Claude Code
 node dist/cli.js init --global
 
