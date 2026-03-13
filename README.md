@@ -111,6 +111,14 @@ AWSL supports two modes of operation:
 
 ## Quick Start
 
+> **One-click install:** Clone this repo, then let Claude Code or Codex read the install guide and do it for you:
+>
+> ```
+> Read INSTALL.md and follow the steps to install AWSL
+> ```
+>
+> Or follow the manual steps below.
+
 ### Mode 1: CC Skills (Interactive)
 
 ```bash
