@@ -639,7 +639,7 @@ export class TaskQueue {
 	 * Preview: call LLM to parse a natural language description into PlannedTask[],
 	 * WITHOUT modifying the queue. Allows inspection before committing.
 	 */
-	async planPreview(
+async planPreview(
 		description: string,
 		defaults?: { engine?: Engine; model?: string },
 	): Promise<PlannedTask[]> {
