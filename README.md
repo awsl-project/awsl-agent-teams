@@ -5,7 +5,9 @@
 Multi-agent orchestration engine for Claude Code.
 Two modes, one goal: **ship quality code fast**.
 
-> **[Installation Guide](./INSTALL.md)** | **[Best Practices](./BEST_PRACTICES.md)**
+> **[Installation Guide](./INSTALL.md)** — setup, `npm link`, FAQ
+>
+> **[Best Practices](./BEST_PRACTICES.md)** — concurrency tuning, goal writing, engine selection, queue patterns, troubleshooting
 
 ## Why AWSL?
 

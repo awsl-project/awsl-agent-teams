@@ -5,7 +5,9 @@
 Claude Code 多智能体编排引擎。
 两种模式，一个目标：**快速交付高质量代码**。
 
-> **[安装教程](./INSTALL.md)** | **[最佳实践](./BEST_PRACTICES.md)**
+> **[安装教程](./INSTALL.md)** — 安装、`npm link`、常见问题
+>
+> **[最佳实践](./BEST_PRACTICES.md)** — 并发调优、Goal 写法、引擎选择、队列用法、故障排查
 
 ## 为什么需要 AWSL？
 
