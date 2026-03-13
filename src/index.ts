@@ -39,3 +39,4 @@ export { ProjectManager, type ProjectEntry, type ProjectRegistry, type ProjectSt
 export { generateSummary, formatSummary, computeTimeRange, type SessionSummary, type SummaryOptions, type TimeRange, type CommitInfo } from "./summary.js";
 export { discussTeam, type DiscussionRound, type DiscussionResult, type DiscussOptions } from "./discuss.js";
 export { atomicWriteFileSync, withFileLock, withFileLockAsync } from "./fs-utils.js";
+export { trackInvocation, loadInvocationStats, getInvocationSummary, isValidSource, type InvocationSource, type InvocationEntry, type InvocationStats, type StatsData } from "./invocations.js";

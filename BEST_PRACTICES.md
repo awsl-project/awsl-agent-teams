@@ -60,6 +60,7 @@ awsl run "goal" --engine claude-code
 查看服务状态              →  awsl status
 讨论架构/设计问题          →  awsl discuss "question"
 定时讨论（带辩论）         →  awsl queue add --discuss "question" --rounds 2
+查看调用统计              →  awsl invocations
 查看睡前模式仪表盘        →  awsl dashboard
 后台启动仪表盘            →  awsl dashboard --bg
 停止后台仪表盘            →  awsl dashboard stop
@@ -933,6 +934,7 @@ AWSL 采用 **文件即状态** 的设计，所有关键信息持久化到 `.pla
 ├── CHECKPOINT.json       ← 限额恢复检查点（自动管理）
 ├── QUEUE.json            ← 任务队列（自动管理）
 ├── HISTORY.json          ← 睡前模式执行历史（自动管理）
+├── STATS.json            ← 调用统计计数（自动管理）
 └── .fix-attempts         ← 自动修复计数器
 ```
 
@@ -1676,6 +1678,18 @@ awsl dashboard
   - 波次分解（每波并行了哪些角色、几个 agent 同时跑）
 - 数据来源：orchestrator 执行时收集 wave 和 agent 信息，写入 HISTORY.json
 - 远程客户端的数据同样参与聚合统计
+
+**调用统计面板：**
+
+仪表盘的 "Invocations" 卡片自动统计各命令类型的调用次数。CC 技能（`/awsl`、`/awsl-plan`、`/awsl-go`、`/awsl-quick`）在调用时自动记录，无需手动操作。
+
+- 统计的类型：`team`（/awsl）、`plan`（/awsl-plan）、`go`（/awsl-go）、`quick`（/awsl-quick）、`queue`、`cli`、`discuss`
+- 数据持久化到 `.planning/STATS.json`，不会因进程重启丢失
+- API 端点：`GET /api/invocations` 返回各类型的计数
+- 远程客户端的调用统计包含在状态同步中
+- CLI 也可以查看：`awsl invocations`
+- 手动记录调用：`awsl track <type> [goal]`（通常由技能自动调用）
+- `HistoryEntry` 的 `source` 字段和 `HistoryStats` 的 `bySource` 提供按来源的统计分析
 
 **项目管理面板：**
 

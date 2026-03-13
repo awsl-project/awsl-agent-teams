@@ -72,9 +72,13 @@ allowed-tools: Bash, Read, Write, Edit, Grep, Glob, Agent
 
 Goal: **$ARGUMENTS**
 
-## Step 0: Lock Check
+## Step 0: Track & Lock Check
 
-Before starting, check if another AWSL session is running on this project:
+Record this invocation and check if another session is running:
+
+\\\`\\\`\\\`bash
+node "${cliPath}" track team $ARGUMENTS
+\\\`\\\`\\\`
 
 \\\`\\\`\\\`bash
 node "${cliPath}" lock
@@ -195,7 +199,11 @@ allowed-tools: Bash, Read, Write, Edit, Grep, Glob, Agent
 
 Fast execution for: **$ARGUMENTS**
 
-## Step 0: Lock Check
+## Step 0: Track & Lock Check
+\\\`\\\`\\\`bash
+node "${cliPath}" track quick $ARGUMENTS
+\\\`\\\`\\\`
+
 \\\`\\\`\\\`bash
 node "${cliPath}" lock
 \\\`\\\`\\\`
@@ -241,6 +249,11 @@ allowed-tools: Bash, Read, Write, Edit, Grep, Glob
 
 Create a plan for: **$ARGUMENTS**
 
+0. Record invocation:
+\`\`\`bash
+node "${cliPath}" track plan $ARGUMENTS
+\`\`\`
+
 1. Read \`agents/*.md\` and \`.planning/STATE.md\` for context
 2. Explore codebase (Glob/Grep/Read)
 3. Brainstorm approaches and trade-offs
@@ -263,6 +276,11 @@ allowed-tools: Bash, Read, Write, Edit, Grep, Glob, Agent
 ---
 
 # AWSL Go — Execute Approved Plan
+
+0. Record invocation:
+\`\`\`bash
+node "${cliPath}" track go
+\`\`\`
 
 1. Read \`.planning/PLAN.md\` and \`.planning/WAVES.md\`
 2. If WAVES.md doesn't exist, run: \`node "${cliPath}" validate\`

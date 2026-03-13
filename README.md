@@ -247,6 +247,10 @@ awsl agents templates             # List built-in prompt templates
 awsl agents prompt <name>         # Edit prompt ($EDITOR / --show / --set / --file)
 awsl agents preview <name>        # Preview composed prompt
 
+# Invocation tracking
+awsl track <type> [goal]          # Record an invocation (team, plan, go, quick, queue, cli, discuss)
+awsl invocations                  # Show invocation counts per type
+
 # Night session summary
 awsl summary                        # Summarize last night's session (22:00→06:00)
 awsl summary --date 2026-03-10      # Summarize a specific night
@@ -428,6 +432,7 @@ Features:
 - **Prompt preview** — Preview the full composed prompt (base + skills + team context) with tabbed section view
 - **Agent analysis** — Shows unique agent roles, average/peak parallelism, total waves, and per-run wave breakdown with agent badges
 - **Wave detail visibility** — Each wave now shows per-task breakdown including description, assignee, status (done/failed/verified), modified files, and result/error messages. Quickly see exactly what each wave accomplished or why it failed
+- **Invocation tracking** — "Invocations" card showing how many times each command type (/awsl, /awsl-plan, /awsl-go, /awsl-quick, queue, cli, discuss) has been invoked. Counts are persisted in `.planning/STATS.json`
 - **Date filter** — Filter statistics by day, week, month, or custom date range. All dashboard widgets update in real-time based on the selected time period
 - **Pixel art aesthetic** — Press Start 2P font, retro animations
 
@@ -458,6 +463,7 @@ API endpoints:
 - `DELETE /api/agents?name=X` — delete custom agent file
 - `GET /api/agents/templates` — list all 7 built-in prompt templates
 - `POST /api/agents/preview` — compose full prompt preview `{name}` → `{composed, sections}`
+- `GET /api/invocations` — invocation counts per command type
 - `GET /api/discussions` — discussion entries from history
 - `GET /api/clients` — list connected remote clients
 - `POST /api/clients/command` — send command to a client `{clientId, action, payload?}`
@@ -519,7 +525,7 @@ curl -X POST http://server:3120/api/clients/command \
   -d '{"clientId":"my-laptop","action":"system:info"}'
 ```
 
-Supported relay actions: `queue:add`, `queue:remove`, `queue:clear`, `queue:list`, `queue:get`, `queue:set-time`, `queue:start`, `agents:list`, `agents:get`, `agents:save`, `agents:delete`, `agents:templates`, `agents:preview`, `system:info`.
+Supported relay actions: `queue:add`, `queue:remove`, `queue:clear`, `queue:list`, `queue:get`, `queue:set-time`, `queue:start`, `agents:list`, `agents:get`, `agents:save`, `agents:delete`, `agents:templates`, `agents:preview`, `invocations:get`, `system:info`.
 
 > For full deployment guide (systemd, PM2, Docker, Nginx reverse proxy, NAT traversal), see [DEPLOY.md](DEPLOY.md).
 
@@ -932,6 +938,7 @@ State persists across sessions:
 ├── CHECKPOINT.json       # Rate-limit recovery checkpoint (auto-managed)
 ├── QUEUE.json            # Task queue for sleep mode (auto-managed)
 ├── HISTORY.json          # Sleep mode execution history (auto-managed)
+├── STATS.json            # Invocation tracking counts (auto-managed)
 ├── .dashboard.pid        # Background dashboard process PID (auto-managed)
 ├── DISCUSSION-*.md       # Discussion mode transcripts (auto-managed)
 ├── research/
@@ -1067,6 +1074,10 @@ awsl review                  # Static analysis (no LLM)
 awsl lock                    # Show lock status
 awsl unlock                  # Release own lock
 awsl unlock --force          # Force release any lock
+
+# Invocation tracking
+awsl track <type> [goal]         # Record an invocation (team/plan/go/quick/queue/cli/discuss)
+awsl invocations                 # Show invocation counts per command type
 
 # Agents
 awsl agents                  # List all agents

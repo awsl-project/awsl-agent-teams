@@ -18,6 +18,7 @@ import * as path from "node:path";
 import { TaskQueue } from "./queue.js";
 import { type Engine, detectEngine } from "./runner.js";
 import { loadHistory } from "./history.js";
+import { getInvocationSummary } from "./invocations.js";
 import { loadAgents, saveAgent, deleteAgent, getPromptTemplates, composePromptPreview } from "./agents.js";
 import { SkillRegistry } from "./skills.js";
 import { log } from "./log.js";
@@ -323,6 +324,7 @@ export class RemoteClient {
 		const queueItems = this.queue.list();
 		const currentQueueJson = JSON.stringify(queueItems);
 		const historyEntries = historyData.entries;
+		const invocations = getInvocationSummary(this.options.cwd);
 
 		const system = {
 			hostname: os.hostname(),
@@ -342,6 +344,7 @@ export class RemoteClient {
 				data: {
 					queue: queueItems,
 					history: historyEntries,
+					invocations,
 					system,
 				},
 			});
@@ -365,7 +368,7 @@ export class RemoteClient {
 			return;
 		}
 
-		const deltaData: Record<string, unknown> = { delta: true, system };
+		const deltaData: Record<string, unknown> = { delta: true, system, invocations };
 
 		if (queueChanged) {
 			deltaData.queue = queueItems;

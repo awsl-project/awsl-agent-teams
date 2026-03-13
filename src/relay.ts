@@ -47,6 +47,11 @@ export interface ClientInfo {
 	status?: {
 		queue: unknown[];
 		history?: unknown[];
+		invocations?: {
+			counts: Record<string, number>;
+			recent: unknown[];
+			updatedAt: string;
+		};
 		system: {
 			hostname: string;
 			platform: string;
@@ -256,6 +261,7 @@ export class RelayServer {
 							(client.status as any).history = existing.concat(data.historyAppend);
 						}
 						if (data.system) (client.status as any).system = data.system;
+						if (data.invocations) (client.status as any).invocations = data.invocations;
 					} else {
 						// Full sync: replace entire status
 						client.status = data;

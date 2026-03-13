@@ -20,6 +20,7 @@ import { appendHistory } from "./history.js";
 import { atomicCommit } from "./planning.js";
 import { atomicWriteFileSync, withFileLock, withFileLockAsync } from "./fs-utils.js";
 import { scheduleQueueRun, cancelScheduledRun } from "./scheduler.js";
+import { trackInvocation } from "./invocations.js";
 
 // ─── Git Push Helper ────────────────────────────────────────
 
@@ -465,7 +466,9 @@ export class TaskQueue {
 								agents: discussResult.agents,
 								mode: "discuss",
 								answer: discussResult.answer,
+								source: "queue",
 							});
+							trackInvocation(this.cwd, "queue", discussFreshTask.goal);
 						} catch (e) {
 							log.warn("queue", `Failed to record history: ${e}`);
 						}
@@ -542,7 +545,9 @@ export class TaskQueue {
 								waves: teamResult.waves,
 								agents: teamResult.agents,
 								maxConcurrency: teamResult.maxConcurrency,
+								source: "queue",
 							});
+							trackInvocation(this.cwd, "queue", buildFreshTask.goal);
 						} catch (e) {
 							log.warn("queue", `Failed to record history: ${e}`);
 						}
@@ -595,6 +600,7 @@ export class TaskQueue {
 							inputTokens: 0,
 							outputTokens: 0,
 							costUsd: 0,
+							source: "queue",
 						});
 					} catch (e) {
 						log.warn("queue", `Failed to record history: ${e}`);

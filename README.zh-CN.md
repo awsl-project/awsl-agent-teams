@@ -247,6 +247,10 @@ awsl agents templates             # 列出内置提示词模板
 awsl agents prompt <name>         # 编辑提示词（$EDITOR / --show / --set / --file）
 awsl agents preview <name>        # 预览合成提示词
 
+# 调用统计
+awsl track <type> [goal]          # 记录一次调用（team、plan、go、quick、queue、cli、discuss）
+awsl invocations                  # 查看各类型的调用计数
+
 # 夜间工作总结
 awsl summary                             # 总结昨晚的工作（22:00→06:00）
 awsl summary --date 2026-03-10           # 总结指定日期的夜间工作
@@ -428,6 +432,7 @@ awsl dashboard stop         # 停止后台仪表盘进程
 - **提示词预览** — 预览合成后的完整提示词（基础 + 技能 + 团队上下文），分页显示
 - **Agent 分析** — 展示使用的 agent 角色、平均/峰值并行度、总波次数，每次运行可展开查看波次详情和 agent 徽章
 - **波次任务详情** — 每个波次现在展示逐任务明细：描述、负责人、状态（done/failed/verified）、修改的文件、结果/错误信息。一眼看清每个波次完成了什么或为什么失败
+- **调用统计** — "Invocations" 卡片展示每种命令类型（/awsl、/awsl-plan、/awsl-go、/awsl-quick、queue、cli、discuss）的调用次数。计数持久化到 `.planning/STATS.json`
 - **日期筛选** — 支持按天、周、月或自定义日期范围筛选统计数据。所有面板组件根据所选时间段实时更新
 - **像素艺术风格** — Press Start 2P 字体、复古动画
 
@@ -458,6 +463,7 @@ API 端点：
 - `DELETE /api/agents?name=X` — 删除自定义智能体文件
 - `GET /api/agents/templates` — 列出全部 7 个内置提示词模板
 - `POST /api/agents/preview` — 合成完整提示词预览 `{name}` → `{composed, sections}`
+- `GET /api/invocations` — 各命令类型的调用计数
 - `GET /api/discussions` — 历史中的讨论条目
 - `GET /api/clients` — 已连接的远程客户端列表
 - `POST /api/clients/command` — 向客户端发送命令 `{clientId, action, payload?}`
@@ -514,7 +520,7 @@ curl -X POST http://server:3120/api/clients/command \
   -d '{"clientId":"my-laptop","action":"queue:start","payload":{"once":true}}'
 ```
 
-支持的中继命令：`queue:add`、`queue:remove`、`queue:clear`、`queue:list`、`queue:get`、`queue:set-time`、`queue:start`、`agents:list`、`agents:get`、`agents:save`、`agents:delete`、`agents:templates`、`agents:preview`、`system:info`。
+支持的中继命令：`queue:add`、`queue:remove`、`queue:clear`、`queue:list`、`queue:get`、`queue:set-time`、`queue:start`、`agents:list`、`agents:get`、`agents:save`、`agents:delete`、`agents:templates`、`agents:preview`、`invocations:get`、`system:info`。
 
 > 完整部署指南（systemd、PM2、Docker、Nginx 反向代理、内网穿透等）见 [DEPLOY.md](DEPLOY.md)。
 
@@ -931,6 +937,7 @@ awsl agents preview coder
 ├── CHECKPOINT.json       # 限额恢复检查点（自动管理）
 ├── QUEUE.json            # 任务队列（自动管理）
 ├── HISTORY.json          # 睡前模式执行历史（自动管理）
+├── STATS.json            # 调用统计计数（自动管理）
 ├── .dashboard.pid        # 后台仪表盘进程 PID（自动管理）
 └── task_*-SUMMARY.md     # 每任务结果
 ```
@@ -1062,6 +1069,10 @@ awsl review                  # 静态分析（无 LLM）
 awsl lock                    # 查看锁状态
 awsl unlock                  # 释放自己的锁
 awsl unlock --force          # 强制释放任何锁
+
+# 调用统计
+awsl track <type> [goal]         # 记录一次调用（team/plan/go/quick/queue/cli/discuss）
+awsl invocations                 # 查看各命令类型的调用计数
 
 # 智能体
 awsl agents                  # 列出所有智能体

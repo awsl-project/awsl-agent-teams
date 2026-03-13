@@ -30,6 +30,7 @@ import { startDashboard, isPortInUse } from "./dashboard.js";
 import { RemoteClient } from "./remote.js";
 import { ProjectManager } from "./projects.js";
 import { generateSummary, formatSummary } from "./summary.js";
+import { trackInvocation, getInvocationSummary, isValidSource, type InvocationSource } from "./invocations.js";
 
 function usage() {
 	console.error(`
@@ -37,7 +38,7 @@ function usage() {
   Conductor (planning & parallelism) + Guardian (TDD & quality)
 
 Commands:
-  start [--port N]         Start all services (dashboard + remote if configured)
+  start [--port N] [--host H]  Start all services (--host 0.0.0.0 for LAN access)
   stop                     Stop all services + release lock + reset running tasks
   status                   Show status of all services
   init [--global]          Install skills into .claude/skills/
@@ -105,6 +106,10 @@ Queue Commands (sleep mode):
   queue start --once       One-shot: process runnable tasks and exit (used by scheduler)
   queue clear              Clear all queue tasks
   discuss <question>       Convenience alias for queue add --discuss
+
+Tracking:
+  track <type> [goal]      Record an invocation (type: team|plan|go|quick|queue|cli|discuss)
+  invocations              Show invocation stats
 
 Options:
   --cwd <path>             Working directory (default: .)
@@ -250,11 +255,13 @@ async function main() {
 		try { ProjectManager.add(cwd); ProjectManager.touch(cwd); } catch { /* fail-soft */ }
 
 		let port = 3120;
+		let host = '127.0.0.1';
 		let serverUrl: string | undefined;
 		let clientId: string | undefined;
 
 		for (let i = 1; i < args.length; i++) {
 			if (args[i] === "--port" && i + 1 < args.length) { port = parseInt(args[++i], 10); }
+			else if (args[i] === "--host" && i + 1 < args.length) { host = args[++i]; }
 			else if (args[i] === "--server" && i + 1 < args.length) { serverUrl = args[++i]; }
 			else if (args[i] === "--id" && i + 1 < args.length) { clientId = args[++i]; }
 			else if (args[i] === "--cwd" && i + 1 < args.length) { i++; }
@@ -293,11 +300,12 @@ async function main() {
 			if (await isPortInUse(port)) {
 				console.log(`  Dashboard: port ${port} in use, skipping (use --port to change)`);
 			} else {
-				const dashArgs = [process.argv[1], "dashboard", "--port", String(port), "--cwd", cwd];
+				const dashArgs = [process.argv[1], "dashboard", "--port", String(port), "--host", host, "--cwd", cwd];
 				const dashChild = spawn(process.execPath, dashArgs, { detached: true, stdio: "ignore", cwd });
 				dashChild.unref();
 				fs.writeFileSync(dashPidFile, String(dashChild.pid));
-				console.log(`  Dashboard: started (pid ${dashChild.pid}) → http://localhost:${port}`);
+				const displayHost = host === '0.0.0.0' ? 'localhost' : host;
+				console.log(`  Dashboard: started (pid ${dashChild.pid}) → http://${displayHost}:${port}`);
 			}
 		}
 
@@ -979,6 +987,50 @@ async function main() {
 
 		console.error("Commands: init <url>, stop, status");
 		process.exit(1);
+	}
+
+	// ── Track command ────────────────────────────────────────
+	if (command === "track") {
+		const { cwd } = parseCwdAndForce(args);
+		const sourceArg = args[1];
+		if (!sourceArg || !isValidSource(sourceArg)) {
+			console.error("Usage: awsl track <type> [goal]");
+			console.error("Types: team, plan, go, quick, queue, cli, discuss");
+			process.exit(1);
+		}
+		const goalParts: string[] = [];
+		for (let i = 2; i < args.length; i++) {
+			if (!args[i].startsWith("--")) goalParts.push(args[i]);
+		}
+		trackInvocation(cwd, sourceArg as InvocationSource, goalParts.join(" ") || undefined);
+		process.exit(0);
+	}
+
+	// ── Invocations command ──────────────────────────────────
+	if (command === "invocations") {
+		const { cwd } = parseCwdAndForce(args);
+		const summary = getInvocationSummary(cwd);
+		console.log("\nInvocation Stats:");
+		console.log("─".repeat(40));
+		const labels: Record<string, string> = {
+			team: "/awsl (team)",
+			plan: "/awsl-plan",
+			go: "/awsl-go",
+			quick: "/awsl-quick",
+			queue: "queue",
+			cli: "awsl run (CLI)",
+			discuss: "discuss",
+		};
+		let total = 0;
+		for (const [src, count] of Object.entries(summary.counts)) {
+			if (count > 0) {
+				console.log(`  ${(labels[src] ?? src).padEnd(20)} ${count}`);
+				total += count;
+			}
+		}
+		console.log("─".repeat(40));
+		console.log(`  ${"Total".padEnd(20)} ${total}\n`);
+		process.exit(0);
 	}
 
 	// ── Summary command ─────────────────────────────────────

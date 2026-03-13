@@ -422,6 +422,13 @@ a { color: var(--blue); text-decoration: none; }
 
 .entry-summary { font-size: 11px; color: var(--ink4); margin-top: 4px; line-height: 1.4; }
 
+/* ─── Invocation Stats ─── */
+.inv-item { text-align: center; padding: 10px 16px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; min-width: 80px; }
+.inv-val { font-size: 22px; font-weight: 700; color: var(--ink); line-height: 1.2; }
+.inv-label { font-size: 10px; color: var(--ink3); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
+.inv-total { border-color: var(--blue); }
+.inv-total .inv-val { color: var(--blue); }
+
 /* ─── Wave / Agent Analysis ─── */
 .aa-stat { text-align: center; }
 .aa-val { font-size: 20px; font-weight: 700; color: var(--ink); line-height: 1.2; }
@@ -1427,6 +1434,11 @@ a { color: var(--blue); text-decoration: none; }
       </div>
     </div>
   </div>
+  <div class="card" id="invocationSection" style="display:none">
+    <h2>&#128202; Invocations</h2>
+    <div id="invocationGrid" style="display:flex;gap:12px;flex-wrap:wrap">
+    </div>
+  </div>
   <div class="card" id="agentSection" style="display:none">
     <h2>&#9881; Agent Analysis</h2>
     <div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:10px;align-items:flex-end">
@@ -1507,10 +1519,10 @@ a { color: var(--blue); text-decoration: none; }
   </div>
 
   <div class="card" id="agentRolesWrap">
-    <h2 style="display:flex;align-items:center;gap:8px;">
+    <h2 style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;" onclick="toggleAgentRoles(event)">
+      <span class="date-toggle" id="agentRolesToggle" style="transition:transform 0.15s;transform:rotate(90deg)">&#9656;</span>
       &#9881; 角色管理 <span id="agentRolesCount" style="font-weight:400;color:var(--ink3);font-size:11px"></span>
-      <button onclick="openAgentEditor()" class="proj-mgmt-btn" style="margin-left:auto;">+ New</button>
-      <button class="tl-collapse-btn" onclick="toggleAgentRoles()">Collapse</button>
+      <button onclick="event.stopPropagation();openAgentEditor()" class="proj-mgmt-btn" style="margin-left:auto;">+ New</button>
     </h2>
     <div id="agentRolesContent">
       <div class="agents-mgmt-grid" id="agentRolesList"></div>
@@ -1648,6 +1660,7 @@ a { color: var(--blue); text-decoration: none; }
 var hist = null, queue = null, filterProj = null, clients = [], selectedClient = null;
 var dateFilterMode = 'all';
 var projects = [], selectedProject = null;
+var invocations = null;
 var projectQueue = null, projectHist = null;
 var collapsedDates = {};
 var timelineWrapCollapsed = {};
@@ -1787,6 +1800,14 @@ async function loadProjects() {
     if (res.ok) projects = await res.json();
     else projects = [];
   } catch(e) { projects = []; }
+}
+
+async function loadInvocations() {
+  try {
+    var res = await fetch('/api/invocations');
+    if (res.ok) invocations = await res.json();
+    else invocations = null;
+  } catch(e) { invocations = null; }
 }
 
 async function loadProjectData(projPath) {
@@ -2054,6 +2075,63 @@ function renderStats(s) {
   document.getElementById('sTokOut').textContent = fmtK(s.outTok);
   document.getElementById('sTokTotal').textContent = fmtK(s.inTok + s.outTok);
   document.getElementById('sTokCost').textContent = s.cost > 0 ? '$' + s.cost.toFixed(2) : '$0';
+}
+
+function renderInvocations() {
+  var sec = document.getElementById('invocationSection');
+  var grid = document.getElementById('invocationGrid');
+  var counts = {};
+  // Use invocations data from API (local dashboard)
+  if (invocations && invocations.counts) {
+    counts = Object.assign({}, invocations.counts);
+  }
+  // If viewing a remote client, use its invocation data
+  if (selectedClient) {
+    var sc = clients.find(function(c){return c.id === selectedClient;});
+    if (sc && sc.status && sc.status.invocations && sc.status.invocations.counts) {
+      counts = Object.assign({}, sc.status.invocations.counts);
+    }
+  } else if (clients.length > 0 && !selectedProject) {
+    // Aggregate remote client invocations
+    for (var i = 0; i < clients.length; i++) {
+      var ci = clients[i].status && clients[i].status.invocations;
+      if (ci && ci.counts) {
+        for (var k in ci.counts) {
+          counts[k] = (counts[k] || 0) + (ci.counts[k] || 0);
+        }
+      }
+    }
+  }
+  var labels = {
+    team: '/awsl',
+    plan: '/plan',
+    go: '/go',
+    quick: '/quick',
+    queue: 'queue',
+    cli: 'CLI',
+    discuss: 'discuss'
+  };
+  var keys = Object.keys(counts);
+  var total = 0;
+  for (var i = 0; i < keys.length; i++) total += (counts[keys[i]] || 0);
+  if (total === 0) { sec.style.display = 'none'; return; }
+  sec.style.display = 'block';
+  grid.innerHTML = '';
+  // Total item first
+  var totalEl = document.createElement('div');
+  totalEl.className = 'inv-item inv-total';
+  totalEl.innerHTML = '<div class="inv-val">' + total + '</div><div class="inv-label">Total</div>';
+  grid.appendChild(totalEl);
+  // Sort by count descending
+  keys.sort(function(a,b){ return (counts[b]||0) - (counts[a]||0); });
+  for (var i = 0; i < keys.length; i++) {
+    var k = keys[i], c = counts[k] || 0;
+    if (c === 0) continue;
+    var el = document.createElement('div');
+    el.className = 'inv-item';
+    el.innerHTML = '<div class="inv-val">' + c + '</div><div class="inv-label">' + (labels[k] || k) + '</div>';
+    grid.appendChild(el);
+  }
 }
 
 function renderAgents(s) {
@@ -2510,7 +2588,7 @@ function render() {
 
   entries = filterByDate(entries);
   var s = stats(entries);
-  renderStats(s); renderAgents(s); renderHeatmap(s.byD); renderTrend(s.byD); renderProjects(s.byP); renderTimeline(entries, s.byD); renderQueue(qt);
+  renderStats(s); renderInvocations(); renderAgents(s); renderHeatmap(s.byD); renderTrend(s.byD); renderProjects(s.byP); renderTimeline(entries, s.byD); renderQueue(qt);
   renderClients();
   renderProjectCards();
   checkNotifications(qt);
@@ -2543,6 +2621,7 @@ async function init() {
   await loadClients();
   await loadProjects();
   await loadAgentRoles();
+  await loadInvocations();
   renderProjectCards();
   renderClients();
   renderAgentRoles();
@@ -2554,7 +2633,7 @@ async function init() {
     document.getElementById('app').style.display = 'block';
     document.getElementById('empty').style.display = 'none';
   }
-  setInterval(async function() { await loadClients(); await loadProjects(); await loadAgentRoles(); renderProjectCards(); renderClients(); renderAgentRoles(); if (selectedProject) await loadProjectData(selectedProject); if (await load()) render(); }, 30000);
+  setInterval(async function() { await loadClients(); await loadProjects(); await loadAgentRoles(); await loadInvocations(); renderProjectCards(); renderClients(); renderAgentRoles(); if (selectedProject) await loadProjectData(selectedProject); if (await load()) render(); }, 30000);
 }
 
 // ─── Trend chart (SVG with area fill) ─────────────────
@@ -3043,9 +3122,11 @@ function renderAgentRoles() {
   el.innerHTML = h;
 }
 
-function toggleAgentRoles() {
+function toggleAgentRoles(e) {
+  if (e) e.stopPropagation();
   agentRolesCollapsed = !agentRolesCollapsed;
   document.getElementById('agentRolesContent').style.display = agentRolesCollapsed ? 'none' : 'block';
+  document.getElementById('agentRolesToggle').style.transform = agentRolesCollapsed ? 'rotate(0deg)' : 'rotate(90deg)';
 }
 
 async function openAgentEditor(name) {

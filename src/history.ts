@@ -63,6 +63,8 @@ export interface HistoryEntry {
 	mode?: "build" | "discuss";
 	/** Final answer text — only set for discuss mode */
 	answer?: string;
+	/** Invocation source: which skill/command triggered this execution */
+	source?: "team" | "plan" | "go" | "quick" | "queue" | "cli" | "discuss";
 }
 
 export interface HistoryData {
@@ -82,6 +84,8 @@ export interface HistoryStats {
 	totalOutputTokens: number;
 	totalCostUsd: number;
 	tokensByProject: Record<string, { inputTokens: number; outputTokens: number; costUsd: number }>;
+	/** Breakdown by invocation source */
+	bySource: Record<string, number>;
 }
 
 // ─── Constants ───────────────────────────────────────────────
@@ -164,6 +168,7 @@ export function getHistoryStats(data: HistoryData): HistoryStats {
 	let totalOutputTokens = 0;
 	let totalCostUsd = 0;
 	const tokensByProject: Record<string, { inputTokens: number; outputTokens: number; costUsd: number }> = {};
+	const bySource: Record<string, number> = {};
 
 	for (const entry of data.entries) {
 		// Group by YYYY-MM-DD
@@ -185,6 +190,10 @@ export function getHistoryStats(data: HistoryData): HistoryStats {
 		tokensByProject[proj].inputTokens += entry.inputTokens ?? 0;
 		tokensByProject[proj].outputTokens += entry.outputTokens ?? 0;
 		tokensByProject[proj].costUsd += entry.costUsd ?? 0;
+
+		// Count by invocation source
+		const src = entry.source ?? "unknown";
+		bySource[src] = (bySource[src] ?? 0) + 1;
 	}
 
 	return {
@@ -199,5 +208,6 @@ export function getHistoryStats(data: HistoryData): HistoryStats {
 		totalOutputTokens,
 		totalCostUsd,
 		tokensByProject,
+		bySource,
 	};
 }

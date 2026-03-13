@@ -12,6 +12,7 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as child_process from "node:child_process";
 import { loadHistory, getHistoryStats, clearHistory } from "./history.js";
+import { getInvocationSummary } from "./invocations.js";
 import { TaskQueue } from "./queue.js";
 import { ProjectManager } from "./projects.js";
 import { loadAgents, saveAgent, deleteAgent, getAgent, BUILTINS, getPromptTemplates, composePromptPreview } from "./agents.js";
@@ -121,6 +122,13 @@ export function startDashboard(cwd: string, port: number = 3120, host: string = 
 			const stats = getHistoryStats(data);
 			res.writeHead(200, { "Content-Type": "application/json" });
 			res.end(JSON.stringify(stats));
+			return;
+		}
+
+		if (url.pathname === "/api/invocations" && req.method === "GET") {
+			const summary = getInvocationSummary(cwd);
+			res.writeHead(200, { "Content-Type": "application/json" });
+			res.end(JSON.stringify(summary));
 			return;
 		}
 
