@@ -851,6 +851,48 @@ awsl run "goal" --engine claude-code --cwd /path/to/project
 awsl run "goal" --engine claude-code --no-verify
 ```
 
+### 并发调优（`--concurrency`）
+
+`--concurrency` 控制每个波次（wave）内最多同时运行几个智能体进程。默认值为 2。
+
+```bash
+# 2 路并行（默认）
+awsl run "goal" --engine claude-code
+
+# 4 路并行（推荐中大型项目）
+awsl run "goal" --engine claude-code --concurrency 4
+
+# 队列任务也支持
+awsl queue add "goal" --engine codex --concurrency 3
+```
+
+**选多少合适？**
+
+| 并发数 | 适合场景 | 注意事项 |
+|--------|---------|---------|
+| 1 | 小任务、调试、资源受限 | 无并行，最安全 |
+| 2（默认） | 日常开发 | 平衡速度和稳定性 |
+| 3-4 | 中大型项目、任务间无文件冲突 | 推荐上限，超过后 API 限频概率增大 |
+| 5+ | 有独立 API key 或企业额度 | 注意系统内存和 CPU 占用 |
+
+**不同引擎的差异：**
+
+| 引擎 | 每路并行的开销 | 建议最大并发 |
+|------|--------------|-------------|
+| `claude-code` | 每路启动一个 `claude -p` 进程 | 3-4（受 CC 订阅限频） |
+| `codex` | 每路启动一个 `codex exec` 进程 | 3-4（受 API 限频） |
+| `builtin` | 每路一个 API 调用 | 取决于 API key 额度 |
+
+**超时保护（codex 引擎）：**
+
+codex 进程有三层超时保护，不用担心进程挂死浪费时间：
+
+| 超时 | 时间 | 触发条件 |
+|------|------|---------|
+| 启动超时 | 60s | 进程无任何输出 → codex 启动失败 |
+| 空闲超时 | 5min | 运行中 5 分钟无新输出 → 进程卡死 |
+| 硬超时 | 30min | 绝对上限 |
+
 ### `--no-verify` 验证总开关
 
 `--no-verify` 是验证的总开关（master switch），禁用后会跳过 **所有** 验证相关步骤：

@@ -169,7 +169,7 @@ awsl run "goal" --engine <claude-code|codex|builtin> [options]
 |--------|---------|-------------|
 | `--engine <type>` | auto | Execution engine: `claude-code`, `codex`, or `builtin` (`codex` is used only when explicitly set) |
 | `--quick` | false | Skip brainstorm & research phases |
-| `--concurrency <n>` | 2 | Max parallel agents per wave |
+| `--concurrency <n>` | 2 | Max parallel agents per wave (recommended: 3-4 for medium/large projects; see BEST_PRACTICES.md for tuning guide) |
 | `--no-verify` | false | Skip ALL verification: per-task code review, provider verification (tsc, npm test, eslint), and auto-fix loop. Task auto-retry still runs (handles execution failures, not verification) |
 | `--no-commit` | false | Skip git commits |
 | `--plan-only` | false | Generate plan only, don't execute |

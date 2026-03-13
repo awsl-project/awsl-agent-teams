@@ -169,7 +169,7 @@ awsl run "目标" --engine <claude-code|codex|builtin> [选项]
 |--------|---------|-------------|
 | `--engine <type>` | auto | 执行引擎：`claude-code`、`codex` 或 `builtin`（`codex` 仅在显式指定时启用） |
 | `--quick` | false | 跳过头脑风暴和调研阶段 |
-| `--concurrency <n>` | 2 | 每波次最大并行智能体数 |
+| `--concurrency <n>` | 2 | 每波次最大并行智能体数（推荐中大型项目用 3-4；详见 BEST_PRACTICES.md 并发调优章节） |
 | `--no-verify` | false | 跳过所有验证步骤：逐任务代码审查、代码验证 (tsc、npm test、eslint) 和自动修复循环。任务自动重试仍然运行（处理执行失败而非验证） |
 | `--no-commit` | false | 跳过 git 提交 |
 | `--plan-only` | false | 仅生成计划，不执行 |
