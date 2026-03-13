@@ -156,12 +156,22 @@ ${task}`;
 
 	log.info(agentDef.name, `Starting... (engine: codex)`);
 
+	// Agent-level timeout: 30 minutes per agent (prevents hung processes from blocking queue)
+	const AGENT_TIMEOUT_MS = 30 * 60 * 1000;
+
 	return new Promise<RunResult>((resolve) => {
 		const child = spawn(codexCmd, args, {
 			cwd,
 			stdio: ["pipe", "pipe", "pipe"],
 			env: process.env,
 		});
+
+		// Kill agent if it exceeds timeout
+		const agentTimer = setTimeout(() => {
+			log.warn(agentDef.name, `Timeout after ${AGENT_TIMEOUT_MS / 60000}min — killing agent`);
+			child.kill("SIGTERM");
+			setTimeout(() => { try { child.kill("SIGKILL"); } catch { /* already dead */ } }, 5000);
+		}, AGENT_TIMEOUT_MS);
 
 		child.stdin.write(prompt);
 		child.stdin.end();
@@ -228,12 +238,30 @@ ${task}`;
 		};
 
 		child.on("close", (code) => {
+			clearTimeout(agentTimer);
+
 			if (stdoutLineBuffer.trim()) {
 				logStream.push({ timestamp: new Date().toISOString(), taskId: logTaskId, agent: agentDef.name, stream: "stdout", text: stdoutLineBuffer });
 				parseJsonEvent(stdoutLineBuffer);
 			}
 			if (stderrLineBuffer.trim()) {
 				logStream.push({ timestamp: new Date().toISOString(), taskId: logTaskId, agent: agentDef.name, stream: "stderr", text: stderrLineBuffer });
+			}
+
+			// Treat timeout kill as an error
+			if (code === null) {
+				cleanupTmp();
+				resolve({
+					agent: agentDef.name,
+					status: "timeout",
+					result: "",
+					turns: turns || 0,
+					error: `Agent timed out after ${AGENT_TIMEOUT_MS / 60000} minutes`,
+					inputTokens,
+					outputTokens,
+					costUsd: 0,
+				});
+				return;
 			}
 
 			const combined = stderr + stdout;
@@ -286,6 +314,7 @@ ${task}`;
 		});
 
 		child.on("error", (err) => {
+			clearTimeout(agentTimer);
 			cleanupTmp();
 			if (isRateLimitError(err.message)) {
 				log.warn(agentDef.name, "Rate limited (spawn error)");
