@@ -156,8 +156,10 @@ ${task}`;
 
 	log.info(agentDef.name, `Starting... (engine: codex)`);
 
-	// Agent-level timeout: 30 minutes per agent (prevents hung processes from blocking queue)
-	const AGENT_TIMEOUT_MS = 30 * 60 * 1000;
+	// Timeout configuration
+	const STARTUP_TIMEOUT_MS = 60 * 1000;       // 60s: no output at all → startup failed
+	const IDLE_TIMEOUT_MS = 5 * 60 * 1000;       // 5min: no new output → agent stuck
+	const AGENT_TIMEOUT_MS = 30 * 60 * 1000;     // 30min: absolute hard cap
 
 	return new Promise<RunResult>((resolve) => {
 		const child = spawn(codexCmd, args, {
@@ -166,12 +168,47 @@ ${task}`;
 			env: process.env,
 		});
 
-		// Kill agent if it exceeds timeout
-		const agentTimer = setTimeout(() => {
-			log.warn(agentDef.name, `Timeout after ${AGENT_TIMEOUT_MS / 60000}min — killing agent`);
+		let hasOutput = false;
+		let killed = false;
+		let killReason = "";
+
+		const killAgent = (reason: string) => {
+			if (killed) return;
+			killed = true;
+			killReason = reason;
+			log.warn(agentDef.name, reason);
 			child.kill("SIGTERM");
 			setTimeout(() => { try { child.kill("SIGKILL"); } catch { /* already dead */ } }, 5000);
+		};
+
+		// Hard timeout: absolute 30min cap
+		const agentTimer = setTimeout(() => {
+			killAgent(`Hard timeout after ${AGENT_TIMEOUT_MS / 60000}min — killing agent`);
 		}, AGENT_TIMEOUT_MS);
+
+		// Startup timeout: 60s to produce any output
+		const startupTimer = setTimeout(() => {
+			if (!hasOutput) {
+				killAgent(`Startup timeout: no output after ${STARTUP_TIMEOUT_MS / 1000}s — codex likely failed to start`);
+			}
+		}, STARTUP_TIMEOUT_MS);
+
+		// Idle heartbeat: reset on every output chunk, fires after 5min of silence
+		let idleTimer: ReturnType<typeof setTimeout> | null = null;
+		const resetIdleTimer = () => {
+			if (idleTimer) clearTimeout(idleTimer);
+			idleTimer = setTimeout(() => {
+				killAgent(`Idle timeout: no output for ${IDLE_TIMEOUT_MS / 60000}min — agent appears stuck`);
+			}, IDLE_TIMEOUT_MS);
+		};
+
+		const onOutput = () => {
+			if (!hasOutput) {
+				hasOutput = true;
+				clearTimeout(startupTimer);
+			}
+			resetIdleTimer();
+		};
 
 		child.stdin.write(prompt);
 		child.stdin.end();
@@ -207,6 +244,7 @@ ${task}`;
 		};
 
 		child.stdout.on("data", (data: Buffer) => {
+			onOutput();
 			const chunk = data.toString();
 			stdout += chunk;
 			stdoutLineBuffer += chunk;
@@ -220,6 +258,7 @@ ${task}`;
 		});
 
 		child.stderr.on("data", (data: Buffer) => {
+			onOutput();
 			const chunk = data.toString();
 			stderr += chunk;
 			process.stderr.write(chunk);
@@ -239,6 +278,8 @@ ${task}`;
 
 		child.on("close", (code) => {
 			clearTimeout(agentTimer);
+			clearTimeout(startupTimer);
+			if (idleTimer) clearTimeout(idleTimer);
 
 			if (stdoutLineBuffer.trim()) {
 				logStream.push({ timestamp: new Date().toISOString(), taskId: logTaskId, agent: agentDef.name, stream: "stdout", text: stdoutLineBuffer });
@@ -248,15 +289,15 @@ ${task}`;
 				logStream.push({ timestamp: new Date().toISOString(), taskId: logTaskId, agent: agentDef.name, stream: "stderr", text: stderrLineBuffer });
 			}
 
-			// Treat timeout kill as an error
-			if (code === null) {
+			// Treat timeout/kill as an error
+			if (code === null || killed) {
 				cleanupTmp();
 				resolve({
 					agent: agentDef.name,
 					status: "timeout",
 					result: "",
 					turns: turns || 0,
-					error: `Agent timed out after ${AGENT_TIMEOUT_MS / 60000} minutes`,
+					error: killReason || `Agent timed out after ${AGENT_TIMEOUT_MS / 60000} minutes`,
 					inputTokens,
 					outputTokens,
 					costUsd: 0,
@@ -315,6 +356,8 @@ ${task}`;
 
 		child.on("error", (err) => {
 			clearTimeout(agentTimer);
+			clearTimeout(startupTimer);
+			if (idleTimer) clearTimeout(idleTimer);
 			cleanupTmp();
 			if (isRateLimitError(err.message)) {
 				log.warn(agentDef.name, "Rate limited (spawn error)");
