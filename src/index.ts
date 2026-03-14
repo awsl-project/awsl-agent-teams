@@ -10,7 +10,7 @@ export { validatePlan, type ValidatedTask, type ValidationResult } from "./valid
 export { runFullVerification, runStaticReview, type VerifyResult, type VerifyItem, type ReviewResult, type ReviewFinding } from "./verify.js";
 export { runAgent, runParallel, detectEngine, isRateLimitError, type RunResult, type Engine } from "./runner.js";
 export { SharedMemory } from "./memory.js";
-export { createPlanningDir, parseStructuredTasks, atomicCommit, saveCheckpoint, loadCheckpoint, clearCheckpoint, type PlanningDir, type StructuredTask, type CheckpointData } from "./planning.js";
+export { createPlanningDir, parseStructuredTasks, parseStructuredTasksChecked, detectDependencyCycles, atomicCommit, saveCheckpoint, loadCheckpoint, clearCheckpoint, type PlanningDir, type StructuredTask, type CheckpointData, type ParseResult, type CycleDetectionResult } from "./planning.js";
 export { TaskQueue, type QueueTask, type QueueData, type PlannedTask } from "./queue.js";
 export { SkillRegistry, type Skill, SKILL_TDD, SKILL_SYSTEMATIC_DEBUG, SKILL_BRAINSTORM, SKILL_CODE_REVIEW, SKILL_PLANNING, SKILL_SUBAGENT_DEV } from "./skills.js";
 export { runInstaller } from "./install.js";

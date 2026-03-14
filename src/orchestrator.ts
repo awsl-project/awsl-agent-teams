@@ -21,7 +21,7 @@ import type { SandboxPolicy } from "./sandbox.js";
 import { SharedMemory } from "./memory.js";
 import { log } from "./log.js";
 import { type RunResult, type Engine, runAgent, runParallel, detectEngine } from "./runner.js";
-import { createPlanningDir, parseStructuredTasks, atomicCommit, saveCheckpoint, loadCheckpoint, clearCheckpoint, type StructuredTask, type PlanningDir, type CheckpointData } from "./planning.js";
+import { createPlanningDir, parseStructuredTasks, parseStructuredTasksChecked, detectDependencyCycles, atomicCommit, saveCheckpoint, loadCheckpoint, clearCheckpoint, type StructuredTask, type PlanningDir, type CheckpointData, type ParseResult, type CycleDetectionResult } from "./planning.js";
 import { SkillRegistry } from "./skills.js";
 import { runFullVerification } from "./verify.js";
 import type { WaveInfo, WaveTaskDetail } from "./history.js";
@@ -135,7 +135,6 @@ function buildRoster(agents: TeamAgentDef[]): string {
 function topologicalSort(tasks: Task[]): Task[][] {
 	const waves: Task[][] = [];
 	const done = new Set<string>();
-	// Seed already-completed tasks into the done set for dependency resolution
 	for (const t of tasks) {
 		if (t.status === "done" || t.status === "verified") done.add(t.id);
 	}
@@ -144,10 +143,15 @@ function topologicalSort(tasks: Task[]): Task[][] {
 	while (remaining.length > 0) {
 		const wave = remaining.filter(t => t.dependencies.every(d => done.has(d)));
 		if (wave.length === 0) {
+			const cycleInfo = findCycleInRemaining(remaining);
+			const cycleMsg = cycleInfo.length > 0 
+				? ` (cycle: ${cycleInfo.join(" -> ")})` 
+				: "";
 			for (const t of remaining) {
 				t.status = "failed";
-				t.error = "Unresolvable dependency";
+				t.error = `Unresolvable dependency${cycleMsg}`;
 			}
+			log.warn("conductor", `Dependency cycle detected: ${cycleInfo.join(" -> ")}`);
 			break;
 		}
 		waves.push(wave);
@@ -155,6 +159,46 @@ function topologicalSort(tasks: Task[]): Task[][] {
 		remaining = remaining.filter(t => !done.has(t.id));
 	}
 	return waves;
+}
+
+function findCycleInRemaining(tasks: Task[]): string[] {
+	const taskMap = new Map(tasks.map(t => [t.id, t]));
+	const visited = new Set<string>();
+	const recStack = new Set<string>();
+
+	function dfs(taskId: string, path: string[]): string[] | null {
+		if (recStack.has(taskId)) {
+			const cycleStart = path.indexOf(taskId);
+			if (cycleStart !== -1) {
+				return [...path.slice(cycleStart), taskId];
+			}
+			return null;
+		}
+		if (visited.has(taskId)) return null;
+
+		visited.add(taskId);
+		recStack.add(taskId);
+		path.push(taskId);
+
+		const task = taskMap.get(taskId);
+		if (task) {
+			for (const dep of task.dependencies) {
+				const cycle = dfs(dep, [...path]);
+				if (cycle) return cycle;
+			}
+		}
+
+		recStack.delete(taskId);
+		return null;
+	}
+
+	for (const task of tasks) {
+		if (!visited.has(task.id)) {
+			const cycle = dfs(task.id, []);
+			if (cycle) return cycle;
+		}
+	}
+	return [];
 }
 
 async function emit(hooks: TeamHook[], event: TeamEvent) {

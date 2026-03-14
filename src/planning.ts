@@ -110,6 +110,62 @@ export interface StructuredTask {
 	done: string;
 }
 
+export interface CycleDetectionResult {
+	hasCycle: boolean;
+	cycles: string[][]; // Each cycle is a path of task IDs
+}
+
+export function detectDependencyCycles(tasks: StructuredTask[]): CycleDetectionResult {
+	const taskMap = new Map(tasks.map(t => [t.id, t]));
+	const visited = new Set<string>();
+	const recStack = new Set<string>();
+	const cycles: string[][] = [];
+
+	function dfs(taskId: string, path: string[]): boolean {
+		if (recStack.has(taskId)) {
+			const cycleStart = path.indexOf(taskId);
+			if (cycleStart !== -1) {
+				cycles.push([...path.slice(cycleStart), taskId]);
+			}
+			return true;
+		}
+		if (visited.has(taskId)) return false;
+
+		visited.add(taskId);
+		recStack.add(taskId);
+		path.push(taskId);
+
+		const task = taskMap.get(taskId);
+		if (task) {
+			for (const dep of task.dependencies) {
+				if (dfs(dep, [...path])) {
+					// Continue to find all cycles
+				}
+			}
+		}
+
+		recStack.delete(taskId);
+		return false;
+	}
+
+	for (const task of tasks) {
+		if (!visited.has(task.id)) {
+			dfs(task.id, []);
+		}
+	}
+
+	return {
+		hasCycle: cycles.length > 0,
+		cycles,
+	};
+}
+
+export interface ParseResult {
+	tasks: StructuredTask[];
+	cycles: string[][];
+	hasCycle: boolean;
+}
+
 /**
  * Parse structured task plan from planner output.
  * Accepts both JSON and XML-like formats.
@@ -227,6 +283,12 @@ export function parseStructuredTasks(raw: string): StructuredTask[] {
 	if (mdTasks.length > 0) return mdTasks;
 
 	return [];
+}
+
+export function parseStructuredTasksChecked(raw: string): ParseResult {
+	const tasks = parseStructuredTasks(raw);
+	const { hasCycle, cycles } = detectDependencyCycles(tasks);
+	return { tasks, hasCycle, cycles };
 }
 
 /**
