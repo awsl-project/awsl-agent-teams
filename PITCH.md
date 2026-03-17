@@ -239,52 +239,121 @@ Claude 生态中有多种多智能体方案，各有定位。以下是主要竞�
 
 ### 竞品概览
 
-| 方案 | 定位 | GitHub |
+| 方案 | 定位 | GitHub / 链接 |
 |------|------|--------|
-| **CC Official Swarm** | Claude Code 官方实验性多 Agent 功能（TeammateTool） | [Anthropic 官方](https://code.claude.com/docs/en/agent-teams) |
-| **Claude Squad** | tmux 多窗口管理器，一人分饰多 Agent | [smtg-ai/claude-squad](https://github.com/smtg-ai/claude-squad) |
-| **Ruflo** | 企业级 Agent 编排平台，60+ Agent + 215 MCP 工具 | [ruvnet/ruflo](https://github.com/ruvnet/ruflo) |
-| **Overstory** | Git worktree 隔离 + SQLite 邮件系统 | [jayminwest/overstory](https://github.com/jayminwest/overstory) |
-| **AWSL** | Conductor+Guardian 双层架构，面向生产的全流水线 | 本项目 |
+| **CC Official Swarm** | Claude Code 官方实验性多 Agent（TeammateTool） | [Anthropic 官方](https://code.claude.com/docs/en/agent-teams) |
+| **Superpowers** | 单会话方法论技能框架（TDD/调试/规划），42K+ Stars | [obra/superpowers](https://github.com/obra/superpowers) |
+| **Oh My Claude Code** | 32 Agent + 5 执行模式 + 智能路由 | [Yeachan-Heo/oh-my-claudecode](https://github.com/yeachan-heo/oh-my-claudecode) |
+| **Claude Squad** | tmux 多窗口管理器 | [smtg-ai/claude-squad](https://github.com/smtg-ai/claude-squad) |
+| **Ruflo** | 企业级编排平台，60+ Agent + 215 MCP 工具 | [ruvnet/ruflo](https://github.com/ruvnet/ruflo) |
+| **Overstory** | Git worktree 隔离 + SQLite 通信 | [jayminwest/overstory](https://github.com/jayminwest/overstory) |
+| **AWSL** | Conductor+Guardian 双层架构，全流水线 | 本项目 |
 
 ### 核心能力对比
 
-| 能力 | CC Official Swarm | Claude Squad | Ruflo | Overstory | **AWSL** |
-|------|:-:|:-:|:-:|:-:|:-:|
-| **任务自动拆解** | Lead Agent 手动分配 | 手动创建会话 | ADR 驱动 | 手动分配 | **DAG 自动拆解 + 拓扑排序** |
-| **并行执行** | Teammate 并行 | tmux 多会话 | Swarm 并行 | Worktree 并行 | **波次级并行（依赖感知）** |
-| **独立代码审查** | 无 | 无 | Spec 合规检查 | 无 | **Reviewer 读真实 git diff，Critical 阻断提交** |
-| **自动验证** | 无内置 | 无 | 无 | 无 | **13 种内置 + 自定义 Provider** |
-| **自动修复** | 无 | 无 | 容错共识 | Watchdog 监控 | **验证失败→修复→重跑（3 轮）** |
-| **任务重试+重规划** | 无 | 无 | 有 | 无 | **重试 2 次→换方案重规划** |
-| **通宵队列** | 无 | 无 | 有 | 无 | **队列 + 限额指数退避 + 检查点续跑** |
-| **限额恢复** | 无 | 无 | 3 层模型路由省 75% 费用 | 无 | **指数退避（1m→15m），最多 20 次** |
-| **崩溃恢复** | 丢失上下文 | Git 分支保留代码 | AgentDB 持久化 | SQLite 状态 | **文件级检查点，1 行命令续跑** |
-| **原子 Git 提交** | 不管理 | 按分支隔离 | 不管理 | FIFO 合并队列 | **每任务 1 commit，支持 bisect** |
-| **可视化面板** | 无 | TUI（终端 UI） | 无 | 无 | **像素风 Web Dashboard + REST API** |
-| **远程控制** | 无 | 无 | 无 | 无 | **WebSocket Relay 远程管理** |
-| **多语言支持** | N/A | N/A | N/A | 可插拔 Runtime | **TS/Python/Go/Rust 自动检测** |
-| **自定义 Agent** | 无 | 支持多种 CLI 工具 | 60+ 内置 Agent | 可插拔 Adapter | **Markdown 定义 + 7 模板** |
-| **上下文管理** | 每 Teammate 独立窗口 | 每会话独立 | 分层内存系统 | 每 Worktree 独立 | **每 Agent 独立 200K** |
-| **需额外 API Key** | 否（实验功能） | 否 | 是 | 取决于 Runtime | **否（用现有订阅）** |
+| 能力 | CC Swarm | Superpowers | OMC | Claude Squad | Ruflo | Overstory | **AWSL** |
+|------|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| **任务自动拆解** | Lead 手动分配 | /write-plan 规划 | Autopilot 自动 | 手动 | ADR 驱动 | 手动 | **DAG 自动拆解 + 拓扑排序** |
+| **并行执行** | Teammate 并行 | 单会话（无） | Ultrapilot 5 并发 | tmux 多会话 | Swarm | Worktree | **波次级并行（依赖感知）** |
+| **独立代码审查** | 无 | /code-review 技能 | 多 Agent PR 审查 | 无 | Spec 合规 | 无 | **Reviewer 读真实 git diff，Critical 阻断** |
+| **自动验证** | 无 | 无 | 无 | 无 | 无 | 无 | **13 种内置 + 自定义 Provider** |
+| **自动修复循环** | 无 | 无 | 无 | 无 | 容错共识 | Watchdog | **验证→修复→重跑（3 轮）** |
+| **重试+重规划** | 无 | 无 | 有（Autopilot） | 无 | 有 | 无 | **重试 2 次→换方案重规划** |
+| **通宵队列** | 无 | 无 | 无 | 无 | 有 | 无 | **队列 + 限额退避 + 检查点** |
+| **限额恢复** | 无 | 无 | Ecomode 省 token | 无 | 3 层路由省 75% | 无 | **指数退避，最多 20 次** |
+| **崩溃恢复** | 丢失上下文 | 无 | 无 | Git 分支保留 | AgentDB | SQLite | **文件检查点，1 行续跑** |
+| **原子 Git 提交** | 不管理 | 无 | 无 | 按分支隔离 | 不管理 | FIFO 合并 | **每任务 1 commit** |
+| **方法论注入** | 无 | **TDD/Debug/Brainstorm** | **40+ 技能** | 无 | 无 | 无 | **Guardian 6 技能自动注入** |
+| **可视化面板** | 无 | 无 | 无 | TUI | 无 | 无 | **Web Dashboard + REST API** |
+| **远程控制** | 无 | 无 | 无 | 无 | 无 | 无 | **WebSocket Relay** |
+| **多语言验证** | N/A | N/A | N/A | N/A | N/A | 可插拔 | **TS/Py/Go/Rust 自动检测** |
+| **自定义 Agent** | 无 | 可写新技能 | 32 内置 | 多 CLI 工具 | 60+ 内置 | 可插拔 | **Markdown 定义 + 7 模板** |
+| **智能模型路由** | 无 | 无 | **Haiku/Opus 自动** | 无 | **3 层路由** | 无 | 按引擎选择 |
+| **额外 API Key** | 否 | 否 | 否 | 否 | 是 | 看 Runtime | **否** |
 
 ### 差异化总结
 
-**CC Official Swarm** 是 Anthropic 官方的实验功能，优点是原生集成、无需安装，但缺少质量保障流水线——没有独立审查、没有自动验证、没有崩溃恢复、没有通宵队列。更适合即兴协作，不适合生产级构建。
+**CC Official Swarm** — 官方实验功能，原生集成无需安装。缺少质量保障流水线（无审查、无验证、无恢复、无队列）。适合即兴协作。
 
-**Claude Squad** 本质是 tmux 多窗口管理器，解决的是"同时看多个 Agent 工作"的问题。不处理任务拆解、依赖分析、代码审查、验证修复等工程化流程。适合手动管理多个独立任务。
+**Superpowers** — 单会话方法论框架，42K+ Stars，Anthropic 官方 Marketplace 收录。核心价值是给单个 Claude 注入 TDD、调试、规划等工作流纪律。**不做多 Agent 编排**，和 AWSL 是互补关系（见下方兼容性章节）。
 
-**Ruflo** 走企业级路线，60+ Agent、215 MCP 工具、3 层模型路由，功能最丰富但也最重。适合大型团队和复杂工作流，学习曲线陡峭。需要额外 API Key 和配置。
+**Oh My Claude Code (OMC)** — 32 Agent + 5 执行模式（Autopilot/Ultrapilot/Swarm/Pipeline/Ecomode），功能全面。Ultrapilot 5 并发是亮点，智能模型路由省 token。但**没有内置验证系统、没有自动修复循环、没有通宵队列**。和 AWSL 的侧重点不同（见下方兼容性章节）。
 
-**Overstory** 用 Git worktree 做代码隔离、SQLite 做通信，架构优雅。但没有质量保障层——没有代码审查、没有自动验证、没有修复循环。更像一个基础设施层。
+**Claude Squad** — tmux 多窗口管理器，解决"同时看多个 Agent"的问题。不处理任务拆解和质量保障。
 
-**AWSL 的独特定位：生产级全流水线。**
+**Ruflo** — 企业级重量级平台，60+ Agent、215 MCP 工具。学习曲线最陡，需额外 API Key。
+
+**Overstory** — Git worktree 隔离 + SQLite 通信，架构优雅。没有质量保障层，更像基础设施。
+
+### AWSL 的独特定位：生产级全流水线
 
 1. **唯一做到写-审分离的方案** — Reviewer 读真实 git diff，不是自查自纠
 2. **唯一内置多语言验证的方案** — 13 种 Provider 全自动检测，还支持自定义
 3. **最完整的自愈体系** — 验证修复（3 轮）+ 任务重试（2 次）+ 动态重规划
 4. **最适合通宵构建** — 队列 + 限额恢复 + 检查点续跑 + Dashboard 监控
 5. **最轻量的起步成本** — 3 步安装，零额外 API Key，零侵入性
+
+---
+
+## 兼容共存 —— 不是替代，是组合
+
+AWSL 与 Claude 生态中的其他工具**不冲突**，可以组合使用，各取所长：
+
+### AWSL + Superpowers = 方法论 × 编排
+
+```
+┌─────────────────────────────────────────────────────┐
+│  Superpowers（方法论层）                              │
+│  给单个 Claude 会话注入 TDD、调试、规划等技能         │
+│  ───────────────────────────────────────────────     │
+│  AWSL（编排层）                                      │
+│  把多个 Claude 会话编排成团队，并行执行，独立审查      │
+└─────────────────────────────────────────────────────┘
+```
+
+| 层 | 工具 | 负责什么 |
+|---|---|---|
+| **方法论** | Superpowers | 教单个 Agent 怎么写好代码（TDD、调试、规划） |
+| **编排** | AWSL | 让多个 Agent 像团队一样协作（分工、并行、审查、验证） |
+
+**实际效果：** Superpowers 确保每个 Agent 按最佳实践工作，AWSL 确保多个 Agent 高效协作。两者结合 = 方法论 × 并行 = 质量和速度双赢。
+
+AWSL 的 Guardian 技能系统本身就参考了 Superpowers 的设计理念——TDD、系统化调试、苏格拉底式探索等技能在 AWSL 中以 Guardian 形式内置，按角色自动注入。如果同时安装了 Superpowers，它们在各自的层面生效，互不干扰。
+
+### AWSL + Oh My Claude Code = 执行模式 × 流水线
+
+```
+┌─────────────────────────────────────────────────────┐
+│  OMC（执行模式层）                                    │
+│  Autopilot / Ultrapilot / Ecomode — 灵活选择        │
+│  ───────────────────────────────────────────────     │
+│  AWSL（流水线层）                                    │
+│  完整构建流水线：规划→执行→审查→验证→修复→提交        │
+└─────────────────────────────────────────────────────┘
+```
+
+| 层 | 工具 | 负责什么 |
+|---|---|---|
+| **执行** | OMC | 多种执行模式，智能模型路由，省 token |
+| **流水线** | AWSL | 端到端构建：拆任务、跑验证、自动修复、通宵队列 |
+
+**实际效果：** OMC 提供灵活的执行策略（快速/省钱/协作），AWSL 提供完整的质量保障管道（验证/审查/修复/恢复）。日常开发用 OMC 的 Ultrapilot 快速出活，正式构建用 AWSL 的全流水线确保质量。
+
+### AWSL + Claude Squad = 可视化 × 流水线
+
+Claude Squad 的 tmux TUI 可以用来**手动观察**多个 Claude 会话的实时输出，而 AWSL 通过 Dashboard 提供**自动化监控**。两者可以互补——Claude Squad 看实时终端，AWSL Dashboard 看全局进度。
+
+### 组合推荐
+
+| 场景 | 推荐组合 | 理由 |
+|------|---------|------|
+| **日常开发，追求速度** | OMC (Ultrapilot) + AWSL (Guardian) | 并行快速出活 + 方法论保质量 |
+| **正式构建，追求质量** | AWSL 全流水线 | 端到端质量保障，通宵无人值守 |
+| **学习和探索** | Superpowers | 最好的单会话方法论框架 |
+| **大型重构** | Superpowers + AWSL | Superpowers 探索方案 → AWSL 并行执行 |
+| **多项目管理** | AWSL + Claude Squad | Dashboard 全局监控 + tmux 看实时输出 |
+
+> **核心理念：AWSL 不试图替代生态中的任何工具。它专注于做好一件事——把 AI 编程从"一个人的独角戏"变成"一支团队的协作"，并在这个过程中确保质量。**
 
 ---
 
