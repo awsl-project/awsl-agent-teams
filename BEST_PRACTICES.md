@@ -241,8 +241,14 @@ Wave 2: task-2          ← 依赖 task-1，等 Wave 1 完成
 
 `verify` 命令（纯代码逻辑，不调 LLM）：
 - 提取 PLAN.md 中每个 task 的 verify 命令并执行
-- 自动检测并运行：`tsc --noEmit`、`npm test`、`eslint`
+- 按语言自动检测并运行对应的验证 provider：
+  - **Node.js / TypeScript：** `tsc --noEmit`、`npm run build`、`npm test`、`eslint`、`prettier --check`、`npm audit`
+  - **Python：** `pytest`、`mypy`、`ruff check`
+  - **Go：** `go vet`、`go test`
+  - **Rust：** `cargo clippy`、`cargo test`
+  - **自定义：** 从 `.planning/verify.json` 或 `.awsl.json` 加载用户自定义 provider
 - 输出 `.planning/VERIFICATION.md`（确定性检查结果）
+- 报告包含每项检查的耗时、通过率 %、总耗时、分阶段汇总
 
 **REVIEW.md vs VERIFICATION.md 分离：**
 
@@ -258,10 +264,91 @@ Wave 2: task-2          ← 依赖 task-1，等 Wave 1 完成
 - Auto-fix 循环只需要读取 VERIFICATION.md
 
 **验证器超时和缓存：**
-- TypeScript 类型检查：120 秒超时
-- 测试运行（npm test）：180 秒超时
-- ESLint：60 秒超时
+
+所有内置 provider 及其超时时间：
+
+| Provider | 命令 | 超时 | 语言 |
+|----------|------|------|------|
+| TypeScript | `tsc --noEmit` | 120s | Node.js / TS |
+| Build | `npm run build` / `cargo build` / `go build ./...` / `python setup.py build` | 180s | 多语言 |
+| Test (npm) | `npm test` | 180s | Node.js |
+| ESLint | `npx eslint .` | 60s | Node.js / TS |
+| Prettier | `npx prettier --check .` | 60s | Node.js / TS |
+| Audit | `npm audit --audit-level=moderate` | 30s | Node.js |
+| PythonTest | `python -m pytest` | 180s | Python |
+| Mypy | `python -m mypy .` | 120s | Python |
+| Ruff | `ruff check .` | 60s | Python |
+| GoVet | `go vet ./...` | 60s | Go |
+| GoTest | `go test ./...` | 180s | Go |
+| CargoClippy | `cargo clippy -- -D warnings` | 120s | Rust |
+| CargoTest | `cargo test` | 180s | Rust |
+| Custom | 用户自定义 | 用户自定义 | 任意 |
+
 - 重复运行 `awsl verify` 时，未变更的检查会使用缓存（5 分钟有效），跳过不必要的重新执行
+- 自定义 provider 有独立的超时设置和耗时统计
+
+### 自定义验证 provider
+
+除了内置 provider，你可以通过配置文件添加自定义验证步骤（如 E2E 测试、集成测试、安全扫描等）。
+
+**方式一：`.planning/verify.json`**
+
+在项目的 `.planning/` 目录下创建 `verify.json`：
+
+```json
+{
+  "providers": [
+    {
+      "name": "playwright-e2e",
+      "command": "npx playwright test",
+      "timeout": 300
+    },
+    {
+      "name": "integration-tests",
+      "command": "npm run test:integration",
+      "timeout": 240
+    },
+    {
+      "name": "security-scan",
+      "command": "npx snyk test",
+      "timeout": 60
+    }
+  ]
+}
+```
+
+**方式二：`.awsl.json`（项目根目录）**
+
+在 `.awsl.json` 中使用 `verify.providers` 键：
+
+```json
+{
+  "verify": {
+    "providers": [
+      {
+        "name": "playwright-e2e",
+        "command": "npx playwright test",
+        "timeout": 300
+      },
+      {
+        "name": "api-contract",
+        "command": "npx dredd",
+        "timeout": 120
+      }
+    ]
+  }
+}
+```
+
+**字段说明：**
+
+| 字段 | 必填 | 说明 |
+|------|------|------|
+| `name` | 是 | provider 名称（在报告中显示） |
+| `command` | 是 | 要执行的命令 |
+| `timeout` | 否 | 超时秒数（默认 60s） |
+
+自定义 provider 和内置 provider 一起运行，各自独立计时，结果统一输出到 `VERIFICATION.md`。
 
 ## 5. 自定义 Agent 团队
 
@@ -661,7 +748,7 @@ AWSL 在三个环节自动处理测试，大多数情况不需要额外操作。
 | 环节 | 谁做 | 做什么 |
 |------|------|--------|
 | 写代码时 | coder agent (TDD) | 自动先写失败测试 → 再写实现 → 确认通过 |
-| verify 阶段 | 代码自动执行 | 跑 PLAN.md 中每个 task 的 verify 命令 + `tsc --noEmit` + `npm test` + `eslint` |
+| verify 阶段 | 代码自动执行 | 跑 PLAN.md 中每个 task 的 verify 命令 + 多语言自动检测（Node.js/Python/Go/Rust）的全部 provider |
 | review 阶段 | reviewer agent | 检查测试覆盖率、边界用例是否遗漏 |
 
 **关键：** coder role 的 agent 会被注入 TDD 技能（RED-GREEN-REFACTOR），你在 goal 里写"实现用户注册 API"，agent **会自动先写测试再写实现**，不需要额外要求。
@@ -709,6 +796,17 @@ verify 字段决定了 `awsl verify` 能否自动跑测试。**必须是可执�
 | 确认类型无误 | `npx tsc --noEmit` |
 | 看看有没有 lint 问题 | `npx eslint src/routes/user.ts` |
 | 手动测试 API | `curl -s http://localhost:3000/health \| node -e "process.exit(JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')).status==='ok'?0:1)"` |
+
+**多语言 verify 示例：**
+
+| 语言 | verify 示例 | 说明 |
+|------|------------|------|
+| Node.js | `npm test -- user.test.ts` | 指定测试文件 |
+| TypeScript | `npx tsc --noEmit` | 类型检查 |
+| E2E (via verify.json) | `npx playwright test` | 需在 `.planning/verify.json` 中配置 provider |
+| Python | `python -m pytest tests/` | Python 测试 |
+| Go | `go test ./...` | Go 测试 |
+| Rust | `cargo test` | Rust 测试 |
 
 ### 测试框架建议
 
@@ -946,6 +1044,10 @@ awsl review --cwd /path/to    # 扫描指定目录
 | `no-hardcoded-secrets` | critical | 硬编码的密码/API key/token |
 | `file-too-long` | warning | 超过 500 行的文件 |
 | `no-tests` | critical | 项目没有任何测试文件 |
+| `unused-import` | warning | 未使用的 import 语句 |
+| `function-too-long` | warning | 函数体超过 50 行 |
+| `nesting-too-deep` | warning | 嵌套层级超过 4 层（if/for/while/switch） |
+| `duplicate-code` | warning | 连续 6 行以上的重复代码块 |
 
 输出格式：
 ```

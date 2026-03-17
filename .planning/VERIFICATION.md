@@ -1,6 +1,32 @@
 # Verification Report
 
-**Verification: 2 passed, 0 failed out of 2 checks.**
+**Verification: 6 passed, 0 failed out of 6 checks.**
+
+## Task Checks
+
+### [PASS] task_1: `npx tsc --noEmit`
+
+### [PASS] task_2: `npx tsc --noEmit`
+
+### [PASS] task_3: `npx tsc --noEmit`
+
+### [PASS] task_5: `npx tsx --test src/dashboard-agents.test.ts`
+```
+TAP version 13
+# ── Wave Detail Tests ──
+# ✓ testWaveTaskDetailShape
+# ✓ testWaveTaskDetailFailedWithError
+# ✓ testWaveTaskDetailVerifiedStatus
+# ✓ testWaveInfoEnrichmentWithTasks
+# ✓ testWaveInfoResultTruncation
+# ✓ testWaveStatusAllSuccess
+# ✓ testWaveStatusAllFailed
+# ✓ testWaveStatusPartialMixed
+# ✓ testWaveInfoBackwardCompatNoTasks
+# ✓ testWaveInfoMultipleWaves
+# ── Dashboard API Tests ──
+# [90m[00:38:55.396][0m [37m[dashboard][0m Loaded HTML from C:\\Users\\11421\\awsl-agent-teams\\pub
+```
 
 ## General Checks
 
@@ -10,9 +36,8 @@
 ```
 .planning/.dashboard.pid     |   2 +-
  .planning/.verify-cache.json |   4 +-
- .planning/CHECKPOINT.json    |  43 +++++++++++++++++++
- .planning/REVIEW.md          | 100 ++++++++-----------------------------------
- .planning/task_1-SUMMARY.md  |  24 +++--------
- src/runner.ts                |   5 ++-
- 6 files changed, 74 insertions(+), 104 deletions(-)
+ .planning/CHECKPOINT.json    |  43 ++++++++++--
+ .planning/REVIEW.md          | 159 +++++++++++++++++++++++++++++++++++++++----
+ .planning/task_7-SUMMARY.md  | 108 ++++++++++++++++++++++++-----
+ 5 files changed, 275 insertions(+), 41 deletions(-)
 ```

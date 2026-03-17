@@ -16,6 +16,7 @@ export interface VerifyItem {
 	command: string;
 	passed: boolean;
 	output: string;
+	durationMs: number;
 }
 
 export interface VerifyResult {
@@ -79,6 +80,7 @@ function computeCacheKey(cwd: string, extensions: string[]): string {
 // ─── Helper: Run a command synchronously ────────────────────
 
 function runCommand(taskId: string, command: string, cwd: string, timeoutMs: number): VerifyItem {
+	const start = Date.now();
 	try {
 		const output = execSync(command, {
 			cwd,
@@ -86,10 +88,12 @@ function runCommand(taskId: string, command: string, cwd: string, timeoutMs: num
 			timeout: timeoutMs,
 			stdio: ["pipe", "pipe", "pipe"],
 		});
-		return { taskId, command, passed: true, output: output.slice(0, 2000) };
+		const durationMs = Date.now() - start;
+		return { taskId, command, passed: true, output: output.slice(0, 2000), durationMs };
 	} catch (e: any) {
+		const durationMs = Date.now() - start;
 		const output = (e.stdout ?? "") + (e.stderr ?? "");
-		return { taskId, command, passed: false, output: output.slice(0, 2000) };
+		return { taskId, command, passed: false, output: output.slice(0, 2000), durationMs };
 	}
 }
 
@@ -182,6 +186,7 @@ const GitDiffProvider: VerifyProvider = {
 		return true;
 	},
 	async execute(cwd: string): Promise<VerifyItem[]> {
+		const start = Date.now();
 		try {
 			let diffCmd: string;
 			try {
@@ -193,13 +198,240 @@ const GitDiffProvider: VerifyProvider = {
 			const diff = execSync(diffCmd, {
 				cwd, encoding: "utf-8", timeout: this.timeout, stdio: ["pipe", "pipe", "pipe"],
 			}).trim();
+			const durationMs = Date.now() - start;
 			if (diff) {
-				return [{ taskId: "git-diff", command: "git diff --stat", passed: true, output: diff }];
+				return [{ taskId: "git-diff", command: "git diff --stat", passed: true, output: diff, durationMs }];
 			}
 		} catch { /* not a git repo or no commits */ }
 		return [];
 	},
 };
+
+// ─── Build Provider ──────────────────────────────────────────
+
+const BuildProvider: VerifyProvider = {
+	name: "build",
+	timeout: 180_000,
+	detect(cwd: string): boolean {
+		// Node.js: package.json with scripts.build
+		const pkgPath = path.join(cwd, "package.json");
+		if (fs.existsSync(pkgPath)) {
+			try {
+				const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
+				if (pkg.scripts?.build) return true;
+			} catch { /* ignore */ }
+		}
+		// Rust, Go, Python
+		if (fs.existsSync(path.join(cwd, "Cargo.toml"))) return true;
+		if (fs.existsSync(path.join(cwd, "go.mod"))) return true;
+		if (fs.existsSync(path.join(cwd, "setup.py"))) return true;
+		if (fs.existsSync(path.join(cwd, "pyproject.toml"))) return true;
+		return false;
+	},
+	async execute(cwd: string): Promise<VerifyItem[]> {
+		// Use first match
+		const pkgPath = path.join(cwd, "package.json");
+		if (fs.existsSync(pkgPath)) {
+			try {
+				const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
+				if (pkg.scripts?.build) {
+					log.info("verify", "Running: npm run build");
+					return [runCommand("build", "npm run build", cwd, this.timeout)];
+				}
+			} catch { /* ignore */ }
+		}
+		if (fs.existsSync(path.join(cwd, "Cargo.toml"))) {
+			log.info("verify", "Running: cargo build");
+			return [runCommand("build", "cargo build", cwd, this.timeout)];
+		}
+		if (fs.existsSync(path.join(cwd, "go.mod"))) {
+			log.info("verify", "Running: go build ./...");
+			return [runCommand("build", "go build ./...", cwd, this.timeout)];
+		}
+		if (fs.existsSync(path.join(cwd, "setup.py")) || fs.existsSync(path.join(cwd, "pyproject.toml"))) {
+			log.info("verify", "Running: python setup.py build");
+			return [runCommand("build", "python setup.py build", cwd, this.timeout)];
+		}
+		return [];
+	},
+};
+
+// ─── Prettier Provider ──────────────────────────────────────
+
+const PrettierProvider: VerifyProvider = {
+	name: "prettier",
+	timeout: 60_000,
+	detect(cwd: string): boolean {
+		const configs = [
+			".prettierrc", ".prettierrc.js", ".prettierrc.json", ".prettierrc.yml",
+			"prettier.config.js", "prettier.config.mjs", "prettier.config.cjs",
+		];
+		return configs.some(c => fs.existsSync(path.join(cwd, c)));
+	},
+	async execute(cwd: string): Promise<VerifyItem[]> {
+		log.info("verify", "Running: npx prettier --check .");
+		return [runCommand("prettier", "npx prettier --check .", cwd, this.timeout)];
+	},
+};
+
+// ─── Audit Provider ─────────────────────────────────────────
+
+const AuditProvider: VerifyProvider = {
+	name: "audit",
+	timeout: 30_000,
+	detect(cwd: string): boolean {
+		return fs.existsSync(path.join(cwd, "package-lock.json"));
+	},
+	async execute(cwd: string): Promise<VerifyItem[]> {
+		log.info("verify", "Running: npm audit --audit-level=moderate");
+		return [runCommand("audit", "npm audit --audit-level=moderate", cwd, this.timeout)];
+	},
+};
+
+// ─── Python Providers ───────────────────────────────────────
+
+const PythonTestProvider: VerifyProvider = {
+	name: "pytest",
+	timeout: 180_000,
+	detect(cwd: string): boolean {
+		if (fs.existsSync(path.join(cwd, "pytest.ini"))) return true;
+		if (fs.existsSync(path.join(cwd, "pyproject.toml"))) return true;
+		// Check for any test_*.py files
+		try {
+			const entries = fs.readdirSync(cwd);
+			return entries.some(e => /^test_.*\.py$/.test(e));
+		} catch { return false; }
+	},
+	async execute(cwd: string): Promise<VerifyItem[]> {
+		log.info("verify", "Running: python -m pytest");
+		return [runCommand("pytest", "python -m pytest", cwd, this.timeout)];
+	},
+};
+
+const MypyProvider: VerifyProvider = {
+	name: "mypy",
+	timeout: 120_000,
+	detect(cwd: string): boolean {
+		return fs.existsSync(path.join(cwd, "mypy.ini")) || fs.existsSync(path.join(cwd, ".mypy.ini"));
+	},
+	async execute(cwd: string): Promise<VerifyItem[]> {
+		log.info("verify", "Running: python -m mypy .");
+		return [runCommand("mypy", "python -m mypy .", cwd, this.timeout)];
+	},
+};
+
+const RuffProvider: VerifyProvider = {
+	name: "ruff",
+	timeout: 60_000,
+	detect(cwd: string): boolean {
+		if (fs.existsSync(path.join(cwd, "ruff.toml"))) return true;
+		// Check pyproject.toml for ruff config
+		const pyprojectPath = path.join(cwd, "pyproject.toml");
+		if (fs.existsSync(pyprojectPath)) {
+			try {
+				const content = fs.readFileSync(pyprojectPath, "utf-8");
+				return content.includes("[tool.ruff]");
+			} catch { return false; }
+		}
+		return false;
+	},
+	async execute(cwd: string): Promise<VerifyItem[]> {
+		log.info("verify", "Running: ruff check .");
+		return [runCommand("ruff", "ruff check .", cwd, this.timeout)];
+	},
+};
+
+// ─── Go Providers ───────────────────────────────────────────
+
+const GoVetProvider: VerifyProvider = {
+	name: "go-vet",
+	timeout: 60_000,
+	detect(cwd: string): boolean {
+		return fs.existsSync(path.join(cwd, "go.mod"));
+	},
+	async execute(cwd: string): Promise<VerifyItem[]> {
+		log.info("verify", "Running: go vet ./...");
+		return [runCommand("go-vet", "go vet ./...", cwd, this.timeout)];
+	},
+};
+
+const GoTestProvider: VerifyProvider = {
+	name: "go-test",
+	timeout: 180_000,
+	detect(cwd: string): boolean {
+		return fs.existsSync(path.join(cwd, "go.mod"));
+	},
+	async execute(cwd: string): Promise<VerifyItem[]> {
+		log.info("verify", "Running: go test ./...");
+		return [runCommand("go-test", "go test ./...", cwd, this.timeout)];
+	},
+};
+
+// ─── Rust Providers ─────────────────────────────────────────
+
+const CargoClippyProvider: VerifyProvider = {
+	name: "cargo-clippy",
+	timeout: 120_000,
+	detect(cwd: string): boolean {
+		return fs.existsSync(path.join(cwd, "Cargo.toml"));
+	},
+	async execute(cwd: string): Promise<VerifyItem[]> {
+		log.info("verify", "Running: cargo clippy -- -D warnings");
+		return [runCommand("cargo-clippy", "cargo clippy -- -D warnings", cwd, this.timeout)];
+	},
+};
+
+const CargoTestProvider: VerifyProvider = {
+	name: "cargo-test",
+	timeout: 180_000,
+	detect(cwd: string): boolean {
+		return fs.existsSync(path.join(cwd, "Cargo.toml"));
+	},
+	async execute(cwd: string): Promise<VerifyItem[]> {
+		log.info("verify", "Running: cargo test");
+		return [runCommand("cargo-test", "cargo test", cwd, this.timeout)];
+	},
+};
+
+// ─── Custom Provider Config ─────────────────────────────────
+
+interface CustomProviderConfig {
+	name: string;
+	command: string;
+	timeout?: number;
+}
+
+function loadCustomProviders(cwd: string): VerifyProvider[] {
+	// Try .planning/verify.json first
+	const verifyJsonPath = path.join(cwd, ".planning", "verify.json");
+	if (fs.existsSync(verifyJsonPath)) {
+		try {
+			const data = JSON.parse(fs.readFileSync(verifyJsonPath, "utf-8"));
+			const providers = data.providers as CustomProviderConfig[];
+			if (Array.isArray(providers)) {
+				return providers.map(p => new CommandProvider(p.name, p.command, p.timeout ?? 60_000));
+			}
+		} catch {
+			log.warn("verify", "Failed to parse .planning/verify.json");
+		}
+	}
+
+	// Fallback to .awsl.json
+	const awslJsonPath = path.join(cwd, ".awsl.json");
+	if (fs.existsSync(awslJsonPath)) {
+		try {
+			const data = JSON.parse(fs.readFileSync(awslJsonPath, "utf-8"));
+			const providers = data.verify?.providers as CustomProviderConfig[] | undefined;
+			if (Array.isArray(providers)) {
+				return providers.map(p => new CommandProvider(p.name, p.command, p.timeout ?? 60_000));
+			}
+		} catch {
+			log.warn("verify", "Failed to parse .awsl.json");
+		}
+	}
+
+	return [];
+}
 
 class CommandProvider implements VerifyProvider {
 	name: string;
@@ -224,8 +456,18 @@ class CommandProvider implements VerifyProvider {
 /** All built-in general-check providers. */
 const GENERAL_PROVIDERS: VerifyProvider[] = [
 	TypeScriptProvider,
+	BuildProvider,
 	TestProvider,
 	ESLintProvider,
+	PrettierProvider,
+	AuditProvider,
+	PythonTestProvider,
+	MypyProvider,
+	RuffProvider,
+	GoVetProvider,
+	GoTestProvider,
+	CargoClippyProvider,
+	CargoTestProvider,
 	GitDiffProvider,
 ];
 
@@ -269,6 +511,7 @@ function extractVerifyCommands(planContent: string): { taskId: string; command: 
  */
 export async function runFullVerification(cwd: string): Promise<VerifyResult> {
 	log.section("Verification (Code-Based)");
+	const startTime = Date.now();
 
 	const planPath = path.join(cwd, ".planning", "PLAN.md");
 	const items: VerifyItem[] = [];
@@ -290,8 +533,10 @@ export async function runFullVerification(cwd: string): Promise<VerifyResult> {
 
 	// General checks — detect applicable providers, run in parallel
 	const activeProviders = GENERAL_PROVIDERS.filter(p => p.detect(cwd));
+	const customProviders = loadCustomProviders(cwd);
+	const allProviders = [...activeProviders, ...customProviders];
 	const settled = await Promise.allSettled(
-		activeProviders.map(p => p.execute(cwd))
+		allProviders.map(p => p.execute(cwd))
 	);
 
 	const generalChecks: VerifyItem[] = [];
@@ -301,27 +546,31 @@ export async function runFullVerification(cwd: string): Promise<VerifyResult> {
 			generalChecks.push(...result.value);
 		} else {
 			// Provider threw — record as failure
-			const provider = activeProviders[i];
+			const provider = allProviders[i];
 			generalChecks.push({
 				taskId: provider.name,
 				command: `(provider: ${provider.name})`,
 				passed: false,
 				output: String(result.reason).slice(0, 2000),
+				durationMs: 0,
 			});
 		}
 	}
 
 	// Summary
+	const totalMs = Date.now() - startTime;
 	const allItems = [...items, ...generalChecks];
 	const passCount = allItems.filter(i => i.passed).length;
 	const failCount = allItems.filter(i => !i.passed).length;
 	const passed = failCount === 0;
+	const passRate = allItems.length > 0 ? ((passCount / allItems.length) * 100).toFixed(1) : "0.0";
+	const totalSec = (totalMs / 1000).toFixed(1);
 
-	const summary = `Verification: ${passCount} passed, ${failCount} failed out of ${allItems.length} checks.`;
+	const summary = `Verification: ${passCount}/${allItems.length} passed (${passRate}%) in ${totalSec}s`;
 	log.info("verify", summary);
 
 	// Write report
-	const report = formatReport(items, generalChecks, summary);
+	const report = formatReport(items, generalChecks, summary, totalMs);
 	const verifyPath = path.join(cwd, ".planning", "VERIFICATION.md");
 	atomicWriteFileSync(verifyPath, report);
 	log.info("verify", "Report saved to .planning/VERIFICATION.md");
@@ -413,6 +662,147 @@ export function runStaticReview(cwd: string): ReviewResult {
 			}
 		}
 
+		// Rule: unused imports
+		for (let i = 0; i < lines.length; i++) {
+			const line = lines[i];
+			// Skip type-only imports and side-effect imports
+			if (/^\s*import\s+type\b/.test(line)) continue;
+			if (/^\s*import\s+["']/.test(line)) continue;
+
+			// Named imports: import { X, Y, Z } from "..."
+			const namedMatch = line.match(/^\s*import\s*\{([^}]+)\}\s*from\b/);
+			if (namedMatch) {
+				const identifiers = namedMatch[1].split(",").map(s => {
+					const parts = s.trim().split(/\s+as\s+/);
+					return (parts[1] ?? parts[0]).trim();
+				}).filter(Boolean);
+				const restOfFile = lines.filter((_, idx) => idx !== i).join("\n");
+				for (const id of identifiers) {
+					if (id && !new RegExp(`\\b${id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(restOfFile)) {
+						findings.push({
+							file: relPath, line: i + 1, severity: "warning",
+							rule: "unused-import", message: `Unused import: \`${id}\``,
+						});
+					}
+				}
+				continue;
+			}
+
+			// Default imports: import X from "..."
+			const defaultMatch = line.match(/^\s*import\s+(\w+)\s+from\b/);
+			if (defaultMatch) {
+				const id = defaultMatch[1];
+				const restOfFile = lines.filter((_, idx) => idx !== i).join("\n");
+				if (!new RegExp(`\\b${id}\\b`).test(restOfFile)) {
+					findings.push({
+						file: relPath, line: i + 1, severity: "warning",
+						rule: "unused-import", message: `Unused import: \`${id}\``,
+					});
+				}
+			}
+		}
+
+		// Rule: function too long (>50 lines)
+		for (let i = 0; i < lines.length; i++) {
+			const line = lines[i];
+			let funcName: string | null = null;
+
+			// Detect function start patterns
+			const funcDeclMatch = line.match(/^\s*(?:export\s+)?(?:async\s+)?function\s+(\w+)\s*\(/);
+			const constFuncMatch = line.match(/^\s*(?:export\s+)?const\s+(\w+)\s*=\s*(?:async\s+)?\(/);
+			const methodMatch = line.match(/^\s+(\w+)\s*\(/);
+
+			if (funcDeclMatch) funcName = funcDeclMatch[1];
+			else if (constFuncMatch) funcName = constFuncMatch[1];
+			else if (methodMatch && !line.trim().startsWith("//") && !line.trim().startsWith("*") && !line.trim().startsWith("if") && !line.trim().startsWith("for") && !line.trim().startsWith("while") && !line.trim().startsWith("switch") && !line.trim().startsWith("return") && !line.trim().startsWith("throw")) funcName = methodMatch[1];
+
+			if (funcName && line.includes("{")) {
+				// Track brace depth from this line
+				let depth = 0;
+				let foundOpen = false;
+				for (let j = i; j < lines.length; j++) {
+					for (const ch of lines[j]) {
+						if (ch === "{") { depth++; foundOpen = true; }
+						if (ch === "}") depth--;
+					}
+					if (foundOpen && depth === 0) {
+						const span = j - i + 1;
+						if (span > 50) {
+							findings.push({
+								file: relPath, line: i + 1, severity: "warning",
+								rule: "function-too-long", message: `Function \`${funcName}\` is ${span} lines long (max 50)`,
+							});
+						}
+						break;
+					}
+				}
+			}
+		}
+
+		// Rule: nesting too deep (>4 levels)
+		{
+			let depth = 0;
+			let reported = false;
+			for (let i = 0; i < lines.length; i++) {
+				const trimmed = lines[i].trim();
+				if (!trimmed || trimmed.startsWith("//") || trimmed.startsWith("*")) continue;
+				for (const ch of lines[i]) {
+					if (ch === "{") depth++;
+					if (ch === "}") { depth--; if (depth <= 4) reported = false; }
+				}
+				if (depth > 4 && !reported) {
+					findings.push({
+						file: relPath, line: i + 1, severity: "warning",
+						rule: "nesting-too-deep", message: `Nesting depth exceeds 4 levels (depth: ${depth})`,
+					});
+					reported = true;
+				}
+			}
+		}
+
+		// Rule: duplicate code blocks (6+ consecutive identical lines)
+		{
+			const normalized = lines.map(l => l.trim());
+			const nonEmptyIndices = normalized.map((l, i) => ({ l, i })).filter(x => x.l.length > 0);
+			const SEQ_LEN = 6;
+			const reportedDups = new Set<string>();
+
+			for (let a = 0; a < nonEmptyIndices.length - SEQ_LEN + 1; a++) {
+				// Check if indices are consecutive in the original file
+				let consecutiveA = true;
+				for (let k = 1; k < SEQ_LEN; k++) {
+					if (nonEmptyIndices[a + k].i !== nonEmptyIndices[a + k - 1].i + 1) { consecutiveA = false; break; }
+				}
+				if (!consecutiveA) continue;
+
+				const seqA = nonEmptyIndices.slice(a, a + SEQ_LEN).map(x => x.l);
+				const seqKey = seqA.join("\n");
+				if (reportedDups.has(seqKey)) continue;
+
+				for (let b = a + SEQ_LEN; b < nonEmptyIndices.length - SEQ_LEN + 1; b++) {
+					let consecutiveB = true;
+					for (let k = 1; k < SEQ_LEN; k++) {
+						if (nonEmptyIndices[b + k].i !== nonEmptyIndices[b + k - 1].i + 1) { consecutiveB = false; break; }
+					}
+					if (!consecutiveB) continue;
+
+					const seqB = nonEmptyIndices.slice(b, b + SEQ_LEN).map(x => x.l);
+					let match = true;
+					for (let k = 0; k < SEQ_LEN; k++) {
+						if (seqA[k] !== seqB[k]) { match = false; break; }
+					}
+					if (match) {
+						reportedDups.add(seqKey);
+						findings.push({
+							file: relPath, line: nonEmptyIndices[b].i + 1, severity: "info",
+							rule: "duplicate-code", message: `Duplicate code block (${SEQ_LEN}+ lines), same as line ${nonEmptyIndices[a].i + 1}`,
+						});
+						break; // Only report first duplicate
+					}
+				}
+			}
+		}
+
 		// Rule: file too long
 		if (lines.length > 500) {
 			findings.push({
@@ -480,7 +870,20 @@ function findSourceFiles(dir: string): string[] {
 }
 
 function formatReviewReport(findings: ReviewFinding[], summary: string): string {
-	const lines = ["# Static Code Review\n", `**${summary}**\n`];
+	const criticalCount = findings.filter(f => f.severity === "critical").length;
+	const warningCount = findings.filter(f => f.severity === "warning").length;
+	const infoCount = findings.filter(f => f.severity === "info").length;
+	const fileCount = new Set(findings.map(f => f.file)).size || 0;
+
+	const statusLabel = criticalCount > 0
+		? `FAIL — ${criticalCount} critical finding${criticalCount > 1 ? "s" : ""}`
+		: "PASS — no critical findings";
+
+	const lines = [
+		"# Static Code Review\n",
+		`**Summary:** ${criticalCount} critical, ${warningCount} warnings, ${infoCount} info across ${fileCount} files`,
+		`**Status:** ${statusLabel}\n`,
+	];
 
 	const bySeverity = { critical: [] as ReviewFinding[], warning: [] as ReviewFinding[], info: [] as ReviewFinding[] };
 	for (const f of findings) {
@@ -501,14 +904,26 @@ function formatReviewReport(findings: ReviewFinding[], summary: string): string 
 
 // ─── Report Formatting ──────────────────────────────────────
 
-function formatReport(items: VerifyItem[], generalChecks: VerifyItem[], summary: string): string {
-	const lines = ["# Verification Report\n", `**${summary}**\n`];
+function formatReport(items: VerifyItem[], generalChecks: VerifyItem[], summary: string, totalMs: number): string {
+	const allItems = [...items, ...generalChecks];
+	const passCount = allItems.filter(i => i.passed).length;
+	const total = allItems.length;
+	const passRate = total > 0 ? ((passCount / total) * 100).toFixed(1) : "0.0";
+	const totalSec = (totalMs / 1000).toFixed(1);
+
+	const lines = [
+		"# Verification Report\n",
+		`**Summary:** ${passCount}/${total} passed (${passRate}% pass rate)`,
+		`**Total time:** ${totalSec}s`,
+		`**Generated:** ${new Date().toISOString()}\n`,
+	];
 
 	if (items.length > 0) {
 		lines.push("## Task Checks\n");
 		for (const item of items) {
 			const icon = item.passed ? "PASS" : "FAIL";
-			lines.push(`### [${icon}] ${item.taskId}: \`${item.command}\``);
+			const dur = (item.durationMs / 1000).toFixed(1);
+			lines.push(`### [${icon}] ${item.taskId}: \`${item.command}\` (${dur}s)`);
 			if (item.output) {
 				lines.push("```");
 				lines.push(item.output.slice(0, 500));
@@ -516,13 +931,20 @@ function formatReport(items: VerifyItem[], generalChecks: VerifyItem[], summary:
 			}
 			lines.push("");
 		}
+
+		const taskPass = items.filter(i => i.passed).length;
+		const taskTotal = items.length;
+		const taskRate = taskTotal > 0 ? ((taskPass / taskTotal) * 100).toFixed(1) : "0.0";
+		const taskTime = (items.reduce((sum, i) => sum + i.durationMs, 0) / 1000).toFixed(1);
+		lines.push(`> Task checks: ${taskPass}/${taskTotal} passed (${taskRate}%) in ${taskTime}s\n`);
 	}
 
 	if (generalChecks.length > 0) {
 		lines.push("## General Checks\n");
 		for (const item of generalChecks) {
 			const icon = item.passed ? "PASS" : "FAIL";
-			lines.push(`### [${icon}] ${item.taskId}: \`${item.command}\``);
+			const dur = (item.durationMs / 1000).toFixed(1);
+			lines.push(`### [${icon}] ${item.taskId}: \`${item.command}\` (${dur}s)`);
 			if (item.output) {
 				lines.push("```");
 				lines.push(item.output.slice(0, 500));
@@ -530,6 +952,12 @@ function formatReport(items: VerifyItem[], generalChecks: VerifyItem[], summary:
 			}
 			lines.push("");
 		}
+
+		const genPass = generalChecks.filter(i => i.passed).length;
+		const genTotal = generalChecks.length;
+		const genRate = genTotal > 0 ? ((genPass / genTotal) * 100).toFixed(1) : "0.0";
+		const genTime = (generalChecks.reduce((sum, i) => sum + i.durationMs, 0) / 1000).toFixed(1);
+		lines.push(`> General checks: ${genPass}/${genTotal} passed (${genRate}%) in ${genTime}s\n`);
 	}
 
 	return lines.join("\n");

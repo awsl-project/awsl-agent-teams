@@ -1,215 +1,261 @@
 # Execution Plan
 
-## task_1: Add WaveTaskDetail type and enrich WaveInfo
-- **Assignee:** coder
-- **Files:** src/history.ts, src/orchestrator.ts, src/index.ts
+## task-1: Add durationMs + new providers to verify.ts
+- **Role:** coder
+- **Dependencies:** (none)
+- **Files:** src/verify.ts
+- **Action:**
 
-### Action
-1. In src/history.ts, add a new interface BEFORE WaveInfo:
+Make the following changes to `src/verify.ts`:
 
-export interface WaveTaskDetail {
-	id: string;
-	description: string;
-	assignee: string;
-	status: "done" | "failed" | "verified";
-	files?: string[];
-	/** One-line result summary (truncated to 200 chars) */
-	result?: string;
-	/** Error message if failed */
-	error?: string;
+### 1. Add `durationMs` to VerifyItem interface
+```typescript
+export interface VerifyItem {
+	taskId: string;
+	command: string;
+	passed: boolean;
+	output: string;
+	durationMs: number;  // NEW
 }
+```
 
-2. In src/history.ts, add two new optional fields to the existing WaveInfo interface:
-  - tasks?: WaveTaskDetail[];   (enriched per-task details)
-  - status?: "success" | "partial" | "failed";  (wave-level status)
+### 2. Modify `runCommand` to track timing
+Wrap the execSync call with `Date.now()` before/after to compute durationMs. Return it in the VerifyItem.
 
-3. In src/orchestrator.ts, REMOVE the duplicate WaveInfo interface (lines 74-79). Add an import of WaveInfo from './history.js' instead. The Task interface (lines 58-72) and TeamResult (line 81+) stay in orchestrator.ts.
+### 3. Add BuildProvider
+Detects build capability and runs the appropriate build command:
+- Node.js: check `package.json` for `scripts.build`, run `npm run build`
+- Rust: check for `Cargo.toml`, run `cargo build`
+- Go: check for `go.mod`, run `go build ./...`
+- Python: check for `setup.py` or `pyproject.toml` with `[build-system]`, run `python -m build` or `python setup.py build`
 
-4. In src/index.ts line 8, remove 'type WaveInfo' from the orchestrator.ts export. Add 'type WaveTaskDetail' to the history.ts export on line 31. Make sure WaveInfo is still exported (it already is from history.ts line 31 as HistoryWaveInfo — also add a plain WaveInfo export from history.ts).
+Priority: check in order, use first match. Timeout: 180_000.
 
-Specifically for index.ts line 8: remove ', type WaveInfo' from that export line.
-For index.ts line 31: change to export { ..., type WaveInfo, type WaveTaskDetail, type WaveInfo as HistoryWaveInfo } from './history.js';
+### 4. Add PrettierProvider
+Detect prettier config files: `.prettierrc`, `.prettierrc.js`, `.prettierrc.json`, `.prettierrc.yml`, `prettier.config.js`, `prettier.config.mjs`, `prettier.config.cjs`.
+Run: `npx prettier --check .`
+Timeout: 60_000.
 
-### Verify
-npx tsc --noEmit
+### 5. Add AuditProvider
+Detect: `package-lock.json` exists (npm audit requires it).
+Run: `npm audit --audit-level=moderate`
+Timeout: 30_000.
 
-### Done
-WaveTaskDetail interface exists in history.ts, WaveInfo has tasks? and status? fields, no duplicate WaveInfo in orchestrator.ts, all exports correct, tsc passes
+### 6. Add Python providers
+**PythonTestProvider:**
+- Detect: `pytest.ini`, `setup.cfg` with `[tool:pytest]`, `pyproject.toml`, or any `test_*.py` / `*_test.py` files
+- Run: `python -m pytest`
+- Timeout: 180_000
 
-## task_2: Populate enriched WaveInfo in orchestrator
-- **Assignee:** coder
-- **Dependencies:** task_1
-- **Files:** src/orchestrator.ts
+**MypyProvider:**
+- Detect: `mypy.ini`, `.mypy.ini`, `setup.cfg`, or `pyproject.toml`
+- Run: `python -m mypy .`
+- Timeout: 120_000
 
-### Action
-In src/orchestrator.ts, modify the waveInfos.push() block at ~line 787 (after 'Record wave execution info' comment). Replace the existing push with:
+**RuffProvider:**
+- Detect: `ruff.toml` or `pyproject.toml`
+- Run: `ruff check .`
+- Timeout: 60_000
 
-1. Import WaveTaskDetail from './history.js' (add to existing WaveInfo import).
+### 7. Add Go providers
+**GoVetProvider:**
+- Detect: `go.mod` exists
+- Run: `go vet ./...`
+- Timeout: 60_000
 
-2. Build WaveTaskDetail array from the wave tasks:
-const waveTaskDetails: WaveTaskDetail[] = wave.map(t => ({
-	id: t.id,
-	description: t.description,
-	assignee: t.assignee,
-	status: t.status as "done" | "failed" | "verified",
-	files: t.files,
-	result: t.result ? t.result.slice(0, 200) : undefined,
-	error: t.error ? t.error.slice(0, 200) : undefined,
-}));
+**GoTestProvider:**
+- Detect: `go.mod` exists
+- Run: `go test ./...`
+- Timeout: 180_000
 
-3. Compute wave-level status:
-const allDone = wave.every(t => t.status === "done" || t.status === "verified");
-const allFailed = wave.every(t => t.status === "failed");
-const waveStatus = allDone ? "success" as const : allFailed ? "failed" as const : "partial" as const;
+### 8. Add Rust providers
+**CargoClippyProvider:**
+- Detect: `Cargo.toml` exists
+- Run: `cargo clippy -- -D warnings`
+- Timeout: 120_000
 
-4. Add tasks and status to the push:
-waveInfos.push({
-	wave: wi + 1,
-	taskIds: wave.map(t => t.id),
-	agents: waveAgents,
-	parallel: wave.length,
-	tasks: waveTaskDetails,
-	status: waveStatus,
-});
+**CargoTestProvider:**
+- Detect: `Cargo.toml` exists
+- Run: `cargo test`
+- Timeout: 180_000
 
-### Verify
-npx tsc --noEmit
+### 9. Add CustomProvider config support
+Read custom verify commands from `.planning/verify.json` or `.awsl.json` in project root.
 
-### Done
-waveInfos.push() includes tasks array with WaveTaskDetail[] and status field, tsc passes
-
-## task_3: Add /api/history/:id/waves endpoint
-- **Assignee:** coder
-- **Dependencies:** task_1
-- **Files:** src/dashboard.ts
-
-### Action
-In src/dashboard.ts, add a new route handler BEFORE the existing '/api/history' handler (before line 98). The new handler:
-
-if (url.pathname.startsWith("/api/history/") && url.pathname.endsWith("/waves")) {
-	const entryId = url.pathname.split("/")[3];
-	const data = loadHistory(cwd);
-	const entry = data.entries.find(e => e.id === entryId);
-	if (!entry) {
-		res.writeHead(404, { "Content-Type": "application/json" });
-		res.end(JSON.stringify({ error: "not found" }));
-	} else {
-		res.writeHead(200, { "Content-Type": "application/json" });
-		res.end(JSON.stringify({ id: entry.id, goal: entry.goal, waves: entry.waves ?? [] }));
-	}
-	return;
+Format for `.planning/verify.json`:
+```json
+{
+  "providers": [
+    { "name": "integration-test", "command": "npm run test:integration", "timeout": 300000 }
+  ]
 }
+```
 
-Also update the log.info line at ~line 683 that lists API endpoints to include /api/history/:id/waves.
+Format for `.awsl.json` (look for `verify.providers` key):
+```json
+{
+  "verify": {
+    "providers": [
+      { "name": "e2e", "command": "npx playwright test", "timeout": 300000 }
+    ]
+  }
+}
+```
 
-### Verify
-npx tsc --noEmit
+Add a function `loadCustomProviders(cwd: string): VerifyProvider[]` that reads these files, creates CommandProvider instances, and returns them.
 
-### Done
-GET /api/history/:id/waves returns wave details for a specific history entry, tsc passes
+### 10. Update GENERAL_PROVIDERS
+Add all new providers to the GENERAL_PROVIDERS array:
+```
+TypeScriptProvider, BuildProvider, TestProvider, ESLintProvider, PrettierProvider, AuditProvider,
+PythonTestProvider, MypyProvider, RuffProvider,
+GoVetProvider, GoTestProvider,
+CargoClippyProvider, CargoTestProvider,
+GitDiffProvider,
+```
 
-## task_4: Render wave task details in dashboard HTML
-- **Assignee:** coder
-- **Dependencies:** task_1
-- **Files:** public/dashboard.html
+In `runFullVerification`, after getting active general providers, also load custom providers and add them.
 
-### Action
-1. Add CSS styles after the existing .entry-wave styles (~line 431). Add:
+### 11. Fix all existing VerifyItem references
+All places that create VerifyItem objects must include `durationMs`. GitDiffProvider should track timing. The error fallback in runFullVerification should use `durationMs: 0`.
 
-.wave-tasks { margin: 4px 0 4px 56px; font-size: 10px; }
-.wave-task { display: flex; align-items: center; gap: 6px; padding: 1px 0; color: var(--ink3); }
-.wave-task-status { font-weight: 600; min-width: 14px; text-align: center; }
-.wave-task-status.done, .wave-task-status.verified { color: var(--green); }
-.wave-task-status.failed { color: var(--red); }
-.wave-task-desc { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wave-task-files { color: var(--ink4); font-size: 9px; }
-.wave-status-badge { font-size: 9px; padding: 0 4px; border-radius: 4px; font-weight: 600; }
-.wave-status-badge.success { background: var(--green); color: #fff; }
-.wave-status-badge.partial { background: var(--orange, #f0a030); color: #fff; }
-.wave-status-badge.failed { background: var(--red); color: #fff; }
+### Important constraints:
+- Keep the existing `VerifyProvider` interface unchanged
+- Keep existing cache logic for TypeScript/Test/ESLint providers
+- New providers do NOT need caching
+- Use the existing `runCommand` helper (now with durationMs)
+- For multi-language detect: use `fs.existsSync` for config files
 
-2. Modify the renderEntryWaves() function (~line 2193) to render per-task details when available. After rendering wave label + agent badges + parallel count, if w.tasks exists and has entries, render a .wave-tasks div containing each task:
-  - Status icon: checkmark for done/verified, X for failed
-  - Task description (truncated to 60 chars)
-  - Assignee badge
-  - Files count if available (e.g. '2 files')
-  - If failed and has error, show error text in red (truncated)
-  - If done and has result, show result text (truncated to 80 chars)
+- **Verify:** `npx tsc --noEmit`
+- **Done:** All new providers added, durationMs tracked, custom config supported, TypeScript compiles
 
-Also add the wave-level status badge next to the wave label if w.status exists.
+## task-2: Enhanced static review + better report format
+- **Role:** coder
+- **Dependencies:** task-1
+- **Files:** src/verify.ts
+- **Action:**
 
-The expanded card should show the task details — they should be visible by default (no extra click needed) since the user wants to see what each wave solved.
+After task-1 has been completed, make the following additional changes to `src/verify.ts`:
 
-### Verify
-Manual: open dashboard.html in browser, verify wave tasks render correctly
+### 1. Enhanced static review rules in `runStaticReview`
 
-### Done
-Dashboard shows per-task details under each wave: status icon, description, assignee, files, result/error
+Add these new rules to the file scanning loop:
 
-## task_5: Write unit tests for enriched WaveInfo
-- **Assignee:** tester
-- **Dependencies:** task_2, task_3
-- **Files:** src/dashboard-agents.test.ts
+**Unused imports detection:**
+- Parse import lines (both `import { X, Y } from` and `import X from` styles)
+- For each imported name, check if it appears elsewhere in the file content (not in the import line itself)
+- If not found, report as warning with rule `unused-import`
+- Skip `import type` lines and side-effect imports (`import "foo"`)
 
-### Action
-Add test cases (can be in a new test file or existing test file) that verify:
+**Function too long (>50 lines):**
+- Track function boundaries by counting brace depth
+- Match function start patterns: `function name(`, `name(` as method, `const name = (` arrow
+- Count lines from opening `{` to closing `}`
+- If body exceeds 50 lines, report as warning with rule `function-too-long`
 
-1. WaveTaskDetail interface shape: create a WaveTaskDetail object, verify all fields are set correctly.
+**Nesting too deep (>4 levels):**
+- Track `{` nesting depth line by line within functions
+- When depth exceeds 4, report as warning with rule `nesting-too-deep`
+- Only count code lines (skip comments and blanks)
 
-2. WaveInfo enrichment: create a WaveInfo with tasks[] populated, verify tasks array contains expected WaveTaskDetail entries with correct status, description, result truncation (>200 chars gets sliced).
+**Duplicate code blocks:**
+- Normalize lines (trim whitespace), find sequences of 6+ identical consecutive lines appearing 2+ times in the same file
+- Report as info with rule `duplicate-code`
 
-3. Wave status logic: test that:
-   - All done/verified tasks → status 'success'
-   - All failed tasks → status 'failed'
-   - Mixed → status 'partial'
+### 2. Better report format for `formatReport`
 
-4. Backward compatibility: WaveInfo without tasks field (old data) should still be valid.
+Update to include:
 
-Use node:test and node:assert/strict. Follow existing test conventions (see src/*.test.ts files for patterns).
+**Header:**
+```markdown
+# Verification Report
 
-### Verify
-npx tsx --test src/dashboard-agents.test.ts
+**Summary:** 8/10 passed (80.0% pass rate)
+**Total time:** 12.3s
+**Generated:** 2026-03-17T10:30:00Z
+```
 
-### Done
-All tests pass verifying WaveTaskDetail population, status computation, and backward compatibility
+**Per-item with timing:**
+```markdown
+### [PASS] typecheck: `npx tsc --noEmit` (2.1s)
+### [FAIL] test: `npm test` (5.3s)
+```
 
-## task_6: Update documentation
-- **Assignee:** coder
-- **Dependencies:** task_2, task_3, task_4
-- **Files:** README.md, README.zh-CN.md, BEST_PRACTICES.md
+**Stage summaries:**
+```markdown
+> Task checks: 3/4 passed (75.0%) in 4.2s
+> General checks: 5/6 passed (83.3%) in 8.1s
+```
 
-### Action
-Update all three documentation files to mention the new wave detail visibility feature:
+### 3. Update `formatReviewReport` to show pass/fail status prominently
 
-1. README.md — In the Dashboard section, mention that wave details now show per-task breakdown (description, status, files, result/error). Mention the new /api/history/:id/waves endpoint.
+### 4. Update `runFullVerification` summary
+Track total time with `Date.now()`. Change summary format:
+```
+Verification: 8/10 passed (80.0%) in 12.3s
+```
 
-2. README.zh-CN.md — Mirror the same changes in Chinese.
+- **Verify:** `npx tsc --noEmit`
+- **Done:** Static review has 4 new rules, reports show timing and pass rate
 
-3. BEST_PRACTICES.md — Add a note about how enriched wave data helps with debugging failed runs (you can see exactly which task in which wave failed and why).
+## task-3: Update README.md
+- **Role:** coder
+- **Dependencies:** task-1, task-2
+- **Files:** README.md
+- **Action:**
 
-Keep additions concise — 2-3 sentences each.
+Update README.md to document the enhanced verification system:
 
-### Verify
-Manual: review docs for accuracy
+1. **Self-healing row** in feature table: mention multi-language verification
+2. **Phase 3 description**: expand to show all provider types
+3. **Quality Gates section**: add rows for multi-language verification, custom providers, timed reports
+4. **CLI commands**: update verify command description
+5. **Any verification-related sections**: update provider list
 
-### Done
-All three docs updated with wave detail visibility feature description
+- **Verify:** grep -c "multi-language\|verify.json\|custom.*provider" README.md
+- **Done:** README.md documents all new verification features
 
-## task_7: Security and quality review
-- **Assignee:** reviewer
-- **Dependencies:** task_1, task_2, task_3, task_4
-- **Files:** src/history.ts, src/orchestrator.ts, src/dashboard.ts, public/dashboard.html
+## task-4: Update README.zh-CN.md
+- **Role:** coder
+- **Dependencies:** task-1, task-2
+- **Files:** README.zh-CN.md
+- **Action:**
 
-### Action
-Review all changed files for:
-1. XSS in dashboard.html — ensure all user-provided strings (task descriptions, results, errors) are escaped with esc() before rendering
-2. Path traversal in /api/history/:id/waves — ensure entryId is safely used (it's only used as array.find match, should be safe)
-3. Payload size — verify result/error truncation to 200 chars is enforced
-4. Backward compatibility — old WaveInfo without tasks field should not break anything
-5. Type safety — no unsafe casts, proper optional chaining
+Mirror README.md verification changes into Chinese version:
 
-### Verify
-npx tsc --noEmit
+1. **自愈能力行**: 提及多语言验证
+2. **阶段 3 描述**: 展示所有 provider 类型
+3. **质量门禁章节**: 添加多语言验证、自定义 provider、带计时报告
+4. **CLI 命令**: 更新 verify 命令描述
+5. **验证器 provider 章节**: 更新列表
 
-### Done
-All changes pass security review, no XSS/injection risks, proper escaping in HTML, types are sound
+- **Verify:** grep -c "多语言\|verify.json\|自定义.*provider" README.zh-CN.md
+- **Done:** README.zh-CN.md mirrors all English changes
+
+## task-5: Update BEST_PRACTICES.md
+- **Role:** coder
+- **Dependencies:** task-1, task-2
+- **Files:** BEST_PRACTICES.md
+- **Action:**
+
+Update BEST_PRACTICES.md with detailed verification guidance:
+
+1. **Verify command section** (~line 242): list all providers by language
+2. **New subsection**: custom verify providers with `.planning/verify.json` and `.awsl.json` examples
+3. **Timeout/cache table**: add all new providers' timeouts
+4. **Verify 字段怎么写**: add multi-language examples
+5. **使用场景 table**: update verify row with full provider list
+
+- **Verify:** grep -c "verify.json\|多语言\|Playwright" BEST_PRACTICES.md
+- **Done:** BEST_PRACTICES.md has comprehensive verification guidance
+
+## task-6: Build and type-check
+- **Role:** tester
+- **Dependencies:** task-1, task-2, task-3, task-4, task-5
+- **Files:** src/verify.ts
+- **Action:**
+1. `npx tsc --noEmit` — must pass with zero errors
+2. `npm run build` — must produce dist/ successfully
+If there are type errors, fix them in src/verify.ts.
+- **Verify:** `npx tsc --noEmit`
+- **Done:** Project builds with zero TypeScript errors

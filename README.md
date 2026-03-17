@@ -69,7 +69,7 @@ Both modes can run on existing local CLI sessions. CC Mode uses Claude Code's bu
 | **Fresh context per task** | Every agent gets a clean 200K token window. No context rot, no attention degradation |
 | **Crash recovery** | `.planning/` persists all state. Process dies → restart → resume from last checkpoint |
 | **Bisectable git history** | One atomic commit per completed task. `git bisect` works. Partial reverts work |
-| **Self-healing** | Test failure → auto-fix agent → re-verify (up to 3 rounds). Task failure → retry with error context (up to 2x) → replan with different approach |
+| **Self-healing** | Test failure → auto-fix agent → re-verify (up to 3 rounds). Task failure → retry with error context (up to 2x) → replan with different approach. Multi-language verification auto-detects your stack (TypeScript, Python, Go, Rust) |
 | **Spec compliance** | Reviewer→Fixer loop catches requirements that single-pass sessions miss. Benchmarks show terminal mode produces more spec-compliant code |
 | **No vendor lock-in** | Built-in engine supports any LLM provider (Anthropic, OpenAI, etc.). Claude Code engine uses your existing subscription |
 | **Customizable teams** | Drop a markdown file in `agents/` to create a domain expert. Frontend specialist, security reviewer, API expert — your team, your rules |
@@ -195,7 +195,7 @@ Phase 0b: Research      parallel agents analyze existing codebase
 Phase 1:  Plan          planner agent creates structured task DAG
 Phase 2:  Execute       coder/tester agents run in topological waves
   └─ Per-task review    after each coder task, reviewer reads actual git diff → blocks on critical findings
-Phase 3:  Verify        tsc/test/eslint → VERIFICATION.md  [skipped by --no-verify]
+Phase 3:  Verify        multi-language checks (build/test/lint/audit) → VERIFICATION.md  [skipped by --no-verify]
 Phase 3b: Auto-Fix      on failure → coder reads VERIFICATION.md → fixes → re-verify (max 3 rounds)  [skipped by --no-verify]
 Phase 4:  Re-plan       on task failure → retry 2x → replan with different approach
 ```
@@ -214,7 +214,10 @@ Phase 4:  Re-plan       on task failure → retry 2x → replan with different a
 | **Rate limit recovery** | Token limit hit → save checkpoint → exponential backoff (1m→2m→5m→10m→15m) → auto-retry (max 20) |
 | **Task queue (sleep mode)** | Queue multiple goals → `awsl queue start` → unattended sequential execution with auto rate-limit recovery |
 | **Flexible plan parsing** | Planner output parsed as JSON, XML, or markdown — robust against format variations from different models |
-| **Verify providers** | Parallel execution with per-provider timeouts (tsc 120s, tests 180s, eslint 60s) and 5-minute result caching |
+| **Verify providers** | Auto-detected per-language: **TypeScript** (tsc), **Node.js** (npm test, eslint, prettier, npm audit), **Python** (pytest, mypy, ruff), **Go** (go vet, go test, go build), **Rust** (cargo clippy, cargo test, cargo build). Parallel execution with per-provider timeouts (30s–180s) and 5-minute result caching |
+| **Custom verify providers** | Define project-specific checks in `.planning/verify.json` or `.awsl.json` — any command, custom timeout, custom name |
+| **Timed verification reports** | Per-check timing (durationMs), pass rate percentage, total verification time, and stage summaries in VERIFICATION.md |
+| **Static review rules** | Built-in detections: unused imports, function-too-long (>50 lines), nesting-too-deep (>4 levels), duplicate code (6+ identical consecutive lines) |
 | **Atomic file writes** | All state files (QUEUE.json, CHECKPOINT.json, HISTORY.json, VERIFICATION.md) written via temp-file + rename pattern, preventing corruption on crash |
 | **Queue file locking** | File-based mutex prevents concurrent read/write conflicts between dashboard API and queue executor |
 | **Real-time status push** | Task completion triggers immediate WebSocket status push instead of waiting for 30s polling interval |
@@ -246,8 +249,8 @@ Phase 4:  Re-plan       on task failure → retry 2x → replan with different a
 
 ```bash
 awsl validate          # Validate .planning/PLAN.md → compute waves
-awsl verify            # Run tests, lint, typecheck from PLAN.md
-awsl review            # Static code review (no LLM) — detect any, secrets, missing tests
+awsl verify            # Multi-language verification (auto-detects stack) + custom providers
+awsl review            # Static code review (no LLM) — unused imports, function-too-long, nesting-too-deep, duplicate code, secrets
 awsl lock              # Show current lock status
 awsl unlock [--force]  # Release lock
 awsl agents            # List available agents

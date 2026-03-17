@@ -69,7 +69,7 @@ AWSL 的架构将编排分为两个独立层：
 | **每任务全新上下文** | 每个智能体获得干净的 200K token 窗口。无上下文腐化，无注意力退化 |
 | **崩溃恢复** | `.planning/` 持久化所有状态。进程死掉 → 重启 → 从最后检查点恢复 |
 | **可二分查找的 Git 历史** | 每个完成的任务一次原子提交。`git bisect` 可用，部分回滚可用 |
-| **自愈能力** | 测试失败 → 自动修复智能体 → 重新验证（最多 3 轮）。任务失败 → 带错误上下文重试（最多 2 次）→ 换方案重规划 |
+| **自愈能力** | 多语言验证（TypeScript、Python、Rust、Go）+ 自定义 provider。测试失败 → 自动修复智能体 → 重新验证（最多 3 轮）。任务失败 → 带错误上下文重试（最多 2 次）→ 换方案重规划 |
 | **规格合规** | 审查者→修复者循环捕获单次会话遗漏的需求。基准测试显示终端模式产出更符合规格的代码 |
 | **无供应商锁定** | 内置引擎支持任意 LLM 提供商（Anthropic、OpenAI 等）。Claude Code 引擎使用你现有的订阅 |
 | **可定制团队** | 在 `agents/` 中放一个 markdown 文件即可创建领域专家。前端专家、安全审查者、API 专家 — 你的团队，你做主 |
@@ -195,7 +195,7 @@ awsl run "目标" --engine <claude-code|codex|builtin> [选项]
 阶段 1:  规划        规划师智能体创建结构化任务 DAG
 阶段 2:  执行        编码/测试智能体按拓扑序波次运行
   └─ 逐任务审查      每个编码任务完成后，审查者读取真实 git diff → 严重问题阻断提交
-阶段 3:  验证        tsc/test/eslint → VERIFICATION.md  [--no-verify 时跳过]
+阶段 3:  验证        多语言 provider（tsc/test/eslint/build/prettier/audit/pytest/mypy/ruff/go vet/go test/cargo clippy/cargo test/自定义）→ VERIFICATION.md  [--no-verify 时跳过]
 阶段 3b: 自动修复    失败 → 编码者读取 VERIFICATION.md → 修复 → 重新验证（最多 3 轮）  [--no-verify 时跳过]
 阶段 4:  重规划      任务失败 → 重试 2 次 → 换方案重新规划
 ```
@@ -214,7 +214,9 @@ awsl run "目标" --engine <claude-code|codex|builtin> [选项]
 | **限额自动恢复** | Token 限额 → 保存检查点 → 指数退避等待（1m→2m→5m→10m→15m）→ 自动重试（最多 20 次） |
 | **任务队列（睡前模式）** | 排队多个目标 → `awsl queue start` → 无人值守顺序执行，自带限额恢复 |
 | **灵活计划解析** | 规划师输出支持 JSON、XML、Markdown 三种格式 — 不同模型的格式差异也能正确解析 |
-| **验证器 provider** | 并行执行，每个 provider 独立超时（tsc 120s，测试 180s，eslint 60s），5 分钟结果缓存 |
+| **验证器 provider** | 并行执行，每个 provider 独立超时，5 分钟结果缓存。内置 provider：tsc（120s）、npm test（180s）、eslint（60s）、build（180s）、prettier（60s）、audit（30s）、pytest（180s）、mypy（120s）、ruff（60s）、go vet（60s）、go test（180s）、cargo clippy（120s）、cargo test（180s）。支持从 `.planning/verify.json` 或 `.awsl.json` 加载自定义 provider |
+| **静态审查规则** | `awsl review` 新增规则：未使用的 import 检测、函数过长检测（>50 行）、嵌套过深检测（>4 层）、重复代码块检测（6+ 行相同代码） |
+| **验证报告** | 每个检查项带耗时（durationMs）、通过率百分比、总验证耗时、分阶段汇总 |
 | **原子文件写入** | 所有状态文件通过临时文件 + 重命名模式写入，防止崩溃时文件损坏 |
 | **队列文件锁** | 基于文件的互斥锁，防止面板 API 和队列执行器同时读写冲突 |
 | **实时状态推送** | 任务完成后立即通过 WebSocket 推送状态，不再等待 30 秒轮询 |
@@ -246,8 +248,8 @@ awsl run "目标" --engine <claude-code|codex|builtin> [选项]
 
 ```bash
 awsl validate          # 验证 .planning/PLAN.md → 计算波次
-awsl verify            # 运行测试、lint、类型检查（来自 PLAN.md）
-awsl review            # 静态代码审查（无 LLM）— 检测 any、密钥、缺失测试
+awsl verify            # 运行多语言验证 provider（tsc、test、eslint、build、prettier、audit、pytest、mypy、ruff、go vet/test、cargo clippy/test、自定义），带计时报告
+awsl review            # 静态代码审查（无 LLM）— 检测 any、密钥、缺失测试、未使用 import、函数过长、嵌套过深、重复代码
 awsl lock              # 查看当前锁状态
 awsl unlock [--force]  # 释放锁
 awsl agents            # 列出可用智能体
@@ -1075,8 +1077,8 @@ awsl run "目标" --engine builtin --model anthropic:claude-sonnet-4-20250514
 
 # 质量工具
 awsl validate                # 解析 + 验证 PLAN.md → WAVES.md
-awsl verify                  # 运行测试、lint、类型检查
-awsl review                  # 静态分析（无 LLM）
+awsl verify                  # 运行多语言验证 provider（tsc/test/eslint/build/prettier/audit/pytest/mypy/ruff/go/cargo/自定义），带计时报告
+awsl review                  # 静态分析（无 LLM）— 含未使用 import、函数过长、嵌套过深、重复代码检测
 
 # 锁管理
 awsl lock                    # 查看锁状态
@@ -1170,6 +1172,10 @@ awsl remote stop                               # 停止后台客户端
 | `no-hardcoded-secrets` | 严重 | 硬编码的密码/API 密钥 |
 | `file-too-long` | 警告 | 超过 500 行的文件 |
 | `no-tests` | 严重 | 项目中无测试文件 |
+| `unused-import` | 警告 | 未使用的 import 语句 |
+| `function-too-long` | 警告 | 函数超过 50 行 |
+| `deep-nesting` | 警告 | 嵌套超过 4 层 |
+| `duplicate-code` | 警告 | 重复代码块（6+ 行相同代码） |
 
 ## 横向对比
 

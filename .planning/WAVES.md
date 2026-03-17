@@ -2,71 +2,41 @@
 
 ## Wave 1
 
-### task_1: Atomic write utility function
+### task-1: Add durationMs + new providers to verify.ts
 - **Role:** coder
-- **Files:** src/fs-utils.ts, src/index.ts
-
-### task_8: Cleanup pending commands on client disconnect
-- **Role:** coder
-- **Files:** src/relay.ts
+- **Files:** src/verify.ts
 
 ## Wave 2
 
-### task_2: Atomic writes in queue.ts
+### task-2: Enhanced static review + better report format
 - **Role:** coder
-- **After:** task_1
-- **Files:** src/queue.ts
-
-### task_3: Atomic writes in planning.ts and history.ts
-- **Role:** coder
-- **After:** task_1
-- **Files:** src/planning.ts, src/history.ts
-
-### task_4: Atomic writes in verify.ts and projects.ts refactor
-- **Role:** coder
-- **After:** task_1
-- **Files:** src/verify.ts, src/projects.ts
+- **After:** task-1
+- **Files:** src/verify.ts
 
 ## Wave 3
 
-### task_5: Queue file locking
+### task-3: Update README.md
 - **Role:** coder
-- **After:** task_2, task_1
-- **Files:** src/queue.ts, src/fs-utils.ts
+- **After:** task-1, task-2
+- **Files:** README.md
+
+### task-4: Update README.zh-CN.md
+- **Role:** coder
+- **After:** task-1, task-2
+- **Files:** README.zh-CN.md
+
+### task-5: Update BEST_PRACTICES.md
+- **Role:** coder
+- **After:** task-1, task-2
+- **Files:** BEST_PRACTICES.md
 
 ## Wave 4
 
-### task_6: Event-driven status push on task completion
-- **Role:** coder
-- **After:** task_5
-- **Files:** src/queue.ts, src/remote.ts
-
-## Wave 5
-
-### task_7: Full state sync on reconnect
-- **Role:** coder
-- **After:** task_6
-- **Files:** src/remote.ts
-
-## Wave 6
-
-### task_9: Delta sync for status messages
-- **Role:** coder
-- **After:** task_7
-- **Files:** src/remote.ts
-
-## Wave 7
-
-### task_10: Documentation update
-- **Role:** coder
-- **After:** task_5, task_6, task_8, task_9
-- **Files:** README.md, README.zh-CN.md, BEST_PRACTICES.md
-
-## File Conflict Resolutions
-
-- **task_1** and **task_5** serialized due to shared files: src/fs-utils.ts
-- **task_5** and **task_6** serialized due to shared files: src/queue.ts
+### task-6: Build and type-check
+- **Role:** tester
+- **After:** task-1, task-2, task-3, task-4, task-5
+- **Files:** src/verify.ts
 
 ---
-Total: 10 tasks in 7 waves
-Parallel tasks per wave: 2, 3, 1, 1, 1, 1, 1
+Total: 6 tasks in 4 waves
+Parallel tasks per wave: 1, 1, 3, 1
