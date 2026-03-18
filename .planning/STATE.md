@@ -7,6 +7,6 @@
 (none)
 
 ## Position
-- Goal: 我现在的远程面板看不到每个wave具体解决了啥
+- Goal: 兼容 Codex — 优化 Codex 作为 wave 引擎的体验
 - Tasks: 7/7 completed
 - Status: SUCCESS

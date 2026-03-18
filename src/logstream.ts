@@ -14,7 +14,7 @@ export interface LogLine {
 	timestamp: string;   // ISO string
 	taskId: string;      // e.g. "task_1" or "q_1"
 	agent: string;       // agent name
-	stream: "stdout" | "stderr";
+	stream: "stdout" | "stderr" | "event";
 	text: string;        // one line of output
 }
 

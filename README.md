@@ -177,7 +177,7 @@ awsl run "goal" --engine <claude-code|codex|builtin> [options]
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `--engine <type>` | auto | Execution engine: `claude-code`, `codex`, or `builtin` (`codex` is used only when explicitly set) |
+| `--engine <type>` | auto | Execution engine: `claude-code`, `codex`, or `builtin` (auto-detects: claude-code → codex → builtin) |
 | `--quick` | false | Skip brainstorm & research phases |
 | `--concurrency <n>` | 2 | Max parallel agents per wave (recommended: 3-4 for medium/large projects; see BEST_PRACTICES.md for tuning guide) |
 | `--no-verify` | false | Skip ALL verification: per-task code review, provider verification (tsc, npm test, eslint), and auto-fix loop. Task auto-retry still runs (handles execution failures, not verification) |
@@ -186,6 +186,32 @@ awsl run "goal" --engine <claude-code|codex|builtin> [options]
 | `--execute-plan` | false | Execute existing `.planning/PLAN.md` |
 | `--force` | false | Override existing lock |
 | `--cwd <path>` | `.` | Working directory |
+
+### Codex Engine Features
+
+When using `--engine codex` (or auto-detected when Codex CLI is installed):
+
+| Feature | Details |
+|---------|---------|
+| **Auto-detection** | `detectEngine()` checks `codex --version` automatically (priority: claude-code → codex → builtin) |
+| **Per-agent API key** | Set `apiKey: env:CODEX_API_KEY` in agent frontmatter for per-agent routing |
+| **Per-agent base URL** | Set `baseUrl: https://your-api.com/v1` for custom OpenAI-compatible endpoints |
+| **Dynamic sandbox** | Sandbox mode maps by role: reviewer/tester → `read-only`, coder/architect → `workspace-write` |
+| **Session resume** | Failed tasks can resume from Codex session ID (stored in shared memory) instead of restarting |
+| **Structured results** | Agents output `## AWSL_RESULT` section; AWSL extracts it as the clean task result |
+| **Rich progress events** | JSONL events (file edits, command executions, agent messages) stream to dashboard |
+
+```yaml
+# Example agent with Codex-specific config (agents/my-coder.md)
+---
+name: my-coder
+role: coder
+apiKey: env:CODEX_API_KEY
+baseUrl: https://api.openai.com/v1
+model: o3
+tools: read,write,edit,bash
+---
+```
 
 ### Pipeline Phases
 

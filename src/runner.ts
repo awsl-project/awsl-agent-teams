@@ -51,6 +51,12 @@ interface CodexJsonEvent {
 		input_tokens?: number;
 		output_tokens?: number;
 	};
+	// item.file_edit fields
+	filename?: string;
+	// item.command_execution fields
+	command?: string;
+	// item.agent_message fields
+	content?: string;
 }
 
 function resolveCodexCliJs(): string | null {
@@ -85,6 +91,29 @@ export function isRateLimitError(text: string): boolean {
 
 // ─── Codex Engine ───────────────────────────────────────────
 
+/** Extract ## AWSL_RESULT section from agent output, or return full text. */
+function extractAwslResult(text: string): string {
+	const marker = "## AWSL_RESULT";
+	const idx = text.indexOf(marker);
+	if (idx === -1) return text;
+	const afterMarker = text.slice(idx + marker.length);
+	// Find next ## heading or end of text
+	const nextHeading = afterMarker.search(/\n## /);
+	const body = nextHeading === -1 ? afterMarker : afterMarker.slice(0, nextHeading);
+	return body.trim();
+}
+
+/** Map agent role to Codex sandbox mode. */
+function codexSandboxMode(role: string): "read-only" | "workspace-write" {
+	switch (role) {
+		case "reviewer":
+		case "tester":
+			return "read-only";
+		default:
+			return "workspace-write";
+	}
+}
+
 async function runWithCodex(
 	agentDef: TeamAgentDef,
 	task: string,
@@ -93,6 +122,7 @@ async function runWithCodex(
 	teamRoster: string,
 	skillRegistry?: SkillRegistry,
 	taskId?: string,
+	resumeSessionId?: string,
 ): Promise<RunResult> {
 	const skills = skillRegistry ?? new SkillRegistry();
 	const skillInstructions = skills.buildInstructions(agentDef.role, agentDef.skills);
@@ -133,17 +163,20 @@ ${task}`;
 	const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "awsl-codex-"));
 	const lastMessagePath = path.join(tmpDir, "last-message.txt");
 
-	const args = [
-		...baseArgs,
-		"exec",
-		"--json",
-		"--ephemeral",
-		"--full-auto",
-		"--sandbox",
-		"workspace-write",
-		"--output-last-message",
-		lastMessagePath,
-	];
+	const sandboxMode = codexSandboxMode(agentDef.role);
+	const isResume = !!resumeSessionId;
+	const args: string[] = [...baseArgs];
+
+	if (isResume) {
+		// Resume mode: codex exec resume <sessionId> -
+		args.push("exec", "--json", "--full-auto", "--sandbox", sandboxMode,
+			"--output-last-message", lastMessagePath,
+			"resume", resumeSessionId);
+	} else {
+		// Normal mode: codex exec --ephemeral ...
+		args.push("exec", "--json", "--ephemeral", "--full-auto", "--sandbox", sandboxMode,
+			"--output-last-message", lastMessagePath);
+	}
 
 	// Use model if specified on agent
 	if (agentDef.model) {
@@ -161,11 +194,23 @@ ${task}`;
 	const IDLE_TIMEOUT_MS = 5 * 60 * 1000;       // 5min: no new output → agent stuck
 	const AGENT_TIMEOUT_MS = 30 * 60 * 1000;     // 30min: absolute hard cap
 
+	// Per-agent API key / base URL override
+	const cleanEnv = { ...process.env };
+	const resolvedApiKey = resolveEnvValue(agentDef.apiKey);
+	const resolvedBaseUrl = resolveEnvValue(agentDef.baseUrl);
+	if (resolvedApiKey) {
+		cleanEnv.CODEX_API_KEY = resolvedApiKey;
+		cleanEnv.OPENAI_API_KEY = resolvedApiKey;
+	}
+	if (resolvedBaseUrl) {
+		cleanEnv.OPENAI_BASE_URL = resolvedBaseUrl;
+	}
+
 	return new Promise<RunResult>((resolve) => {
 		const child = spawn(codexCmd, args, {
 			cwd,
 			stdio: ["pipe", "pipe", "pipe"],
-			env: process.env,
+			env: cleanEnv,
 		});
 
 		let hasOutput = false;
@@ -238,6 +283,16 @@ ${task}`;
 					inputTokens += event.usage?.input_tokens ?? 0;
 					outputTokens += event.usage?.output_tokens ?? 0;
 				}
+				// Rich progress events for dashboard
+				if (event.type === "item.file_edit" && event.filename) {
+					logStream.push({ timestamp: new Date().toISOString(), taskId: logTaskId, agent: agentDef.name, stream: "event", text: `[file_edit] ${event.filename}` });
+				}
+				if (event.type === "item.command_execution" && event.command) {
+					logStream.push({ timestamp: new Date().toISOString(), taskId: logTaskId, agent: agentDef.name, stream: "event", text: `[command] ${event.command.slice(0, 200)}` });
+				}
+				if (event.type === "item.agent_message" && event.content) {
+					logStream.push({ timestamp: new Date().toISOString(), taskId: logTaskId, agent: agentDef.name, stream: "event", text: `[message] ${event.content.slice(0, 200)}` });
+				}
 			} catch {
 				// ignore non-JSON lines
 			}
@@ -307,6 +362,14 @@ ${task}`;
 
 			const combined = stderr + stdout;
 
+			// Resume failed — fallback to fresh execution
+			if (isResume && code !== 0 && /session.*(not found|expired|invalid)/i.test(combined)) {
+				log.warn(agentDef.name, "Session resume failed, retrying without resume");
+				cleanupTmp();
+				resolve(runWithCodex(agentDef, task, cwd, memory, teamRoster, skillRegistry, taskId));
+				return;
+			}
+
 			if (code !== 0 && isRateLimitError(combined)) {
 				log.warn(agentDef.name, `Rate limited (exit: ${code})`);
 				cleanupTmp();
@@ -335,6 +398,9 @@ ${task}`;
 			if (!result) {
 				result = stdout.trim() || stderr.trim();
 			}
+
+			// Extract structured AWSL_RESULT section if present
+			result = extractAwslResult(result);
 
 			if (sessionId) {
 				memory.set(`result:${agentDef.name}:session`, sessionId, agentDef.name);
@@ -402,9 +468,30 @@ function isClaudeAvailable(): boolean {
 	return _claudeAvailable;
 }
 
+let _codexAvailable: boolean | null = null;
+
+function isCodexAvailable(): boolean {
+	if (_codexAvailable !== null) return _codexAvailable;
+	// Check CLI first
+	try {
+		execSync("codex --version", { stdio: "pipe", timeout: 5000, shell: process.platform === "win32" ? "cmd.exe" : "/bin/sh" });
+		_codexAvailable = true;
+		return true;
+	} catch { /* not in PATH */ }
+	// Windows: check via resolved node_modules path
+	if (resolveCodexCliJs()) {
+		_codexAvailable = true;
+		return true;
+	}
+	_codexAvailable = false;
+	return false;
+}
+
 export function detectEngine(preferred?: Engine): Engine {
 	if (preferred) return preferred;
-	return isClaudeAvailable() ? "claude-code" : "builtin";
+	if (isClaudeAvailable()) return "claude-code";
+	if (isCodexAvailable()) return "codex";
+	return "builtin";
 }
 
 // ─── Claude Code Engine ──────────────────────────────────────
@@ -780,8 +867,9 @@ export async function runAgent(
 		return runWithClaudeCode(agentDef, task, cwd, memory, teamRoster, skillRegistry, taskId);
 	}
 	if (resolved === "codex") {
-		// Codex CLI has its own permission/sandbox system; builtin sandbox is ignored
-		return runWithCodex(agentDef, task, cwd, memory, teamRoster, skillRegistry, taskId);
+		// Try session resume if a prior session ID exists in memory
+		const priorSession = memory.get(`result:${agentDef.name}:session`);
+		return runWithCodex(agentDef, task, cwd, memory, teamRoster, skillRegistry, taskId, priorSession || undefined);
 	}
 	return runWithBuiltin(agentDef, task, cwd, memory, teamRoster, defaultModel, maxTurns, skillRegistry, sandbox);
 }

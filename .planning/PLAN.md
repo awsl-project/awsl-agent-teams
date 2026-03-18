@@ -1,261 +1,59 @@
-# Execution Plan
+# PLAN — Codex 引擎兼容优化
 
-## task-1: Add durationMs + new providers to verify.ts
+> Goal: 优化 Codex CLI 作为 wave 执行引擎的体验，对齐 claude-code 引擎的功能集
+
+## task_1: codex-auto-detection
 - **Role:** coder
 - **Dependencies:** (none)
-- **Files:** src/verify.ts
-- **Action:**
-
-Make the following changes to `src/verify.ts`:
-
-### 1. Add `durationMs` to VerifyItem interface
-```typescript
-export interface VerifyItem {
-	taskId: string;
-	command: string;
-	passed: boolean;
-	output: string;
-	durationMs: number;  // NEW
-}
-```
-
-### 2. Modify `runCommand` to track timing
-Wrap the execSync call with `Date.now()` before/after to compute durationMs. Return it in the VerifyItem.
-
-### 3. Add BuildProvider
-Detects build capability and runs the appropriate build command:
-- Node.js: check `package.json` for `scripts.build`, run `npm run build`
-- Rust: check for `Cargo.toml`, run `cargo build`
-- Go: check for `go.mod`, run `go build ./...`
-- Python: check for `setup.py` or `pyproject.toml` with `[build-system]`, run `python -m build` or `python setup.py build`
-
-Priority: check in order, use first match. Timeout: 180_000.
-
-### 4. Add PrettierProvider
-Detect prettier config files: `.prettierrc`, `.prettierrc.js`, `.prettierrc.json`, `.prettierrc.yml`, `prettier.config.js`, `prettier.config.mjs`, `prettier.config.cjs`.
-Run: `npx prettier --check .`
-Timeout: 60_000.
-
-### 5. Add AuditProvider
-Detect: `package-lock.json` exists (npm audit requires it).
-Run: `npm audit --audit-level=moderate`
-Timeout: 30_000.
-
-### 6. Add Python providers
-**PythonTestProvider:**
-- Detect: `pytest.ini`, `setup.cfg` with `[tool:pytest]`, `pyproject.toml`, or any `test_*.py` / `*_test.py` files
-- Run: `python -m pytest`
-- Timeout: 180_000
-
-**MypyProvider:**
-- Detect: `mypy.ini`, `.mypy.ini`, `setup.cfg`, or `pyproject.toml`
-- Run: `python -m mypy .`
-- Timeout: 120_000
-
-**RuffProvider:**
-- Detect: `ruff.toml` or `pyproject.toml`
-- Run: `ruff check .`
-- Timeout: 60_000
-
-### 7. Add Go providers
-**GoVetProvider:**
-- Detect: `go.mod` exists
-- Run: `go vet ./...`
-- Timeout: 60_000
-
-**GoTestProvider:**
-- Detect: `go.mod` exists
-- Run: `go test ./...`
-- Timeout: 180_000
-
-### 8. Add Rust providers
-**CargoClippyProvider:**
-- Detect: `Cargo.toml` exists
-- Run: `cargo clippy -- -D warnings`
-- Timeout: 120_000
-
-**CargoTestProvider:**
-- Detect: `Cargo.toml` exists
-- Run: `cargo test`
-- Timeout: 180_000
-
-### 9. Add CustomProvider config support
-Read custom verify commands from `.planning/verify.json` or `.awsl.json` in project root.
-
-Format for `.planning/verify.json`:
-```json
-{
-  "providers": [
-    { "name": "integration-test", "command": "npm run test:integration", "timeout": 300000 }
-  ]
-}
-```
-
-Format for `.awsl.json` (look for `verify.providers` key):
-```json
-{
-  "verify": {
-    "providers": [
-      { "name": "e2e", "command": "npx playwright test", "timeout": 300000 }
-    ]
-  }
-}
-```
-
-Add a function `loadCustomProviders(cwd: string): VerifyProvider[]` that reads these files, creates CommandProvider instances, and returns them.
-
-### 10. Update GENERAL_PROVIDERS
-Add all new providers to the GENERAL_PROVIDERS array:
-```
-TypeScriptProvider, BuildProvider, TestProvider, ESLintProvider, PrettierProvider, AuditProvider,
-PythonTestProvider, MypyProvider, RuffProvider,
-GoVetProvider, GoTestProvider,
-CargoClippyProvider, CargoTestProvider,
-GitDiffProvider,
-```
-
-In `runFullVerification`, after getting active general providers, also load custom providers and add them.
-
-### 11. Fix all existing VerifyItem references
-All places that create VerifyItem objects must include `durationMs`. GitDiffProvider should track timing. The error fallback in runFullVerification should use `durationMs: 0`.
-
-### Important constraints:
-- Keep the existing `VerifyProvider` interface unchanged
-- Keep existing cache logic for TypeScript/Test/ESLint providers
-- New providers do NOT need caching
-- Use the existing `runCommand` helper (now with durationMs)
-- For multi-language detect: use `fs.existsSync` for config files
-
+- **Files:** `src/runner.ts`
+- **Action:** 在 `detectEngine()` 中加入 Codex CLI 自动检测。添加 `isCodexAvailable()` 函数，检查 `codex --version` 是否可用（5s 超时，捕获错误）。缓存结果到 `_codexAvailable`。修改 `detectEngine()` 优先级为: claude-code > codex > builtin。同时在 Windows 上尝试通过 `resolveCodexCliJs()` 路径检测。
 - **Verify:** `npx tsc --noEmit`
-- **Done:** All new providers added, durationMs tracked, custom config supported, TypeScript compiles
+- **Done:** `detectEngine()` 能自动发现已安装的 Codex CLI 并返回 `"codex"` 引擎
 
-## task-2: Enhanced static review + better report format
+## task_2: codex-env-override
 - **Role:** coder
-- **Dependencies:** task-1
-- **Files:** src/verify.ts
-- **Action:**
-
-After task-1 has been completed, make the following additional changes to `src/verify.ts`:
-
-### 1. Enhanced static review rules in `runStaticReview`
-
-Add these new rules to the file scanning loop:
-
-**Unused imports detection:**
-- Parse import lines (both `import { X, Y } from` and `import X from` styles)
-- For each imported name, check if it appears elsewhere in the file content (not in the import line itself)
-- If not found, report as warning with rule `unused-import`
-- Skip `import type` lines and side-effect imports (`import "foo"`)
-
-**Function too long (>50 lines):**
-- Track function boundaries by counting brace depth
-- Match function start patterns: `function name(`, `name(` as method, `const name = (` arrow
-- Count lines from opening `{` to closing `}`
-- If body exceeds 50 lines, report as warning with rule `function-too-long`
-
-**Nesting too deep (>4 levels):**
-- Track `{` nesting depth line by line within functions
-- When depth exceeds 4, report as warning with rule `nesting-too-deep`
-- Only count code lines (skip comments and blanks)
-
-**Duplicate code blocks:**
-- Normalize lines (trim whitespace), find sequences of 6+ identical consecutive lines appearing 2+ times in the same file
-- Report as info with rule `duplicate-code`
-
-### 2. Better report format for `formatReport`
-
-Update to include:
-
-**Header:**
-```markdown
-# Verification Report
-
-**Summary:** 8/10 passed (80.0% pass rate)
-**Total time:** 12.3s
-**Generated:** 2026-03-17T10:30:00Z
-```
-
-**Per-item with timing:**
-```markdown
-### [PASS] typecheck: `npx tsc --noEmit` (2.1s)
-### [FAIL] test: `npm test` (5.3s)
-```
-
-**Stage summaries:**
-```markdown
-> Task checks: 3/4 passed (75.0%) in 4.2s
-> General checks: 5/6 passed (83.3%) in 8.1s
-```
-
-### 3. Update `formatReviewReport` to show pass/fail status prominently
-
-### 4. Update `runFullVerification` summary
-Track total time with `Date.now()`. Change summary format:
-```
-Verification: 8/10 passed (80.0%) in 12.3s
-```
-
+- **Dependencies:** (none)
+- **Files:** `src/runner.ts`
+- **Action:** 在 `runWithCodex()` 中支持 per-agent 的 API key 和 base URL 覆盖。参考 claude-code 引擎的 `cleanEnv` 模式：创建 env 副本，用 `resolveEnvValue()` 解析 `agentDef.apiKey`（映射到 `CODEX_API_KEY` 或 `OPENAI_API_KEY`）和 `agentDef.baseUrl`（映射到 `OPENAI_BASE_URL`）。将 `spawn()` 的 env 从 `process.env` 改为 cleanEnv。
 - **Verify:** `npx tsc --noEmit`
-- **Done:** Static review has 4 new rules, reports show timing and pass rate
+- **Done:** Codex agent 可通过 frontmatter 配置独立的 API key 和 base URL
 
-## task-3: Update README.md
+## task_3: codex-sandbox-mapping
 - **Role:** coder
-- **Dependencies:** task-1, task-2
-- **Files:** README.md
-- **Action:**
-
-Update README.md to document the enhanced verification system:
-
-1. **Self-healing row** in feature table: mention multi-language verification
-2. **Phase 3 description**: expand to show all provider types
-3. **Quality Gates section**: add rows for multi-language verification, custom providers, timed reports
-4. **CLI commands**: update verify command description
-5. **Any verification-related sections**: update provider list
-
-- **Verify:** grep -c "multi-language\|verify.json\|custom.*provider" README.md
-- **Done:** README.md documents all new verification features
-
-## task-4: Update README.zh-CN.md
-- **Role:** coder
-- **Dependencies:** task-1, task-2
-- **Files:** README.zh-CN.md
-- **Action:**
-
-Mirror README.md verification changes into Chinese version:
-
-1. **自愈能力行**: 提及多语言验证
-2. **阶段 3 描述**: 展示所有 provider 类型
-3. **质量门禁章节**: 添加多语言验证、自定义 provider、带计时报告
-4. **CLI 命令**: 更新 verify 命令描述
-5. **验证器 provider 章节**: 更新列表
-
-- **Verify:** grep -c "多语言\|verify.json\|自定义.*provider" README.zh-CN.md
-- **Done:** README.zh-CN.md mirrors all English changes
-
-## task-5: Update BEST_PRACTICES.md
-- **Role:** coder
-- **Dependencies:** task-1, task-2
-- **Files:** BEST_PRACTICES.md
-- **Action:**
-
-Update BEST_PRACTICES.md with detailed verification guidance:
-
-1. **Verify command section** (~line 242): list all providers by language
-2. **New subsection**: custom verify providers with `.planning/verify.json` and `.awsl.json` examples
-3. **Timeout/cache table**: add all new providers' timeouts
-4. **Verify 字段怎么写**: add multi-language examples
-5. **使用场景 table**: update verify row with full provider list
-
-- **Verify:** grep -c "verify.json\|多语言\|Playwright" BEST_PRACTICES.md
-- **Done:** BEST_PRACTICES.md has comprehensive verification guidance
-
-## task-6: Build and type-check
-- **Role:** tester
-- **Dependencies:** task-1, task-2, task-3, task-4, task-5
-- **Files:** src/verify.ts
-- **Action:**
-1. `npx tsc --noEmit` — must pass with zero errors
-2. `npm run build` — must produce dist/ successfully
-If there are type errors, fix them in src/verify.ts.
+- **Dependencies:** (none)
+- **Files:** `src/runner.ts`
+- **Action:** 将 agent 的角色和 sandbox 配置映射到 Codex `--sandbox` 参数。当前硬编码 `workspace-write`，改为动态选择：reviewer/tester → `read-only`；coder/architect → `workspace-write`。新增 `runWithCodex` 参数接收 sandbox 配置。在 `runAgent()` 中将 sandbox 传递给 codex 引擎。同时去掉 `--full-auto` 改为显式的 `--sandbox <mode>`。
 - **Verify:** `npx tsc --noEmit`
-- **Done:** Project builds with zero TypeScript errors
+- **Done:** Codex sandbox 模式根据 agent 角色动态选择
+
+## task_4: codex-result-parsing
+- **Role:** coder
+- **Dependencies:** (none)
+- **Files:** `src/runner.ts`
+- **Action:** 增强 Codex 结果解析。在 `child.on("close")` 的 result 提取逻辑后，从 result 内容中查找 `## AWSL_RESULT` section。如果找到，提取该 section 之后到下一个 `## ` 标题或文本末尾的内容作为 clean result。提取到的内容会替换原始 result。如果没找到 AWSL_RESULT section，保留原始 last-message.txt 内容。
+- **Verify:** `npx tsc --noEmit`
+- **Done:** Codex 引擎能从输出中提取结构化的 AWSL_RESULT
+
+## task_5: codex-progress-events
+- **Role:** coder
+- **Dependencies:** task_4
+- **Files:** `src/runner.ts`
+- **Action:** 增强 JSONL 事件解析，从 Codex 的事件流中提取更丰富的进度信息。在 `parseJsonEvent` 中添加对以下事件类型的处理：`item.file_edit`（文件名 + 操作类型）、`item.command_execution`（命令内容）、`item.agent_message`（助手消息摘要）。为 logStream 条目添加 `eventType` 元数据字段，便于 dashboard 展示不同类型的进度条目。
+- **Verify:** `npx tsc --noEmit`
+- **Done:** logStream 包含 Codex agent 的文件编辑、命令执行等细粒度进度
+
+## task_6: codex-session-resume
+- **Role:** coder
+- **Dependencies:** task_4
+- **Files:** `src/runner.ts`
+- **Action:** 利用 Codex `resume` 能力增强 checkpoint 恢复。在 `runWithCodex()` 开头检查 shared memory 中是否有 `result:{agentName}:session` 的 session ID。如果有，尝试用 `codex exec resume <sessionId>` 模式启动（不加 `--ephemeral`）。如果 resume 失败（非零退出且 stderr 含 "session not found" 或类似错误），fallback 到普通的 ephemeral 执行。新增可选参数 `resumeSessionId?: string`。
+- **Verify:** `npx tsc --noEmit`
+- **Done:** Codex 引擎支持通过 session ID 恢复中断的任务
+
+## task_7: docs-update
+- **Role:** coder
+- **Dependencies:** task_1, task_2, task_3, task_4, task_5, task_6
+- **Files:** `README.md`, `README.zh-CN.md`, `BEST_PRACTICES.md`
+- **Action:** 更新三份文档，添加 Codex 引擎完整使用指南：(1) 安装要求 `npm i -g @openai/codex`、`CODEX_API_KEY` 设置；(2) `--engine codex` 用法和自动检测；(3) agent frontmatter 中 `apiKey: env:CODEX_API_KEY` / `baseUrl` 配置示例；(4) sandbox 模式映射表；(5) session resume 行为说明；(6) 与 claude-code 引擎的功能对比表；(7) BEST_PRACTICES.md 中的 Codex 最佳实践和常见问题。
+- **Verify:** 文件存在且包含 codex 相关内容
+- **Done:** README.md、README.zh-CN.md、BEST_PRACTICES.md 都包含 Codex 引擎完整指南

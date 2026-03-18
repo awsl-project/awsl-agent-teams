@@ -991,6 +991,44 @@ codex 进程有三层超时保护，不用担心进程挂死浪费时间：
 | 空闲超时 | 5min | 运行中 5 分钟无新输出 → 进程卡死 |
 | 硬超时 | 30min | 绝对上限 |
 
+**Codex 引擎增强特性：**
+
+| 特性 | 说明 |
+|------|------|
+| 自动检测 | 安装了 `@openai/codex` 后自动检测，无需显式 `--engine codex` |
+| 独立 API Key | agent frontmatter 设置 `apiKey: env:CODEX_API_KEY`，每个 agent 可使用不同的 key |
+| 自定义端点 | `baseUrl` 映射到 `OPENAI_BASE_URL`，支持 OpenAI 兼容 API |
+| 动态沙箱 | reviewer/tester → `read-only`（只读），coder/architect → `workspace-write`（可写） |
+| 会话恢复 | checkpoint 恢复时自动尝试 `codex exec resume <sessionId>`，失败后 fallback 到普通执行 |
+| 结构化结果 | 自动提取 `## AWSL_RESULT` section 作为任务结果 |
+| 细粒度进度 | 解析 JSONL 事件流中的 file_edit、command_execution、agent_message 推送到 Dashboard |
+
+**Codex agent 配置示例：**
+
+```yaml
+# agents/codex-coder.md
+---
+name: codex-coder
+role: coder
+description: Full-stack developer using Codex
+apiKey: env:CODEX_API_KEY
+baseUrl: https://api.openai.com/v1
+model: o3
+tools: read,write,edit,bash
+---
+```
+
+**Codex vs Claude Code 引擎对比：**
+
+| 能力 | claude-code | codex |
+|------|------------|-------|
+| 安装 | `npm i -g @anthropic-ai/claude-code` | `npm i -g @openai/codex` |
+| API Key 环境变量 | `ANTHROPIC_API_KEY` | `CODEX_API_KEY` / `OPENAI_API_KEY` |
+| 沙箱 | CC 内置权限系统 | `--sandbox` (read-only / workspace-write) |
+| 输出格式 | JSON (result, usage, cost) | JSONL 事件流 + last-message.txt |
+| 会话恢复 | checkpoint 系统 | `codex exec resume` + checkpoint |
+| 模型 | Claude 系列 | GPT-4o / o3 / 自定义 |
+
 ### `--no-verify` 验证总开关
 
 `--no-verify` 是验证的总开关（master switch），禁用后会跳过 **所有** 验证相关步骤：

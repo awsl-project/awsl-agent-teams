@@ -2,41 +2,59 @@
 
 ## Wave 1
 
-### task-1: Add durationMs + new providers to verify.ts
+### task_1: codex-auto-detection
 - **Role:** coder
-- **Files:** src/verify.ts
+- **Files:** `src/runner.ts`
 
 ## Wave 2
 
-### task-2: Enhanced static review + better report format
+### task_2: codex-env-override
 - **Role:** coder
-- **After:** task-1
-- **Files:** src/verify.ts
+- **After:** task_1
+- **Files:** `src/runner.ts`
 
 ## Wave 3
 
-### task-3: Update README.md
+### task_3: codex-sandbox-mapping
 - **Role:** coder
-- **After:** task-1, task-2
-- **Files:** README.md
-
-### task-4: Update README.zh-CN.md
-- **Role:** coder
-- **After:** task-1, task-2
-- **Files:** README.zh-CN.md
-
-### task-5: Update BEST_PRACTICES.md
-- **Role:** coder
-- **After:** task-1, task-2
-- **Files:** BEST_PRACTICES.md
+- **After:** task_2
+- **Files:** `src/runner.ts`
 
 ## Wave 4
 
-### task-6: Build and type-check
-- **Role:** tester
-- **After:** task-1, task-2, task-3, task-4, task-5
-- **Files:** src/verify.ts
+### task_4: codex-result-parsing
+- **Role:** coder
+- **After:** task_3
+- **Files:** `src/runner.ts`
+
+## Wave 5
+
+### task_5: codex-progress-events
+- **Role:** coder
+- **After:** task_4
+- **Files:** `src/runner.ts`
+
+## Wave 6
+
+### task_6: codex-session-resume
+- **Role:** coder
+- **After:** task_4, task_5
+- **Files:** `src/runner.ts`
+
+## Wave 7
+
+### task_7: docs-update
+- **Role:** coder
+- **After:** task_1, task_2, task_3, task_4, task_5, task_6
+- **Files:** `README.md`, `README.zh-CN.md`, `BEST_PRACTICES.md`
+
+## File Conflict Resolutions
+
+- **task_1** and **task_2** serialized due to shared files: `src/runner.ts`
+- **task_2** and **task_3** serialized due to shared files: `src/runner.ts`
+- **task_3** and **task_4** serialized due to shared files: `src/runner.ts`
+- **task_5** and **task_6** serialized due to shared files: `src/runner.ts`
 
 ---
-Total: 6 tasks in 4 waves
-Parallel tasks per wave: 1, 1, 3, 1
+Total: 7 tasks in 7 waves
+Parallel tasks per wave: 1, 1, 1, 1, 1, 1, 1

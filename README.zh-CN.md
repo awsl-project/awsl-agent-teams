@@ -177,7 +177,7 @@ awsl run "目标" --engine <claude-code|codex|builtin> [选项]
 
 | 选项 | 默认值 | 说明 |
 |--------|---------|-------------|
-| `--engine <type>` | auto | 执行引擎：`claude-code`、`codex` 或 `builtin`（`codex` 仅在显式指定时启用） |
+| `--engine <type>` | auto | 执行引擎：`claude-code`、`codex` 或 `builtin`（自动检测优先级：claude-code → codex → builtin） |
 | `--quick` | false | 跳过头脑风暴和调研阶段 |
 | `--concurrency <n>` | 2 | 每波次最大并行智能体数（推荐中大型项目用 3-4；详见 BEST_PRACTICES.md 并发调优章节） |
 | `--no-verify` | false | 跳过所有验证步骤：逐任务代码审查、代码验证 (tsc、npm test、eslint) 和自动修复循环。任务自动重试仍然运行（处理执行失败而非验证） |
@@ -186,6 +186,32 @@ awsl run "目标" --engine <claude-code|codex|builtin> [选项]
 | `--execute-plan` | false | 执行已有的 `.planning/PLAN.md` |
 | `--force` | false | 覆盖已有锁 |
 | `--cwd <path>` | `.` | 工作目录 |
+
+### Codex 引擎特性
+
+使用 `--engine codex`（或安装了 Codex CLI 时自动检测到）时：
+
+| 特性 | 说明 |
+|------|------|
+| **自动检测** | `detectEngine()` 自动检查 `codex --version`（优先级：claude-code → codex → builtin） |
+| **独立 API Key** | 在 agent frontmatter 中设置 `apiKey: env:CODEX_API_KEY` 实现按 agent 路由 |
+| **自定义端点** | 设置 `baseUrl: https://your-api.com/v1` 指向 OpenAI 兼容的 API |
+| **动态沙箱** | 按角色自动选择沙箱模式：reviewer/tester → `read-only`，coder/architect → `workspace-write` |
+| **会话恢复** | 失败任务可通过 Codex session ID（存储在共享内存中）恢复，无需重新开始 |
+| **结构化结果** | Agent 输出 `## AWSL_RESULT` section，AWSL 自动提取为干净的任务结果 |
+| **细粒度进度** | JSONL 事件（文件编辑、命令执行、助手消息）实时推送到 Dashboard |
+
+```yaml
+# 带 Codex 配置的 agent 示例 (agents/my-coder.md)
+---
+name: my-coder
+role: coder
+apiKey: env:CODEX_API_KEY
+baseUrl: https://api.openai.com/v1
+model: o3
+tools: read,write,edit,bash
+---
+```
 
 ### 流水线阶段
 
