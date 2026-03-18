@@ -32,6 +32,9 @@ export const log = {
 	warn(source: string, msg: string) {
 		console.error(`\x1b[33m[${ts()}]${RESET} ${color(source)}[${source}]${RESET} ${msg}`);
 	},
+	error(source: string, msg: string) {
+		console.error(`\x1b[31m[${ts()}]${RESET} ${color(source)}[${source}]${RESET} \x1b[31m${msg}${RESET}`);
+	},
 	debug(source: string, msg: string) {
 		if (process.env.DEBUG) {
 			console.error(`${DIM}[${ts()}] [${source}] ${msg}${RESET}`);

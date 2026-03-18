@@ -51,6 +51,8 @@ interface CodexJsonEvent {
 		input_tokens?: number;
 		output_tokens?: number;
 	};
+	// error event fields
+	message?: string;
 	// item.file_edit fields
 	filename?: string;
 	// item.command_execution fields
@@ -71,7 +73,25 @@ function resolveCodexCliJs(): string | null {
 	return null;
 }
 
-// ─── Rate Limit Detection ────────────────────────────────────
+// ─── Error Classification ────────────────────────────────────
+
+const API_CONNECTIVITY_PATTERNS = [
+	/502\s*Bad Gateway/i,
+	/503\s*Service Unavailable/i,
+	/connection refused/i,
+	/ECONNREFUSED/,
+	/ECONNRESET/,
+	/ETIMEDOUT/,
+	/ENOTFOUND/,
+	/unexpected status 5\d\d/i,
+	/provider.*失败/,
+	/provider.*failed/i,
+	/Reconnecting\.\.\./i,
+];
+
+function isApiConnectivityError(text: string): boolean {
+	return API_CONNECTIVITY_PATTERNS.some(p => p.test(text));
+}
 
 const RATE_LIMIT_PATTERNS = [
 	/rate limit/i,
@@ -266,6 +286,8 @@ ${task}`;
 		let turns = 0;
 		let stdoutLineBuffer = "";
 		let stderrLineBuffer = "";
+		const codexErrors: string[] = [];  // Accumulated error events
+		let reconnectCount = 0;
 
 		const logStream = getLogStream();
 		const logTaskId = taskId ?? agentDef.name;
@@ -282,6 +304,16 @@ ${task}`;
 					turns++;
 					inputTokens += event.usage?.input_tokens ?? 0;
 					outputTokens += event.usage?.output_tokens ?? 0;
+				}
+				// Error events — accumulate for final error report
+				if (event.type === "error" && event.message) {
+					codexErrors.push(event.message);
+					const reconnectMatch = event.message.match(/Reconnecting\.\.\.\s*(\d+)\/(\d+)/);
+					if (reconnectMatch) {
+						reconnectCount = parseInt(reconnectMatch[1], 10);
+					}
+					logStream.push({ timestamp: new Date().toISOString(), taskId: logTaskId, agent: agentDef.name, stream: "event", text: `[error] ${event.message.slice(0, 300)}` });
+					log.warn(agentDef.name, `Codex error: ${event.message.slice(0, 200)}`);
 				}
 				// Rich progress events for dashboard
 				if (event.type === "item.file_edit" && event.filename) {
@@ -361,16 +393,28 @@ ${task}`;
 			}
 
 			const combined = stderr + stdout;
+			const allErrors = codexErrors.join(" | ");
+
+			// Build structured error message from accumulated JSONL error events
+			const buildErrorMsg = (prefix: string): string => {
+				if (codexErrors.length > 0) {
+					// Deduplicate reconnect messages, keep the last one + unique errors
+					const unique = [...new Set(codexErrors.map(e => e.replace(/Reconnecting\.\.\.\s*\d+\/\d+\s*\(/, "(").trim()))];
+					return `${prefix}: ${unique.slice(-3).join(" → ")}`;
+				}
+				return `${prefix}: ${(stderr || stdout).slice(0, 300)}`;
+			};
 
 			// Resume failed — fallback to fresh execution
-			if (isResume && code !== 0 && /session.*(not found|expired|invalid)/i.test(combined)) {
+			if (isResume && code !== 0 && /session.*(not found|expired|invalid)/i.test(combined + allErrors)) {
 				log.warn(agentDef.name, "Session resume failed, retrying without resume");
 				cleanupTmp();
 				resolve(runWithCodex(agentDef, task, cwd, memory, teamRoster, skillRegistry, taskId));
 				return;
 			}
 
-			if (code !== 0 && isRateLimitError(combined)) {
+			// Rate limit detection (check both stderr/stdout and JSONL errors)
+			if (code !== 0 && isRateLimitError(combined + allErrors)) {
 				log.warn(agentDef.name, `Rate limited (exit: ${code})`);
 				cleanupTmp();
 				resolve({
@@ -378,7 +422,25 @@ ${task}`;
 					status: "rate_limited",
 					result: "",
 					turns: turns || 0,
-					error: combined.slice(0, 500),
+					error: buildErrorMsg("Rate limited"),
+					inputTokens,
+					outputTokens,
+					costUsd: 0,
+				});
+				return;
+			}
+
+			// API connectivity errors (502, connection refused, provider failures)
+			if (code !== 0 && isApiConnectivityError(combined + allErrors)) {
+				const retryInfo = reconnectCount > 0 ? ` (${reconnectCount} reconnect attempts)` : "";
+				log.error(agentDef.name, `API connectivity error${retryInfo} (exit: ${code})`);
+				cleanupTmp();
+				resolve({
+					agent: agentDef.name,
+					status: "failed",
+					result: "",
+					turns: turns || 0,
+					error: buildErrorMsg(`API connectivity error${retryInfo}`),
 					inputTokens,
 					outputTokens,
 					costUsd: 0,
@@ -406,14 +468,18 @@ ${task}`;
 				memory.set(`result:${agentDef.name}:session`, sessionId, agentDef.name);
 			}
 
-			log.info(agentDef.name, `Done (codex, exit: ${code})`);
+			if (code === 0) {
+				log.info(agentDef.name, `Done (codex, turns: ${turns})`);
+			} else {
+				log.error(agentDef.name, `Failed (codex, exit: ${code})`);
+			}
 			cleanupTmp();
 			resolve({
 				agent: agentDef.name,
 				status: code === 0 ? "done" : "failed",
 				result,
 				turns: turns || 1,
-				error: code !== 0 ? `Exit code ${code}: ${(stderr || stdout).slice(0, 200)}` : undefined,
+				error: code !== 0 ? buildErrorMsg(`Exit code ${code}`) : undefined,
 				inputTokens,
 				outputTokens,
 				costUsd: 0,
