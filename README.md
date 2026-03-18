@@ -200,16 +200,28 @@ When using `--engine codex` (or auto-detected when Codex CLI is installed):
 | **Session resume** | Failed tasks can resume from Codex session ID (stored in shared memory) instead of restarting |
 | **Structured results** | Agents output `## AWSL_RESULT` section; AWSL extracts it as the clean task result |
 | **Rich progress events** | JSONL events (file edits, command executions, agent messages) stream to dashboard |
+| **Per-agent engine** | Set `engine: codex` in agent frontmatter — different agents can use different engines in the same run |
 
 ```yaml
-# Example agent with Codex-specific config (agents/my-coder.md)
+# Example: coder uses Codex, reviewer uses Claude Code (agents/my-coder.md)
 ---
 name: my-coder
 role: coder
+engine: codex
 apiKey: env:CODEX_API_KEY
 baseUrl: https://api.openai.com/v1
 model: o3
 tools: read,write,edit,bash
+---
+```
+
+```yaml
+# agents/my-reviewer.md — uses Claude for code review
+---
+name: my-reviewer
+role: reviewer
+engine: claude-code
+tools: read,grep,glob,bash
 ---
 ```
 

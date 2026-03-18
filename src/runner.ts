@@ -860,7 +860,8 @@ export async function runAgent(
 	taskId?: string,
 	sandbox?: SandboxPolicy | boolean,
 ): Promise<RunResult> {
-	const resolved = detectEngine(engine);
+	// Per-agent engine override takes priority over global engine
+	const resolved = detectEngine(agentDef.engine ?? engine);
 
 	if (resolved === "claude-code") {
 		// Claude Code has its own permission system; sandbox is ignored

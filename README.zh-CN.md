@@ -200,16 +200,28 @@ awsl run "目标" --engine <claude-code|codex|builtin> [选项]
 | **会话恢复** | 失败任务可通过 Codex session ID（存储在共享内存中）恢复，无需重新开始 |
 | **结构化结果** | Agent 输出 `## AWSL_RESULT` section，AWSL 自动提取为干净的任务结果 |
 | **细粒度进度** | JSONL 事件（文件编辑、命令执行、助手消息）实时推送到 Dashboard |
+| **独立引擎** | 在 agent frontmatter 设置 `engine: codex`，同一次运行中不同 agent 可使用不同引擎 |
 
 ```yaml
-# 带 Codex 配置的 agent 示例 (agents/my-coder.md)
+# 示例：coder 用 Codex，reviewer 用 Claude Code (agents/my-coder.md)
 ---
 name: my-coder
 role: coder
+engine: codex
 apiKey: env:CODEX_API_KEY
 baseUrl: https://api.openai.com/v1
 model: o3
 tools: read,write,edit,bash
+---
+```
+
+```yaml
+# agents/my-reviewer.md — 用 Claude 做代码审查
+---
+name: my-reviewer
+role: reviewer
+engine: claude-code
+tools: read,grep,glob,bash
 ---
 ```
 

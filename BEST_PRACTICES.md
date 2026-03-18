@@ -1029,6 +1029,44 @@ tools: read,write,edit,bash
 | 会话恢复 | checkpoint 系统 | `codex exec resume` + checkpoint |
 | 模型 | Claude 系列 | GPT-4o / o3 / 自定义 |
 
+**混合引擎（Per-Agent Engine）：**
+
+同一次运行中，不同 agent 可以使用不同引擎。在 agent frontmatter 中设置 `engine` 字段即可：
+
+```yaml
+# agents/codex-coder.md — 用 Codex 写代码（GPT-4o 便宜）
+---
+name: codex-coder
+role: coder
+engine: codex
+apiKey: env:CODEX_API_KEY
+model: o3
+tools: read,write,edit,bash
+---
+
+# agents/claude-reviewer.md — 用 Claude 审代码（Opus 更细致）
+---
+name: claude-reviewer
+role: reviewer
+engine: claude-code
+tools: read,grep,glob,bash
+---
+```
+
+运行时效果：
+```
+Wave 1: codex-coder (engine: codex)      ← codex exec 写代码
+Wave 2: claude-reviewer (engine: claude-code) ← claude -p 审代码
+```
+
+优先级：`agent.engine` > `--engine` 命令行参数 > 自动检测
+
+也可以在 Dashboard 的 Agent Editor 中选择引擎，或使用 CLI：
+```bash
+awsl agents create my-coder --role coder --engine codex --prompt "..."
+awsl agents edit my-reviewer --engine claude-code
+```
+
 ### `--no-verify` 验证总开关
 
 `--no-verify` 是验证的总开关（master switch），禁用后会跳过 **所有** 验证相关步骤：

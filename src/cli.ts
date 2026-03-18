@@ -58,6 +58,7 @@ Commands:
     --template <name>        Pre-populate prompt from built-in template
     --tools <a,b,c>          Comma-separated tools
     --model <model>          Model override
+    --engine <type>          Per-agent engine (claude-code, codex, builtin)
     --skills <a,b,c>         Comma-separated skills
     --thinking <level>       Thinking level
   agents edit <name>       Update an existing custom agent (same flags as create)
@@ -166,6 +167,11 @@ function parseAgentFlags(flagArgs: string[]): Partial<Omit<TeamAgentDef, "name" 
 		else if (arg === "--template") templateName = next();
 		else if (arg === "--tools") result.tools = next().split(",").map(s => s.trim()).filter(Boolean);
 		else if (arg === "--model") result.model = next();
+		else if (arg === "--engine") {
+			const val = next();
+			if (val === "claude-code" || val === "codex" || val === "builtin") result.engine = val;
+			else { console.error(`Invalid engine "${val}": must be claude-code, codex, or builtin`); process.exit(1); }
+		}
 		else if (arg === "--skills") result.skills = next().split(",").map(s => s.trim()).filter(Boolean);
 		else if (arg === "--thinking") result.thinkingLevel = next();
 		else if (arg === "--cwd") { i++; } // skip --cwd, handled by parseCwdAndForce
@@ -443,6 +449,7 @@ async function main() {
 			console.log(`Description: ${agent.description}`);
 			console.log(`Source:      ${agent.source}`);
 			if (agent.model) console.log(`Model:       ${agent.model}`);
+			if (agent.engine) console.log(`Engine:      ${agent.engine}`);
 			if (agent.tools) console.log(`Tools:       ${agent.tools.join(", ")}`);
 			if (agent.skills) console.log(`Skills:      ${agent.skills.join(", ")}`);
 			if (agent.thinkingLevel) console.log(`Thinking:    ${agent.thinkingLevel}`);

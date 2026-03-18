@@ -20,6 +20,8 @@ export interface TeamAgentDef {
 	role: string;
 	description: string;
 	model?: string;
+	/** Per-agent execution engine override. When set, this agent uses the specified engine regardless of global setting. */
+	engine?: "claude-code" | "codex" | "builtin";
 	/** API base URL override (e.g. GLM's Anthropic-compatible endpoint). */
 	baseUrl?: string;
 	/** API key override. Use "env:VAR_NAME" to read from environment variable. */
@@ -44,11 +46,14 @@ export function resolveEnvValue(val: string | undefined): string | undefined {
 	return val;
 }
 
+const VALID_ENGINES = ["claude-code", "codex", "builtin"] as const;
+
 const AgentFrontmatterSchema = Type.Object({
 	name: Type.String(),
 	role: Type.Optional(Type.String()),
 	description: Type.Optional(Type.String()),
 	model: Type.Optional(Type.String()),
+	engine: Type.Optional(Type.String()),
 	baseUrl: Type.Optional(Type.String()),
 	apiKey: Type.Optional(Type.String()),
 	tools: Type.Optional(Type.Union([Type.String(), Type.Array(Type.String())])),
@@ -101,11 +106,16 @@ function loadFromDir(dir: string): TeamAgentDef[] {
 		const tools = normalizeStringArray(meta.tools);
 		const skills = normalizeStringArray(meta.skills);
 
+		const engine = typeof meta.engine === "string" && (VALID_ENGINES as readonly string[]).includes(meta.engine)
+			? meta.engine as TeamAgentDef["engine"]
+			: undefined;
+
 		agents.push({
 			name: meta.name,
 			role: (typeof meta.role === "string" ? meta.role : undefined) ?? "custom",
 			description: (typeof meta.description === "string" ? meta.description : undefined) ?? "",
 			model: typeof meta.model === "string" ? meta.model : undefined,
+			engine,
 			baseUrl: typeof meta.baseUrl === "string" ? meta.baseUrl : undefined,
 			apiKey: typeof meta.apiKey === "string" ? meta.apiKey : undefined,
 			tools: tools.length > 0 ? tools : undefined,
@@ -238,6 +248,7 @@ export function serializeAgent(agent: TeamAgentDef): string {
 		description: agent.description,
 	};
 	if (agent.model !== undefined) fm.model = agent.model;
+	if (agent.engine !== undefined) fm.engine = agent.engine;
 	if (agent.baseUrl !== undefined) fm.baseUrl = agent.baseUrl;
 	if (agent.apiKey !== undefined) fm.apiKey = agent.apiKey;
 	if (agent.tools !== undefined && agent.tools.length > 0) fm.tools = agent.tools;
@@ -271,6 +282,7 @@ export function saveAgent(dir: string, agent: Partial<TeamAgentDef> & { name: st
 		role: agent.role ?? base.role ?? "custom",
 		description: agent.description ?? base.description ?? "",
 		model: agent.model ?? base.model,
+		engine: agent.engine ?? base.engine,
 		baseUrl: agent.baseUrl ?? base.baseUrl,
 		apiKey: agent.apiKey ?? base.apiKey,
 		tools: agent.tools ?? base.tools,
