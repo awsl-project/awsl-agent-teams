@@ -744,6 +744,49 @@ awsl run "构建一个 REST API"
 
 **核心模块：** `context.ts` — `RunContext` 提供带生命周期的运行上下文，统一管理锁。它替代了分散的手动 `acquireLock`/`releaseLock` 调用，自动注册信号处理器并使用正确的 `cwd`，保证退出时清理。
 
+## 流式执行
+
+三种引擎（claude-code、codex、builtin）均支持**实时流式事件**。消费方无需等待最终结果，可以在 agent 执行过程中接收细粒度事件：
+
+| 事件 | 说明 |
+|------|------|
+| `start` | Agent 进程已启动（含引擎类型） |
+| `text` | 模型的增量文本输出 |
+| `tool_start` | Agent 开始调用工具（工具名 + 参数） |
+| `tool_end` | 工具执行完成 |
+| `turn_end` | 一轮模型调用完成（含 token 用量） |
+| `progress` | 信息性进度消息 |
+| `error` | 非致命错误或警告 |
+| `done` | Agent 执行完毕 — 携带最终 `RunResult` |
+
+**通过 `ExecuteOptions` 使用：**
+
+```typescript
+import { executeTeam, type AgentStreamEvent } from "awsl-agent-core";
+
+const result = await executeTeam(goal, agents, cwd, model, 3, {
+  onStream: (event: AgentStreamEvent) => {
+    if (event.type === "tool_start") {
+      console.log(`[${event.agent}] 正在使用 ${event.tool}`);
+    }
+  },
+});
+```
+
+**通过 `runAgent` 使用：**
+
+```typescript
+import { runAgent, type StreamCallback } from "awsl-agent-core";
+
+const onStream: StreamCallback = (event) => {
+  if (event.type === "text") process.stdout.write(event.text);
+};
+
+const result = await runAgent(agentDef, task, cwd, memory, roster, model, 30, undefined, undefined, undefined, undefined, onStream);
+```
+
+claude-code 引擎使用 `--output-format stream-json`（NDJSON）替代 `--output-format json`，实时提供 assistant 消息、工具调用和 token 用量。事件自动通过 `"agent-event"` 通道转发到 **LogStream**，供仪表盘/SSE 订阅者消费。
+
 ## Conductor
 
 Conductor 是编排引擎，负责 **做什么** 以及 **何时做**。

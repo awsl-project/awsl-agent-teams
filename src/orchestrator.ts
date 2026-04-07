@@ -23,8 +23,10 @@ import { log } from "./log.js";
 import { type RunResult, type Engine, runAgent, runParallel, detectEngine } from "./runner.js";
 import { createPlanningDir, parseStructuredTasks, parseStructuredTasksChecked, detectDependencyCycles, atomicCommit, saveCheckpoint, loadCheckpoint, clearCheckpoint, type StructuredTask, type PlanningDir, type CheckpointData, type ParseResult, type CycleDetectionResult } from "./planning.js";
 import { SkillRegistry } from "./skills.js";
-import { runFullVerification } from "./verify.js";
+import { runFullVerification, runRegressionTest } from "./verify.js";
 import type { WaveInfo, WaveTaskDetail } from "./history.js";
+import { getLogStream } from "./logstream.js";
+import type { StreamCallback, AgentStreamEvent } from "./streaming.js";
 
 // ─── Event / Hook System ─────────────────────────────────────
 
@@ -121,6 +123,8 @@ export interface ExecuteOptions {
 	resumeFromCheckpoint?: boolean;
 	/** Sandbox policy for builtin engine. true=role defaults (default), false=disabled, or custom SandboxPolicy. */
 	sandbox?: boolean | SandboxPolicy;
+	/** Streaming callback — receives real-time events from all agents. */
+	onStream?: StreamCallback;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────
@@ -202,6 +206,8 @@ function findCycleInRemaining(tasks: Task[]): string[] {
 }
 
 async function emit(hooks: TeamHook[], event: TeamEvent) {
+	// Broadcast to LogStream so SSE-based TUI monitors receive events
+	try { getLogStream().pushTeamEvent(event as unknown as Record<string, unknown>); } catch { /* best-effort */ }
 	for (const hook of hooks) {
 		try { await hook(event); } catch (e) { log.warn("hook", String(e)); }
 	}
@@ -351,6 +357,16 @@ export async function executeTeam(
 	const maxRateLimitRetries = options?.maxRateLimitRetries ?? 20;
 	const rateLimitBackoff = options?.rateLimitBackoff ?? DEFAULT_RATE_LIMIT_BACKOFF;
 	const sandbox = options?.sandbox ?? true;
+	const onStream = options?.onStream;
+
+	// Build stream callback that also forwards to LogStream
+	const logStream = getLogStream();
+	const streamForward: StreamCallback | undefined = onStream
+		? (event: AgentStreamEvent) => {
+				logStream.pushAgentEvent(event);
+				onStream(event);
+			}
+		: undefined;
 	let rateLimitRetryCount = 0;
 	const memory = new SharedMemory();
 	const roster = buildRoster(agents);
@@ -476,7 +492,7 @@ export async function executeTeam(
 			const brainstormResult = await runAgent(
 				brainstormer,
 				`## Goal\n${goal}\n\n## Team\n${roster}\n\nConduct a Socratic brainstorming session about this goal. Explore requirements, alternatives, trade-offs, and constraints. Produce a design document with key decisions and rationale. Store it in shared memory as "design". Call report when done.`,
-				cwd, memory, roster, defaultModel, 20, skills, engine, undefined, sandbox,
+				cwd, memory, roster, defaultModel, 20, skills, engine, undefined, sandbox, streamForward,
 			);
 
 			totalInputTokens += brainstormResult.inputTokens ?? 0;
@@ -504,7 +520,7 @@ export async function executeTeam(
 			const researcher = agents.find(a => a.role === "architect") ?? agents.find(a => a.name !== "planner");
 			if (researcher) {
 				await runParallel(researchTopics, maxConcurrency, async (topic) => {
-					const result = await runAgent(researcher, topic.prompt, cwd, memory, roster, defaultModel, 15, skills, engine, undefined, sandbox);
+					const result = await runAgent(researcher, topic.prompt, cwd, memory, roster, defaultModel, 15, skills, engine, undefined, sandbox, streamForward);
 					totalInputTokens += result.inputTokens ?? 0;
 					totalOutputTokens += result.outputTokens ?? 0;
 					totalCostUsd += result.costUsd ?? 0;
@@ -569,7 +585,7 @@ IMPORTANT: You MUST call the report tool with ONLY a JSON code block in this EXA
 
 Do NOT output any text before or after the JSON. Do NOT use markdown prose format.`;
 
-		const planResult = await runAgent(planner, planPrompt, cwd, memory, roster, defaultModel, 30, skills, engine, undefined, sandbox);
+		const planResult = await runAgent(planner, planPrompt, cwd, memory, roster, defaultModel, 30, skills, engine, undefined, sandbox, streamForward);
 		totalInputTokens += planResult.inputTokens ?? 0;
 		totalOutputTokens += planResult.outputTokens ?? 0;
 		totalCostUsd += planResult.costUsd ?? 0;
@@ -685,7 +701,7 @@ Do NOT output any text before or after the JSON. Do NOT use markdown prose forma
 
 			// Conductor: fresh context per task (new Agent instance)
 			// Guardian: skills auto-activate based on agent role
-			const result = await runAgent(agentDef, prompt, cwd, memory, roster, defaultModel, 30, skills, engine, undefined, sandbox);
+			const result = await runAgent(agentDef, prompt, cwd, memory, roster, defaultModel, 30, skills, engine, undefined, sandbox, streamForward);
 			totalInputTokens += result.inputTokens ?? 0;
 			totalOutputTokens += result.outputTokens ?? 0;
 			totalCostUsd += result.costUsd ?? 0;
@@ -738,7 +754,7 @@ Critical findings MUST explain what's wrong and suggest a fix.`;
 
 							const reviewResult = await runAgent(
 								reviewer, reviewPrompt, cwd, memory, roster,
-								defaultModel, 15, skills, engine, undefined, sandbox,
+								defaultModel, 15, skills, engine, undefined, sandbox, streamForward,
 							);
 							totalInputTokens += reviewResult.inputTokens ?? 0;
 							totalOutputTokens += reviewResult.outputTokens ?? 0;
@@ -770,6 +786,16 @@ Critical findings MUST explain what's wrong and suggest a fix.`;
 				if (task.status === "done" && autoCommit) {
 					const committed = atomicCommit(cwd, task.id, task.description.slice(0, 50), task.files);
 					if (committed) log.info("git", `Committed: ${task.id}`);
+				}
+
+				// Conductor: per-task regression test — catch breakage early
+				if (task.status === "done") {
+					const regression = await runRegressionTest(cwd);
+					if (!regression.passed) {
+						log.warn("guardian", `${task.id} caused regression: ${regression.output.slice(0, 200)}`);
+						task.status = "failed";
+						task.error = `Regression: ${regression.output.slice(0, 500)}`;
+					}
 				}
 
 				// Save task summary to .planning/
@@ -909,12 +935,49 @@ Critical findings MUST explain what's wrong and suggest a fix.`;
 			if (!coder) break;
 
 			const fixPrompt = "Read .planning/VERIFICATION.md and .planning/REVIEW.md. Fix all FAIL and CRITICAL items from both files. Then re-run the failing commands to confirm they pass.";
-			const fixResult = await runAgent(coder, fixPrompt, cwd, memory, roster, defaultModel, 30, skills, engine, undefined, sandbox);
+			const fixResult = await runAgent(coder, fixPrompt, cwd, memory, roster, defaultModel, 30, skills, engine, undefined, sandbox, streamForward);
 			totalInputTokens += fixResult.inputTokens ?? 0;
 			totalOutputTokens += fixResult.outputTokens ?? 0;
 			totalCostUsd += fixResult.costUsd ?? 0;
 
-			// Re-run verification after fix attempt
+			// Second review after fix — reviewer verifies the fix didn't introduce new issues
+			const reviewer = agents.find(a => a.role === "reviewer");
+			if (reviewer && qualityGate) {
+				log.info("guardian", `Post-fix review (attempt ${fixAttempt})...`);
+				const fixDiff = getTaskDiff(cwd);
+				if (fixDiff) {
+					const postFixReviewPrompt = `# Post-Fix Review (attempt ${fixAttempt})
+
+## Changes After Fix
+\`\`\`diff
+${fixDiff.slice(0, 8000)}
+\`\`\`
+
+Verify:
+1. The fix addresses the original FAIL/CRITICAL items
+2. The fix does NOT introduce new issues (regressions, broken logic, missing error handling)
+3. No quick hacks — the fix should be a proper solution
+
+Report format: [PASS/FAIL/WARN] description (severity: critical/major/minor)`;
+
+					const postFixReview = await runAgent(reviewer, postFixReviewPrompt, cwd, memory, roster, defaultModel, 10, skills, engine, undefined, sandbox, streamForward);
+					totalInputTokens += postFixReview.inputTokens ?? 0;
+					totalOutputTokens += postFixReview.outputTokens ?? 0;
+					totalCostUsd += postFixReview.costUsd ?? 0;
+
+					if (postFixReview.status === "done" || postFixReview.status === "no_report") {
+						const findings = parseReviewFindings(postFixReview.result);
+						const hasCritical = findings.some(f => f.severity === "critical");
+						if (hasCritical) {
+							log.warn("guardian", `Post-fix review found critical issues — will retry`);
+							continue; // skip verify, go to next fix attempt
+						}
+						log.info("guardian", `Post-fix review PASSED`);
+					}
+				}
+			}
+
+			// Re-run verification after fix + review
 			const reVerify = await runFullVerification(cwd);
 			verifyPassed = reVerify.passed;
 
@@ -947,7 +1010,7 @@ Critical findings MUST explain what's wrong and suggest a fix.`;
 			if (!agentDef) continue;
 
 			const retryPrompt = `# Retry: ${task.id}\n\nPrevious attempt failed: ${task.error}\n\n## Action\n${task.description}\n\nFix the issue and complete the task.`;
-			const result = await runAgent(agentDef, retryPrompt, cwd, memory, roster, defaultModel, 30, skills, engine, undefined, sandbox);
+			const result = await runAgent(agentDef, retryPrompt, cwd, memory, roster, defaultModel, 30, skills, engine, undefined, sandbox, streamForward);
 			totalInputTokens += result.inputTokens ?? 0;
 			totalOutputTokens += result.outputTokens ?? 0;
 			totalCostUsd += result.costUsd ?? 0;
@@ -977,7 +1040,7 @@ Critical findings MUST explain what's wrong and suggest a fix.`;
 		const replanResult = await runAgent(
 			planner,
 			`## Original Goal\n${goal}\n\n## Completed\n${doneSummary}\n\n## Failed\n${failedSummary}\n\n## Team\n${roster}\n\nCreate a recovery plan. Use different approaches where the original failed. Assign only to: ${available.join(", ")}.\n\nIMPORTANT: Call the report tool with ONLY a JSON code block:\n\`\`\`json\n{ "summary": "...", "tasks": [{ "id": "task_1", "name": "...", "assignee": "...", "dependencies": [], "files": [], "action": "...", "verify": "...", "done": "..." }] }\n\`\`\`\nDo NOT output markdown prose. Output ONLY JSON.`,
-			cwd, memory, roster, defaultModel, 30, skills, engine, undefined, sandbox,
+			cwd, memory, roster, defaultModel, 30, skills, engine, undefined, sandbox, streamForward,
 		);
 		totalInputTokens += replanResult.inputTokens ?? 0;
 		totalOutputTokens += replanResult.outputTokens ?? 0;
@@ -1008,7 +1071,7 @@ Critical findings MUST explain what's wrong and suggest a fix.`;
 							task.status = "failed";
 							return { agent: task.assignee, status: "failed" as const, result: "", turns: 0, inputTokens: 0, outputTokens: 0, costUsd: 0 };
 						}
-						const result = await runAgent(agentDef, task.description, cwd, memory, roster, defaultModel, 30, skills, engine, undefined, sandbox);
+						const result = await runAgent(agentDef, task.description, cwd, memory, roster, defaultModel, 30, skills, engine, undefined, sandbox, streamForward);
 						totalInputTokens += result.inputTokens ?? 0;
 						totalOutputTokens += result.outputTokens ?? 0;
 						totalCostUsd += result.costUsd ?? 0;

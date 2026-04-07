@@ -750,6 +750,49 @@ Output: .planning/ artifacts + code + per-task git commits
 
 **Key module:** `context.ts` — `RunContext` provides lifecycle-aware lock management. It replaces scattered manual `acquireLock`/`releaseLock` calls with a single object that auto-registers signal handlers using the correct `cwd` and guarantees cleanup on exit.
 
+## Streaming Execution
+
+All three engines (claude-code, codex, builtin) support **real-time streaming events** during agent execution. Instead of waiting for a final result, consumers receive fine-grained events as agents work:
+
+| Event | Description |
+|-------|-------------|
+| `start` | Agent process spawned (includes engine type) |
+| `text` | Incremental text output from the model |
+| `tool_start` | Agent began invoking a tool (name + args) |
+| `tool_end` | Tool execution completed |
+| `turn_end` | One model turn completed (with token counts) |
+| `progress` | Informational progress message |
+| `error` | Non-fatal error or warning |
+| `done` | Agent finished — carries the final `RunResult` |
+
+**Usage via `ExecuteOptions`:**
+
+```typescript
+import { executeTeam, type AgentStreamEvent } from "awsl-agent-core";
+
+const result = await executeTeam(goal, agents, cwd, model, 3, {
+  onStream: (event: AgentStreamEvent) => {
+    if (event.type === "tool_start") {
+      console.log(`[${event.agent}] using ${event.tool}`);
+    }
+  },
+});
+```
+
+**Usage via `runAgent`:**
+
+```typescript
+import { runAgent, type StreamCallback } from "awsl-agent-core";
+
+const onStream: StreamCallback = (event) => {
+  if (event.type === "text") process.stdout.write(event.text);
+};
+
+const result = await runAgent(agentDef, task, cwd, memory, roster, model, 30, undefined, undefined, undefined, undefined, onStream);
+```
+
+For the **claude-code** engine, streaming uses `--output-format stream-json` (NDJSON) instead of `--output-format json`, providing real-time assistant messages, tool invocations, and token usage. Events are automatically forwarded to the **LogStream** for dashboard/SSE subscribers via the `"agent-event"` channel.
+
 ## Conductor
 
 Conductor is the orchestration engine. It handles **what** to do and **when**.

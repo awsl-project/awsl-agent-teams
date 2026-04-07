@@ -1842,14 +1842,44 @@ awsl dashboard
 | **失败处理** | 单个任务失败不影响后续无依赖任务的执行 |
 | **日志** | 所有日志输出到 stderr，可重定向：`awsl queue start 2>queue.log` |
 
+### 流式执行
+
+所有引擎（claude-code、codex、builtin）支持实时流式事件回调。
+
+**事件类型：**
+- `start` — agent 进程启动
+- `text` — 模型增量文本输出（逐 token）
+- `tool_start` / `tool_end` — 工具调用开始/结束
+- `turn_end` — 一轮对话完成（含 token 计数）
+- `progress` / `error` — 进度/非致命错误
+- `done` — 执行完毕，携带最终 `RunResult`
+
+**在编排中使用：**
+```typescript
+const result = await executeTeam(goal, agents, cwd, model, 3, {
+  onStream: (event) => {
+    if (event.type === "tool_start") {
+      console.log(`[${event.agent}] → ${event.tool}`);
+    }
+  },
+});
+```
+
+**注意事项：**
+- claude-code 引擎在流式模式下使用 `--output-format stream-json`（NDJSON）
+- 事件自动转发到 LogStream → SSE → 仪表盘
+- `text` 事件量大，LogStream 默认过滤掉（避免日志爆炸），仅 `agent-event` 通道保留
+- 不传 `onStream` 时，行为与之前完全一致（零开销）
+
 ### 仪表盘进阶功能
 
 `awsl dashboard` 不只是看历史，还能实时监控和操作队列。
 
 **实时日志流：**
 - 点击底部 "LIVE LOG" 栏展开日志面板
-- 通过 SSE (Server-Sent Events) 实时显示 agent 的 stdout/stderr
+- 通过 SSE (Server-Sent Events) 实时显示 agent 的 stdout/stderr 和流式事件
 - 按任务 ID 和 agent 名称着色，自动滚动
+- `"agent-event"` SSE 通道提供细粒度的工具调用和进度事件
 - 适合远程监控：浏览器打开 `http://<IP>:3120` 即可
 
 **浏览器通知：**

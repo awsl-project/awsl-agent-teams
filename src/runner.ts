@@ -30,6 +30,12 @@ import type { SandboxPolicy } from "./sandbox.js";
 import { defaultPolicy } from "./sandbox.js";
 import { log } from "./log.js";
 import { getLogStream } from "./logstream.js";
+import type { StreamCallback } from "./streaming.js";
+import {
+	streamStart, streamText, streamToolStart, streamToolEnd,
+	streamTurnEnd, streamProgress, streamError, streamDone,
+	parseCCStreamLine, parseCodexStreamLine,
+} from "./streaming.js";
 
 export type Engine = "claude-code" | "codex" | "builtin";
 
@@ -143,6 +149,7 @@ async function runWithCodex(
 	skillRegistry?: SkillRegistry,
 	taskId?: string,
 	resumeSessionId?: string,
+	onStream?: StreamCallback,
 ): Promise<RunResult> {
 	const skills = skillRegistry ?? new SkillRegistry();
 	const skillInstructions = skills.buildInstructions(agentDef.role, agentDef.skills);
@@ -227,6 +234,11 @@ ${task}`;
 	}
 
 	return new Promise<RunResult>((resolve) => {
+		const resolveWithStream = (r: RunResult) => {
+			onStream?.(streamDone(agentDef.name, r));
+			resolve(r);
+		};
+
 		const child = spawn(codexCmd, args, {
 			cwd,
 			stdio: ["pipe", "pipe", "pipe"],
@@ -278,6 +290,9 @@ ${task}`;
 		child.stdin.write(prompt);
 		child.stdin.end();
 
+		// Emit stream start
+		onStream?.(streamStart(agentDef.name, "codex", taskId));
+
 		let stdout = "";
 		let stderr = "";
 		let sessionId = "";
@@ -295,15 +310,30 @@ ${task}`;
 		const parseJsonEvent = (line: string) => {
 			const trimmed = line.trim();
 			if (!trimmed) return;
+
+			// Use streaming parser to emit fine-grained events
+			if (onStream) {
+				const parsed = parseCodexStreamLine(agentDef.name, trimmed, onStream);
+				if (parsed?.sessionId) sessionId = parsed.sessionId;
+				if (parsed?.turnDelta) {
+					turns++;
+					inputTokens += parsed.turnDelta.inputTokens;
+					outputTokens += parsed.turnDelta.outputTokens;
+					onStream(streamTurnEnd(agentDef.name, turns, inputTokens, outputTokens));
+				}
+			}
+
 			try {
 				const event = JSON.parse(trimmed) as CodexJsonEvent;
 				if (event.type === "thread.started" && event.thread_id) {
-					sessionId = event.thread_id;
+					if (!onStream) sessionId = event.thread_id;
 				}
 				if (event.type === "turn.completed") {
-					turns++;
-					inputTokens += event.usage?.input_tokens ?? 0;
-					outputTokens += event.usage?.output_tokens ?? 0;
+					if (!onStream) {
+						turns++;
+						inputTokens += event.usage?.input_tokens ?? 0;
+						outputTokens += event.usage?.output_tokens ?? 0;
+					}
 				}
 				// Error events — accumulate for final error report
 				if (event.type === "error" && event.message) {
@@ -348,7 +378,7 @@ ${task}`;
 			onOutput();
 			const chunk = data.toString();
 			stderr += chunk;
-			process.stderr.write(chunk);
+			if (!log._muted) process.stderr.write(chunk);
 			stderrLineBuffer += chunk;
 			const lines = stderrLineBuffer.split("\n");
 			stderrLineBuffer = lines.pop() ?? "";
@@ -379,7 +409,7 @@ ${task}`;
 			// Treat timeout/kill as an error
 			if (code === null || killed) {
 				cleanupTmp();
-				resolve({
+				resolveWithStream({
 					agent: agentDef.name,
 					status: "timeout",
 					result: "",
@@ -409,7 +439,7 @@ ${task}`;
 			if (isResume && code !== 0 && /session.*(not found|expired|invalid)/i.test(combined + allErrors)) {
 				log.warn(agentDef.name, "Session resume failed, retrying without resume");
 				cleanupTmp();
-				resolve(runWithCodex(agentDef, task, cwd, memory, teamRoster, skillRegistry, taskId));
+				resolve(runWithCodex(agentDef, task, cwd, memory, teamRoster, skillRegistry, taskId, undefined, onStream));
 				return;
 			}
 
@@ -417,7 +447,7 @@ ${task}`;
 			if (code !== 0 && isRateLimitError(combined + allErrors)) {
 				log.warn(agentDef.name, `Rate limited (exit: ${code})`);
 				cleanupTmp();
-				resolve({
+				resolveWithStream({
 					agent: agentDef.name,
 					status: "rate_limited",
 					result: "",
@@ -435,7 +465,7 @@ ${task}`;
 				const retryInfo = reconnectCount > 0 ? ` (${reconnectCount} reconnect attempts)` : "";
 				log.error(agentDef.name, `API connectivity error${retryInfo} (exit: ${code})`);
 				cleanupTmp();
-				resolve({
+				resolveWithStream({
 					agent: agentDef.name,
 					status: "failed",
 					result: "",
@@ -474,7 +504,7 @@ ${task}`;
 				log.error(agentDef.name, `Failed (codex, exit: ${code})`);
 			}
 			cleanupTmp();
-			resolve({
+			resolveWithStream({
 				agent: agentDef.name,
 				status: code === 0 ? "done" : "failed",
 				result,
@@ -493,7 +523,7 @@ ${task}`;
 			cleanupTmp();
 			if (isRateLimitError(err.message)) {
 				log.warn(agentDef.name, "Rate limited (spawn error)");
-				resolve({
+				resolveWithStream({
 					agent: agentDef.name,
 					status: "rate_limited",
 					result: "",
@@ -505,7 +535,7 @@ ${task}`;
 				});
 				return;
 			}
-			resolve({
+			resolveWithStream({
 				agent: agentDef.name,
 				status: "failed",
 				result: "",
@@ -570,6 +600,7 @@ async function runWithClaudeCode(
 	teamRoster: string,
 	skillRegistry?: SkillRegistry,
 	taskId?: string,
+	onStream?: StreamCallback,
 ): Promise<RunResult> {
 	const skills = skillRegistry ?? new SkillRegistry();
 	const skillInstructions = skills.buildInstructions(agentDef.role, agentDef.skills);
@@ -621,10 +652,11 @@ ${memSummary === "(empty)" ? "No shared data yet." : memSummary}
 		baseArgs = [];
 	}
 
+	const outputFormat = onStream ? "stream-json" : "json";
 	const args = [
 		...baseArgs,
 		"-p",
-		"--output-format", "json",
+		"--output-format", outputFormat,
 		"--append-system-prompt", systemPrompt,
 		"--allowedTools", allowedTools.join(","),
 	];
@@ -641,6 +673,11 @@ ${memSummary === "(empty)" ? "No shared data yet." : memSummary}
 	const AGENT_TIMEOUT_MS = 30 * 60 * 1000;
 
 	return new Promise<RunResult>((resolve) => {
+		const resolveWithStream = (r: RunResult) => {
+			onStream?.(streamDone(agentDef.name, r));
+			resolve(r);
+		};
+
 		const cleanEnv = { ...process.env };
 		delete cleanEnv.CLAUDECODE;
 
@@ -668,39 +705,88 @@ ${memSummary === "(empty)" ? "No shared data yet." : memSummary}
 		child.stdin.write(task);
 		child.stdin.end();
 
+		// Emit stream start
+		onStream?.(streamStart(agentDef.name, "claude-code", taskId));
+
 		let stdout = "";
 		let stderr = "";
+		let stdoutLineBuffer = "";
 		const logStream = getLogStream();
 		const logTaskId = taskId ?? agentDef.name;
+
+		// Streaming state: accumulated from stream-json NDJSON events
+		let streamSessionId = "";
+		let streamResult = "";
+		let streamInputTokens = 0;
+		let streamOutputTokens = 0;
+		let streamCostUsd = 0;
+		let streamNumTurns = 0;
+		let streamParsedResult = false;
 
 		child.stdout.on("data", (data: Buffer) => {
 			const chunk = data.toString();
 			stdout += chunk;
-			for (const line of chunk.split("\n")) {
-				if (line.trim()) {
-					logStream.push({ timestamp: new Date().toISOString(), taskId: logTaskId, agent: agentDef.name, stream: "stdout", text: line });
+
+			if (onStream) {
+				// Stream-json mode: parse NDJSON lines in real-time
+				stdoutLineBuffer += chunk;
+				const lines = stdoutLineBuffer.split("\n");
+				stdoutLineBuffer = lines.pop() ?? "";
+				for (const line of lines) {
+					if (!line.trim()) continue;
+					logStream.push({ timestamp: new Date().toISOString(), taskId: logTaskId, agent: agentDef.name, stream: "stdout", text: line.slice(0, 500) });
+					const parsed = parseCCStreamLine(agentDef.name, line, onStream);
+					if (parsed) {
+						if (parsed.sessionId) streamSessionId = parsed.sessionId;
+						if (parsed.result !== undefined) {
+							streamResult = parsed.result;
+							streamParsedResult = true;
+						}
+						if (parsed.usage) {
+							streamInputTokens = parsed.usage.input_tokens;
+							streamOutputTokens = parsed.usage.output_tokens;
+						}
+						if (parsed.costUsd !== undefined) streamCostUsd = parsed.costUsd;
+						if (parsed.numTurns !== undefined) streamNumTurns = parsed.numTurns;
+					}
 				}
 			}
+			// In non-streaming mode, stdout is parsed as a single JSON blob on close
 		});
 		child.stderr.on("data", (data: Buffer) => {
 			const chunk = data.toString();
 			stderr += chunk;
-			process.stderr.write(chunk);
+			if (!log._muted) process.stderr.write(chunk);
 			for (const line of chunk.split("\n")) {
-				if (line.trim()) {
-					logStream.push({ timestamp: new Date().toISOString(), taskId: logTaskId, agent: agentDef.name, stream: "stderr", text: line });
-				}
+				const trimmed = line.trim();
+				if (!trimmed) continue;
+				// Skip ANSI-heavy progress bars and spinner lines from CC
+				if (trimmed.startsWith("\x1b[") && trimmed.length < 10) continue;
+				logStream.push({ timestamp: new Date().toISOString(), taskId: logTaskId, agent: agentDef.name, stream: "stderr", text: trimmed.slice(0, 500) });
 			}
 		});
 
 		child.on("close", (code) => {
 			clearTimeout(agentTimer);
 
+			// Flush remaining stdout buffer
+			if (onStream && stdoutLineBuffer.trim()) {
+				logStream.push({ timestamp: new Date().toISOString(), taskId: logTaskId, agent: agentDef.name, stream: "stdout", text: stdoutLineBuffer });
+				const parsed = parseCCStreamLine(agentDef.name, stdoutLineBuffer, onStream);
+				if (parsed) {
+					if (parsed.sessionId) streamSessionId = parsed.sessionId;
+					if (parsed.result !== undefined) { streamResult = parsed.result; streamParsedResult = true; }
+					if (parsed.usage) { streamInputTokens = parsed.usage.input_tokens; streamOutputTokens = parsed.usage.output_tokens; }
+					if (parsed.costUsd !== undefined) streamCostUsd = parsed.costUsd;
+					if (parsed.numTurns !== undefined) streamNumTurns = parsed.numTurns;
+				}
+			}
+
 			// Treat timeout kill as an error
 			if (code === null || (code !== 0 && !stdout.trim())) {
 				const isTimeout = code === null;
 				if (isTimeout) {
-					resolve({
+					resolveWithStream({
 						agent: agentDef.name,
 						status: "timeout",
 						result: "",
@@ -717,7 +803,7 @@ ${memSummary === "(empty)" ? "No shared data yet." : memSummary}
 			// Check for rate limiting before parsing response
 			if (code !== 0 && isRateLimitError(stderr + stdout)) {
 				log.warn(agentDef.name, `Rate limited (exit: ${code})`);
-				resolve({
+				resolveWithStream({
 					agent: agentDef.name,
 					status: "rate_limited",
 					result: "",
@@ -730,7 +816,26 @@ ${memSummary === "(empty)" ? "No shared data yet." : memSummary}
 				return;
 			}
 
-			// Parse JSON response
+			// ── Stream-json mode: use accumulated stream data ──
+			if (onStream && streamParsedResult) {
+				if (streamSessionId) {
+					memory.set(`result:${agentDef.name}:session`, streamSessionId, agentDef.name);
+				}
+				log.info(agentDef.name, `Done (claude-code stream, exit: ${code})`);
+				resolveWithStream({
+					agent: agentDef.name,
+					status: code === 0 ? "done" : "failed",
+					result: streamResult,
+					turns: streamNumTurns || 1,
+					error: code !== 0 ? `Exit code ${code}` : undefined,
+					inputTokens: streamInputTokens,
+					outputTokens: streamOutputTokens,
+					costUsd: streamCostUsd,
+				});
+				return;
+			}
+
+			// ── Legacy JSON mode: parse single JSON blob ──
 			try {
 				const response = JSON.parse(stdout);
 				const result = response.result ?? stdout;
@@ -746,7 +851,7 @@ ${memSummary === "(empty)" ? "No shared data yet." : memSummary}
 				memory.set(`result:${agentDef.name}:session`, sessionId, agentDef.name);
 
 				log.info(agentDef.name, `Done (claude-code, exit: ${code})`);
-				resolve({
+				resolveWithStream({
 					agent: agentDef.name,
 					status: code === 0 ? "done" : "failed",
 					result,
@@ -759,7 +864,7 @@ ${memSummary === "(empty)" ? "No shared data yet." : memSummary}
 			} catch {
 				// Non-JSON output — use raw stdout
 				const result = stdout.trim() || stderr.trim();
-				resolve({
+				resolveWithStream({
 					agent: agentDef.name,
 					status: code === 0 ? "done" : "failed",
 					result,
@@ -775,7 +880,7 @@ ${memSummary === "(empty)" ? "No shared data yet." : memSummary}
 		child.on("error", (err) => {
 			if (isRateLimitError(err.message)) {
 				log.warn(agentDef.name, `Rate limited (spawn error)`);
-				resolve({
+				resolveWithStream({
 					agent: agentDef.name,
 					status: "rate_limited",
 					result: "",
@@ -787,7 +892,7 @@ ${memSummary === "(empty)" ? "No shared data yet." : memSummary}
 				});
 				return;
 			}
-			resolve({
+			resolveWithStream({
 				agent: agentDef.name,
 				status: "failed",
 				result: "",
@@ -819,6 +924,7 @@ async function runWithBuiltin(
 	maxTurns: number,
 	skillRegistry?: SkillRegistry,
 	sandbox?: SandboxPolicy | boolean,
+	onStream?: StreamCallback,
 ): Promise<RunResult> {
 	const modelStr = agentDef.model ?? defaultModel;
 	const [provider, modelId] = parseModel(modelStr);
@@ -861,29 +967,46 @@ ${memSummary === "(empty)" ? "No shared data yet." : memSummary}
 	});
 
 	let turns = 0;
+
+	// Emit stream start
+	onStream?.(streamStart(agentDef.name, "builtin"));
+
 	const unsub = agent.subscribe((event: AgentEvent) => {
 		if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
-			process.stderr.write(event.assistantMessageEvent.delta);
+			const delta = event.assistantMessageEvent.delta;
+			process.stderr.write(delta);
+			onStream?.(streamText(agentDef.name, delta));
 		}
 		if (event.type === "turn_end") {
 			turns++;
+			onStream?.(streamTurnEnd(agentDef.name, turns));
 			if (turns >= maxTurns) {
 				log.warn(agentDef.name, `Max turns (${maxTurns}) reached, aborting`);
 				agent.abort();
 			}
 		}
 		if (event.type === "tool_execution_start") {
-			log.debug(agentDef.name, `${event.toolName}(${JSON.stringify(event.args).slice(0, 80)})`);
+			const argsStr = JSON.stringify(event.args).slice(0, 80);
+			log.debug(agentDef.name, `${event.toolName}(${argsStr})`);
+			onStream?.(streamToolStart(agentDef.name, event.toolName, argsStr));
+		}
+		if (event.type === "tool_execution_end") {
+			onStream?.(streamToolEnd(agentDef.name, event.toolName));
 		}
 	});
 
 	log.info(agentDef.name, `Starting... (engine: builtin, model: ${modelStr})`);
 
+	const emitDone = (r: RunResult): RunResult => {
+		onStream?.(streamDone(agentDef.name, r));
+		return r;
+	};
+
 	try {
 		await agent.prompt(task);
 	} catch (e: any) {
 		unsub();
-		return { agent: agentDef.name, status: "failed", result: "", turns, error: e.message ?? String(e), inputTokens: 0, outputTokens: 0, costUsd: 0 };
+		return emitDone({ agent: agentDef.name, status: "failed", result: "", turns, error: e.message ?? String(e), inputTokens: 0, outputTokens: 0, costUsd: 0 });
 	}
 
 	unsub();
@@ -892,7 +1015,7 @@ ${memSummary === "(empty)" ? "No shared data yet." : memSummary}
 	if (reportBox.value) {
 		const rpt = reportBox.value;
 		log.info(agentDef.name, `Done (${rpt.status})`);
-		return { agent: agentDef.name, status: rpt.status as RunResult["status"], result: rpt.result, turns, inputTokens: 0, outputTokens: 0, costUsd: 0 };
+		return emitDone({ agent: agentDef.name, status: rpt.status as RunResult["status"], result: rpt.result, turns, inputTokens: 0, outputTokens: 0, costUsd: 0 });
 	}
 
 	const messages = agent.state.messages;
@@ -903,12 +1026,12 @@ ${memSummary === "(empty)" ? "No shared data yet." : memSummary}
 			if (textParts.length > 0) {
 				const text = textParts.map((c: any) => c.text).join("\n");
 				log.info(agentDef.name, "Done (no report tool, using last output)");
-				return { agent: agentDef.name, status: "no_report", result: text, turns, inputTokens: 0, outputTokens: 0, costUsd: 0 };
+				return emitDone({ agent: agentDef.name, status: "no_report", result: text, turns, inputTokens: 0, outputTokens: 0, costUsd: 0 });
 			}
 		}
 	}
 
-	return { agent: agentDef.name, status: "failed", result: "", turns, error: "No output", inputTokens: 0, outputTokens: 0, costUsd: 0 };
+	return emitDone({ agent: agentDef.name, status: "failed", result: "", turns, error: "No output", inputTokens: 0, outputTokens: 0, costUsd: 0 });
 }
 
 // ─── Public API ──────────────────────────────────────────────
@@ -925,20 +1048,21 @@ export async function runAgent(
 	engine?: Engine,
 	taskId?: string,
 	sandbox?: SandboxPolicy | boolean,
+	onStream?: StreamCallback,
 ): Promise<RunResult> {
 	// Per-agent engine override takes priority over global engine
 	const resolved = detectEngine(agentDef.engine ?? engine);
 
 	if (resolved === "claude-code") {
 		// Claude Code has its own permission system; sandbox is ignored
-		return runWithClaudeCode(agentDef, task, cwd, memory, teamRoster, skillRegistry, taskId);
+		return runWithClaudeCode(agentDef, task, cwd, memory, teamRoster, skillRegistry, taskId, onStream);
 	}
 	if (resolved === "codex") {
 		// Try session resume if a prior session ID exists in memory
 		const priorSession = memory.get(`result:${agentDef.name}:session`);
-		return runWithCodex(agentDef, task, cwd, memory, teamRoster, skillRegistry, taskId, priorSession || undefined);
+		return runWithCodex(agentDef, task, cwd, memory, teamRoster, skillRegistry, taskId, priorSession || undefined, onStream);
 	}
-	return runWithBuiltin(agentDef, task, cwd, memory, teamRoster, defaultModel, maxTurns, skillRegistry, sandbox);
+	return runWithBuiltin(agentDef, task, cwd, memory, teamRoster, defaultModel, maxTurns, skillRegistry, sandbox, onStream);
 }
 
 /**
