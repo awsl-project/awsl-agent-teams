@@ -793,6 +793,23 @@ const result = await runAgent(agentDef, task, cwd, memory, roster, model, 30, un
 
 For the **claude-code** engine, streaming uses `--output-format stream-json` (NDJSON) instead of `--output-format json`, providing real-time assistant messages, tool invocations, and token usage. Events are automatically forwarded to the **LogStream** for dashboard/SSE subscribers via the `"agent-event"` channel.
 
+**CLI usage — `--stream` flag:**
+
+```bash
+awsl run "Build a REST API" --stream
+```
+
+Shows real-time progress inline in the terminal:
+```
+[12:34:56] [coder]    >>> started (claude-code)
+[12:34:58] [coder]    -> Read src/index.ts
+[12:35:01] [coder]    <- Read
+[12:35:03] [coder]    -> Edit src/index.ts
+[12:35:05] [coder]    <- Edit
+[12:35:06] [coder]    #1 (in=2340 out=890)
+[12:35:10] [coder]    <<< done (turns=2 $0.0124)
+```
+
 ## Conductor
 
 Conductor is the orchestration engine. It handles **what** to do and **when**.

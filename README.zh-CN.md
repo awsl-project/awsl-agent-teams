@@ -787,6 +787,23 @@ const result = await runAgent(agentDef, task, cwd, memory, roster, model, 30, un
 
 claude-code 引擎使用 `--output-format stream-json`（NDJSON）替代 `--output-format json`，实时提供 assistant 消息、工具调用和 token 用量。事件自动通过 `"agent-event"` 通道转发到 **LogStream**，供仪表盘/SSE 订阅者消费。
 
+**CLI 用法 — `--stream` 标志：**
+
+```bash
+awsl run "构建一个 REST API" --stream
+```
+
+在终端内联显示实时进度：
+```
+[12:34:56] [coder]    >>> started (claude-code)
+[12:34:58] [coder]    -> Read src/index.ts
+[12:35:01] [coder]    <- Read
+[12:35:03] [coder]    -> Edit src/index.ts
+[12:35:05] [coder]    <- Edit
+[12:35:06] [coder]    #1 (in=2340 out=890)
+[12:35:10] [coder]    <<< done (turns=2 $0.0124)
+```
+
 ## Conductor
 
 Conductor 是编排引擎，负责 **做什么** 以及 **何时做**。

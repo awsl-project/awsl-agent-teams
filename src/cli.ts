@@ -31,6 +31,100 @@ import { RemoteClient } from "./remote.js";
 import { ProjectManager } from "./projects.js";
 import { generateSummary, formatSummary } from "./summary.js";
 import { trackInvocation, getInvocationSummary, isValidSource, type InvocationSource } from "./invocations.js";
+import { TUI, startTUIMonitor, createTUIHook } from "./tui.js";
+import type { AgentStreamEvent, StreamCallback } from "./streaming.js";
+
+// ─── Stream Logger ──────────────────────────────────────────
+
+const STREAM_COLORS: Record<string, string> = {
+	planner: "\x1b[35m",
+	architect: "\x1b[34m",
+	coder: "\x1b[32m",
+	reviewer: "\x1b[33m",
+	tester: "\x1b[36m",
+};
+const S_RESET = "\x1b[0m";
+const S_DIM = "\x1b[90m";
+const S_BOLD = "\x1b[1m";
+const S_CYAN = "\x1b[36m";
+const S_GREEN = "\x1b[32m";
+const S_YELLOW = "\x1b[33m";
+const S_RED = "\x1b[31m";
+
+function streamTs(): string {
+	return new Date().toISOString().slice(11, 23);
+}
+
+function agentColor(agent: string): string {
+	// Try role-based color, fallback to agent name match
+	for (const [role, c] of Object.entries(STREAM_COLORS)) {
+		if (agent.toLowerCase().includes(role)) return c;
+	}
+	return "\x1b[37m";
+}
+
+/**
+ * Build a StreamCallback that writes formatted progress lines to stderr.
+ * Designed for non-TUI mode — compact, colored, one line per event.
+ */
+function buildStreamLogger(): StreamCallback {
+	// Track per-agent active tool for tool_end rendering
+	const activeTools = new Map<string, string>();
+
+	return (event: AgentStreamEvent) => {
+		const ac = agentColor(event.agent);
+		const prefix = `${S_DIM}[${streamTs()}]${S_RESET} ${ac}[${event.agent}]${S_RESET}`;
+
+		switch (event.type) {
+			case "start":
+				console.error(`${prefix} ${S_CYAN}>>>${S_RESET} started ${S_DIM}(${event.engine})${S_RESET}`);
+				break;
+
+			case "tool_start": {
+				activeTools.set(event.agent, event.tool);
+				const args = event.args ? ` ${S_DIM}${event.args.slice(0, 80)}${S_RESET}` : "";
+				console.error(`${prefix} ${S_YELLOW}->${S_RESET} ${event.tool}${args}`);
+				break;
+			}
+
+			case "tool_end": {
+				const tool = activeTools.get(event.agent) ?? event.tool;
+				activeTools.delete(event.agent);
+				const out = event.output ? ` ${S_DIM}${event.output.slice(0, 60)}${S_RESET}` : "";
+				console.error(`${prefix} ${S_GREEN}<-${S_RESET} ${tool}${out}`);
+				break;
+			}
+
+			case "turn_end": {
+				const tokens = event.inputTokens
+					? ` ${S_DIM}(in=${event.inputTokens} out=${event.outputTokens})${S_RESET}`
+					: "";
+				console.error(`${prefix} ${S_BOLD}#${event.turn}${S_RESET}${tokens}`);
+				break;
+			}
+
+			case "progress":
+				console.error(`${prefix} ${S_DIM}${event.message}${S_RESET}`);
+				break;
+
+			case "error":
+				console.error(`${prefix} ${S_RED}!! ${event.message.slice(0, 200)}${S_RESET}`);
+				break;
+
+			case "done": {
+				const r = event.result;
+				const status = r.status === "done" ? `${S_GREEN}done${S_RESET}`
+					: r.status === "failed" ? `${S_RED}failed${S_RESET}`
+					: `${S_YELLOW}${r.status}${S_RESET}`;
+				const cost = r.costUsd ? ` $${r.costUsd.toFixed(4)}` : "";
+				console.error(`${prefix} ${S_CYAN}<<<${S_RESET} ${status} ${S_DIM}(turns=${r.turns}${cost})${S_RESET}`);
+				break;
+			}
+
+			// Skip "text" events in CLI — too noisy (token-by-token)
+		}
+	};
+}
 
 function usage() {
 	console.error(`
@@ -70,6 +164,7 @@ Commands:
     --set <text>             Set prompt inline
     --file <path>            Set prompt from file
   agents preview <name>    Show full composed prompt (base + skills + team context)
+  tui [--url <dashboard>]  Terminal UI — real-time agent output monitor
   dashboard [--port N]     Open the sleep mode pixel dashboard (default: 3120)
   dashboard --bg           Start dashboard in background (detached)
   dashboard stop           Stop background dashboard
@@ -122,6 +217,7 @@ Terminal Full Pipeline (no API key needed with --engine claude-code/codex):
   --model <provider:model> Default: anthropic:claude-sonnet-4-20250514
   --concurrency <n>        Default: 2
   --engine <type>          "claude-code", "codex", or "builtin"
+  --stream                 Show real-time agent progress (tools, turns, tokens)
 
 Examples:
   awsl init --global
@@ -773,6 +869,28 @@ async function main() {
 		releaseLock(cwd);
 
 		process.exit(result.passed ? 0 : 1);
+	}
+
+	// ── TUI command (standalone monitor) ────────────────────
+	if (command === "tui") {
+		let dashboardUrl = "http://127.0.0.1:3120";
+		for (let i = 1; i < args.length; i++) {
+			if (args[i] === "--url" && i + 1 < args.length) {
+				dashboardUrl = args[++i];
+			} else if (args[i] === "--port" && i + 1 < args.length) {
+				dashboardUrl = `http://127.0.0.1:${args[++i]}`;
+			}
+		}
+
+		console.log(`Connecting to dashboard at ${dashboardUrl}...`);
+		const tui = startTUIMonitor(dashboardUrl);
+
+		// Graceful shutdown
+		process.on("SIGINT", () => { tui.stop(); process.exit(0); });
+		process.on("SIGTERM", () => { tui.stop(); process.exit(0); });
+
+		// Keep process alive
+		await new Promise(() => {});
 	}
 
 	// ── Dashboard command ───────────────────────────────────
@@ -1552,6 +1670,8 @@ async function main() {
 	let autoCommit = true;
 	let force = false;
 	let engine: Engine | undefined;
+	let useTUI = false;
+	let useStream = false;
 	const positional: string[] = [];
 
 	for (let i = 0; i < runArgs.length; i++) {
@@ -1578,9 +1698,18 @@ async function main() {
 			force = true;
 		} else if (arg === "--engine" && i + 1 < runArgs.length) {
 			engine = runArgs[++i] as Engine;
+		} else if (arg === "--tui") {
+			useTUI = true;
+		} else if (arg === "--stream") {
+			useStream = true;
 		} else if (!arg.startsWith("--")) {
 			positional.push(arg);
 		}
+	}
+
+	// Mute logs early if TUI will take over
+	if (useTUI) {
+		log.mute();
 	}
 
 	// Acquire lock via RunContext
@@ -1588,6 +1717,7 @@ async function main() {
 	try {
 		ctx = RunContext.acquire(cwd, { description: positional.join(" ").slice(0, 60) || "run", force });
 	} catch (e) {
+		if (useTUI) log.unmute();
 		console.error(e instanceof Error ? e.message : String(e));
 		process.exit(1);
 	}
@@ -1598,10 +1728,26 @@ async function main() {
 	// Auto-register project
 	try { ProjectManager.add(cwd); ProjectManager.touch(cwd); } catch { /* fail-soft */ }
 
+	// Set up TUI
+	let tui: TUI | null = null;
+	const tuiHooks: import("./orchestrator.js").TeamHook[] = [];
+	if (useTUI) {
+		const setup = createTUIHook();
+		tui = setup.tui;
+		tuiHooks.push(setup.hook);
+		tui.start();
+	}
+
+	// Set up streaming logger (--stream flag)
+	const streamLogger: StreamCallback | undefined = useStream && !useTUI
+		? buildStreamLogger()
+		: undefined;
+
 	try {
 		if (executePlan) {
 			const planPath = path.join(cwd, ".planning", "PLAN.md");
 			if (!fs.existsSync(planPath)) {
+				if (tui) { tui.stop(); log.unmute(); }
 				console.error("No plan found at .planning/PLAN.md.");
 				ctx.release();
 				process.exit(1);
@@ -1611,7 +1757,10 @@ async function main() {
 			const result = await executeTeam(goal, agents, cwd, model, concurrency, {
 				brainstorm: false, research: false, verify, autoCommit,
 				replan: true, qualityGate: true, engine: detectEngine(engine),
+				hooks: tuiHooks.length > 0 ? tuiHooks : undefined,
+				onStream: streamLogger,
 			});
+			if (tui) { tui.stop(); log.unmute(); }
 			printResult(result);
 			ctx.release();
 			process.exit(result.success ? 0 : 1);
@@ -1619,15 +1768,18 @@ async function main() {
 
 		const goal = positional.join(" ").trim();
 		if (!goal) {
+			if (tui) { tui.stop(); log.unmute(); }
 			console.error("Please provide a goal. Example: awsl run \"Build a REST API\"");
 			ctx.release();
 			process.exit(1);
 		}
 
-		log.section(`GOAL: ${goal}`);
 		const resolvedEngine = detectEngine(engine);
-		log.info("conductor", `Engine: ${resolvedEngine} | Model: ${model} | Concurrency: ${concurrency}`);
-		log.info("conductor", `Agents: ${agents.map(a => a.name).join(", ")}`);
+		if (!useTUI) {
+			log.section(`GOAL: ${goal}`);
+			log.info("conductor", `Engine: ${resolvedEngine} | Model: ${model} | Concurrency: ${concurrency}`);
+			log.info("conductor", `Agents: ${agents.map(a => a.name).join(", ")}`);
+		}
 
 		const result = await executeTeam(goal, agents, cwd, model, concurrency, {
 			brainstorm: !quick && !planOnlyMode,
@@ -1637,8 +1789,11 @@ async function main() {
 			replan: !planOnlyMode && !quick,
 			qualityGate: !planOnlyMode,
 			engine: resolvedEngine,
+			hooks: tuiHooks.length > 0 ? tuiHooks : undefined,
+			onStream: streamLogger,
 		});
 
+		if (tui) { tui.stop(); log.unmute(); }
 		printResult(result);
 
 		if (planOnlyMode) {
@@ -1649,6 +1804,7 @@ async function main() {
 		ctx.release();
 		process.exit(result.success ? 0 : 1);
 	} catch (e) {
+		if (tui) { tui.stop(); log.unmute(); }
 		ctx.release();
 		throw e;
 	}
