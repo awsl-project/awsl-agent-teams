@@ -453,12 +453,88 @@ class CommandProvider implements VerifyProvider {
 	}
 }
 
+// ─── Coverage Provider ─────────────────────────────────────
+// Runs tests with coverage and checks that coverage meets threshold.
+
+const CoverageProvider: VerifyProvider = {
+	name: "coverage",
+	timeout: 180_000,
+	detect(cwd: string): boolean {
+		try {
+			const pkg = JSON.parse(fs.readFileSync(path.join(cwd, "package.json"), "utf-8"));
+			const hasTest = pkg.scripts?.test && !pkg.scripts.test.includes("no test specified");
+			// Only if vitest or jest or c8 is available
+			const hasVite = fs.existsSync(path.join(cwd, "node_modules", "vitest"));
+			const hasJest = fs.existsSync(path.join(cwd, "node_modules", "jest"));
+			const hasC8 = fs.existsSync(path.join(cwd, "node_modules", "c8"));
+			return !!(hasTest && (hasVite || hasJest || hasC8));
+		} catch { return false; }
+	},
+	async execute(cwd: string): Promise<VerifyItem[]> {
+		// Request json-summary so we can read coverage/coverage-summary.json from disk.
+		// vitest's `--reporter=json` writes test results (not coverage), and jest's
+		// `--coverageReporters=text` emits an istanbul table — neither matches
+		// the `Lines|Stmts: N%` format the old regex expected.
+		const hasVite = fs.existsSync(path.join(cwd, "node_modules", "vitest"));
+		const cmd = hasVite
+			? "npx vitest run --coverage --coverage.reporter=json-summary --coverage.reporter=text 2>&1"
+			: "npx jest --coverage --coverageReporters=json-summary --coverageReporters=text 2>&1";
+
+		const result = runCommand("coverage", cmd, cwd, this.timeout);
+
+		// Read canonical coverage number from the json-summary file.
+		let coveragePct = 0;
+		const summaryPath = path.join(cwd, "coverage", "coverage-summary.json");
+		try {
+			if (fs.existsSync(summaryPath)) {
+				const summary = JSON.parse(fs.readFileSync(summaryPath, "utf-8"));
+				const pct = summary?.total?.lines?.pct;
+				if (typeof pct === "number" && !Number.isNaN(pct)) coveragePct = pct;
+			}
+		} catch {
+			// keep coveragePct at 0 — reporter likely didn't run
+		}
+
+		const THRESHOLD = 60; // minimum 60% line coverage
+		const passed = coveragePct >= THRESHOLD;
+		result.passed = passed;
+		result.output = `Line coverage: ${coveragePct}% (threshold: ${THRESHOLD}%)\n${result.output.slice(0, 1500)}`;
+
+		return [result];
+	},
+};
+
+// ─── Security Scan Provider ────────────────────────────────
+// Runs eslint-plugin-security or semgrep if available.
+
+const SecurityScanProvider: VerifyProvider = {
+	name: "security-scan",
+	timeout: 60_000,
+	detect(cwd: string): boolean {
+		// Check for eslint-plugin-security in node_modules
+		const hasPlugin = fs.existsSync(path.join(cwd, "node_modules", "eslint-plugin-security"));
+		// Or semgrep on PATH
+		if (hasPlugin) return true;
+		try { execSync("semgrep --version", { stdio: "pipe", timeout: 5000 }); return true; } catch { return false; }
+	},
+	async execute(cwd: string): Promise<VerifyItem[]> {
+		const hasPlugin = fs.existsSync(path.join(cwd, "node_modules", "eslint-plugin-security"));
+		if (hasPlugin) {
+			return [runCommand("security-scan", "npx eslint src/ --rule '{\"security/detect-object-injection\": \"warn\", \"security/detect-non-literal-fs-filename\": \"warn\", \"security/detect-eval-with-expression\": \"error\"}' --max-warnings 0 2>&1", cwd, this.timeout)];
+		}
+		// Fallback: semgrep
+		return [runCommand("security-scan", "semgrep --config auto src/ --error 2>&1", cwd, this.timeout)];
+	},
+};
+
 /** All built-in general-check providers. */
 const GENERAL_PROVIDERS: VerifyProvider[] = [
 	TypeScriptProvider,
 	BuildProvider,
 	TestProvider,
+	CoverageProvider,
 	ESLintProvider,
+	SecurityScanProvider,
 	PrettierProvider,
 	AuditProvider,
 	PythonTestProvider,
@@ -477,8 +553,11 @@ const GENERAL_PROVIDERS: VerifyProvider[] = [
 function extractVerifyCommands(planContent: string): { taskId: string; command: string }[] {
 	const results: { taskId: string; command: string }[] = [];
 
-	// Match ## task-id: name ... ### Verify ... (content until next ##)
-	const taskRegex = /^## ([\w-]+):\s*.+$([\s\S]*?)(?=^## |\Z)/gm;
+	// Match ## task-id: name ... ### Verify ... (content until next ## or end-of-string).
+	// JS regex has no \Z; `$(?![\s\S])` with the m flag anchors end-of-string since `$`
+	// alone with m matches end-of-line. Without this, the last task block in PLAN.md
+	// silently fails to match (or terminates at the first stray 'Z' in its body).
+	const taskRegex = /^## ([\w-]+):\s*.+$([\s\S]*?)(?=^## |$(?![\s\S]))/gm;
 	let match;
 	while ((match = taskRegex.exec(planContent)) !== null) {
 		const taskId = match[1];
@@ -576,6 +655,29 @@ export async function runFullVerification(cwd: string): Promise<VerifyResult> {
 	log.info("verify", "Report saved to .planning/VERIFICATION.md");
 
 	return { passed, items, generalChecks, summary };
+}
+
+/**
+ * Quick regression test — runs only tsc + npm test (fast, no lint/audit).
+ * Used after each task to catch regressions before moving to next task.
+ */
+export async function runRegressionTest(cwd: string): Promise<{ passed: boolean; output: string }> {
+	const checks: VerifyItem[] = [];
+
+	// TypeScript compilation
+	if (TypeScriptProvider.detect(cwd)) {
+		checks.push(...await TypeScriptProvider.execute(cwd));
+	}
+
+	// Tests
+	if (TestProvider.detect(cwd)) {
+		checks.push(...await TestProvider.execute(cwd));
+	}
+
+	const passed = checks.every(c => c.passed);
+	const output = checks.map(c => `[${c.passed ? "PASS" : "FAIL"}] ${c.taskId}: ${c.output.slice(0, 300)}`).join("\n");
+
+	return { passed, output };
 }
 
 // ─── Static Code Review ─────────────────────────────────────

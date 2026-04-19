@@ -106,9 +106,17 @@ function loadFromDir(dir: string): TeamAgentDef[] {
 		const tools = normalizeStringArray(meta.tools);
 		const skills = normalizeStringArray(meta.skills);
 
-		const engine = typeof meta.engine === "string" && (VALID_ENGINES as readonly string[]).includes(meta.engine)
-			? meta.engine as TeamAgentDef["engine"]
-			: undefined;
+		let engine: TeamAgentDef["engine"] | undefined;
+		if (typeof meta.engine === "string" && meta.engine.length > 0) {
+			if ((VALID_ENGINES as readonly string[]).includes(meta.engine)) {
+				engine = meta.engine as TeamAgentDef["engine"];
+			} else {
+				// Typos (e.g. "claud-code", "CodeX") used to silently fall back to the
+				// global default. Warn so users catch them quickly — matches the CLI
+				// --engine flag's strict validation.
+				log.warn("agents", `${file}: invalid engine "${meta.engine}" (expected ${VALID_ENGINES.join(" | ")}) — falling back to default`);
+			}
+		}
 
 		agents.push({
 			name: meta.name,

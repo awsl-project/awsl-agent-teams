@@ -435,11 +435,25 @@ ${task}`;
 				return `${prefix}: ${(stderr || stdout).slice(0, 300)}`;
 			};
 
-			// Resume failed — fallback to fresh execution
+			// Resume failed — fallback to fresh execution.
+			// Outer already emitted streamStart; recurse without onStream so the inner
+			// attempt doesn't emit a duplicate start, then close the outer stream via
+			// resolveWithStream with the inner's final result.
 			if (isResume && code !== 0 && /session.*(not found|expired|invalid)/i.test(combined + allErrors)) {
 				log.warn(agentDef.name, "Session resume failed, retrying without resume");
 				cleanupTmp();
-				resolve(runWithCodex(agentDef, task, cwd, memory, teamRoster, skillRegistry, taskId, undefined, onStream));
+				runWithCodex(agentDef, task, cwd, memory, teamRoster, skillRegistry, taskId, undefined, undefined)
+					.then(resolveWithStream)
+					.catch(err => resolveWithStream({
+						agent: agentDef.name,
+						status: "failed",
+						result: "",
+						turns: turns || 0,
+						error: `Session resume fallback failed: ${err instanceof Error ? err.message : String(err)}`,
+						inputTokens,
+						outputTokens,
+						costUsd: 0,
+					}));
 				return;
 			}
 
@@ -828,6 +842,35 @@ ${memSummary === "(empty)" ? "No shared data yet." : memSummary}
 					result: streamResult,
 					turns: streamNumTurns || 1,
 					error: code !== 0 ? `Exit code ${code}` : undefined,
+					inputTokens: streamInputTokens,
+					outputTokens: streamOutputTokens,
+					costUsd: streamCostUsd,
+				});
+				return;
+			}
+
+			// ── Stream-json mode: subprocess died before emitting a result event ──
+			// stdout is NDJSON here, so JSON.parse(stdout) below would always throw and
+			// the catch handler would bury the real cause. Surface last NDJSON event,
+			// stderr tail, and exit code instead.
+			if (onStream && !streamParsedResult) {
+				const stdoutLines = stdout.split("\n").map(l => l.trim()).filter(Boolean);
+				const lastLine = stdoutLines[stdoutLines.length - 1] ?? "";
+				let lastEvent = "";
+				try {
+					const parsed = JSON.parse(lastLine);
+					lastEvent = parsed.message || parsed.error || parsed.type || lastLine.slice(0, 200);
+				} catch {
+					lastEvent = lastLine.slice(0, 200);
+				}
+				const stderrTail = stderr.split("\n").map(l => l.trim()).filter(Boolean).slice(-3).join(" | ").slice(0, 300);
+				log.error(agentDef.name, `Stream aborted without result event (exit: ${code})`);
+				resolveWithStream({
+					agent: agentDef.name,
+					status: "failed",
+					result: streamResult,
+					turns: streamNumTurns || 0,
+					error: `Exit ${code}: ${lastEvent || stderrTail || "subprocess died before result event"}`,
 					inputTokens: streamInputTokens,
 					outputTokens: streamOutputTokens,
 					costUsd: streamCostUsd,

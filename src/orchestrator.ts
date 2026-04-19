@@ -21,7 +21,7 @@ import type { SandboxPolicy } from "./sandbox.js";
 import { SharedMemory } from "./memory.js";
 import { log } from "./log.js";
 import { type RunResult, type Engine, runAgent, runParallel, detectEngine } from "./runner.js";
-import { createPlanningDir, parseStructuredTasks, parseStructuredTasksChecked, detectDependencyCycles, atomicCommit, saveCheckpoint, loadCheckpoint, clearCheckpoint, type StructuredTask, type PlanningDir, type CheckpointData, type ParseResult, type CycleDetectionResult } from "./planning.js";
+import { createPlanningDir, parseStructuredTasks, detectDependencyCycles, atomicCommit, saveCheckpoint, loadCheckpoint, clearCheckpoint, type StructuredTask, type PlanningDir, type CheckpointData } from "./planning.js";
 import { SkillRegistry } from "./skills.js";
 import { runFullVerification, runRegressionTest } from "./verify.js";
 import type { WaveInfo, WaveTaskDetail } from "./history.js";
@@ -426,7 +426,10 @@ export async function executeTeam(
 				const storedPlan = memory.get("plan");
 				if (storedPlan) {
 					const structuredTasks = parseStructuredTasks(storedPlan);
-					if (structuredTasks.length > 0) {
+					if (structuredTasks.length > 0 && detectDependencyCycles(structuredTasks).hasCycle) {
+						log.warn("checkpoint", "Cached plan has dependency cycles — discarding checkpoint");
+						clearCheckpoint(cwd);
+					} else if (structuredTasks.length > 0) {
 						resumedTasks = structuredTasks.map(st => ({
 							id: st.id,
 							description: st.action || st.name,
@@ -609,6 +612,16 @@ Do NOT output any text before or after the JSON. Do NOT use markdown prose forma
 			return { success: false, tasks: [], summary: `Planner produced no parseable tasks:\n${planResult.result.slice(0, 300)}`, memory, planning, inputTokens: totalInputTokens, outputTokens: totalOutputTokens, costUsd: totalCostUsd };
 		}
 
+		// Detect dependency cycles up-front. Without this, cycles only surface
+		// reactively inside topologicalSort's findCycleInRemaining fallback, which
+		// wholesale-fails the remaining task set with "Unresolvable dependency".
+		const cycleCheck = detectDependencyCycles(structuredTasks);
+		if (cycleCheck.hasCycle) {
+			const summary = `Dependency cycle(s) detected: ${cycleCheck.cycles.map(c => c.join(" → ")).join("; ")}`;
+			log.warn("conductor", summary);
+			return { success: false, tasks: [], summary, memory, planning, inputTokens: totalInputTokens, outputTokens: totalOutputTokens, costUsd: totalCostUsd };
+		}
+
 		tasks = structuredTasks.map(st => ({
 			id: st.id,
 			description: st.action || st.name,
@@ -782,21 +795,12 @@ Critical findings MUST explain what's wrong and suggest a fix.`;
 					}
 				}
 
-				// Conductor: atomic git commit per task (only if review passed)
-				if (task.status === "done" && autoCommit) {
-					const committed = atomicCommit(cwd, task.id, task.description.slice(0, 50), task.files);
-					if (committed) log.info("git", `Committed: ${task.id}`);
-				}
-
-				// Conductor: per-task regression test — catch breakage early
-				if (task.status === "done") {
-					const regression = await runRegressionTest(cwd);
-					if (!regression.passed) {
-						log.warn("guardian", `${task.id} caused regression: ${regression.output.slice(0, 200)}`);
-						task.status = "failed";
-						task.error = `Regression: ${regression.output.slice(0, 500)}`;
-					}
-				}
+				// Note: regression test + atomic commit are deferred until AFTER the
+				// parallel workers complete. Running them inside the worker caused two
+				// real bugs: (1) concurrent workers mutated the tree while regression
+				// tests were running, producing false-positive failures; (2) commits
+				// happened before regression, so bad code could enter git history.
+				// See the post-wave block further below.
 
 				// Save task summary to .planning/
 				planning.write(`${task.id}-SUMMARY.md`, `# ${task.id}: ${task.description.slice(0, 60)}\n\nAssignee: ${task.assignee}\nStatus: ${task.status}\n\n## Result\n${task.result}`);
@@ -843,6 +847,28 @@ Critical findings MUST explain what's wrong and suggest a fix.`;
 				// Retry this wave
 				wi--;
 				continue;
+			}
+		}
+
+		// Post-wave: single regression test + per-task atomic commits (sequential).
+		// Running regression inside the parallel worker caused false positives from
+		// concurrent tree mutations, and committing before regression polluted git
+		// history with broken commits. Gating commits on regression success preserves
+		// the bisectable-commit invariant.
+		const doneInWave = wave.filter(t => t.status === "done");
+		if (doneInWave.length > 0) {
+			const regression = await runRegressionTest(cwd);
+			if (!regression.passed) {
+				log.warn("guardian", `Wave ${wi + 1} regression failed: ${regression.output.slice(0, 300)}`);
+				for (const task of doneInWave) {
+					task.status = "failed";
+					task.error = `Wave regression: ${regression.output.slice(0, 500)}`;
+				}
+			} else if (autoCommit) {
+				for (const task of doneInWave) {
+					const committed = atomicCommit(cwd, task.id, task.description.slice(0, 50), task.files);
+					if (committed) log.info("git", `Committed: ${task.id}`);
+				}
 			}
 		}
 
@@ -1048,7 +1074,10 @@ Report format: [PASS/FAIL/WARN] description (severity: critical/major/minor)`;
 
 		if (replanResult.status !== "failed") {
 			const retryStructured = parseStructuredTasks(replanResult.result);
-			if (retryStructured.length > 0) {
+			const retryCycleCheck = detectDependencyCycles(retryStructured);
+			if (retryCycleCheck.hasCycle) {
+				log.warn("conductor", `Replan produced dependency cycles — skipping retry: ${retryCycleCheck.cycles.map(c => c.join(" → ")).join("; ")}`);
+			} else if (retryStructured.length > 0) {
 				const retryTasks: Task[] = retryStructured.map(st => ({
 					id: st.id.startsWith("retry_") ? st.id : `retry_${st.id}`,
 					description: st.action || st.name,
@@ -1255,6 +1284,16 @@ export async function planOnly(
 	}
 	if (structuredTasks.length === 0) {
 		return { success: false, planPath: "", tasks: [], waves: [], summary: `No parseable tasks from planner output:\n${planResult.result.slice(0, 300)}` };
+	}
+
+	// Detect dependency cycles up-front. The downstream topologicalSort only finds
+	// cycles reactively once it can't make progress — catching them here gives a
+	// clear error with the actual cycle path.
+	const quickCycleCheck = detectDependencyCycles(structuredTasks);
+	if (quickCycleCheck.hasCycle) {
+		const summary = `Dependency cycle(s) detected: ${quickCycleCheck.cycles.map(c => c.join(" → ")).join("; ")}`;
+		log.warn("conductor", summary);
+		return { success: false, planPath: "", tasks: [], waves: [], summary };
 	}
 
 	// Validate assignees
