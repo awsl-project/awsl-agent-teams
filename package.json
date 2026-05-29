@@ -41,7 +41,7 @@
     "@mariozechner/pi-ai": "latest",
     "@sinclair/typebox": "^0.34.0",
     "tsx": "^4.19.0",
-    "ws": "^8.19.0",
+    "ws": "^8.21.0",
     "yaml": "^2.8.3"
   },
   "devDependencies": {
