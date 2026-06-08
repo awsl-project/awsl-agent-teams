@@ -350,6 +350,28 @@ Wave 2: task-2          ← 依赖 task-1，等 Wave 1 完成
 
 自定义 provider 和内置 provider 一起运行，各自独立计时，结果统一输出到 `VERIFICATION.md`。
 
+**`browser` 块（前端浏览器验证门禁）**
+
+在同一个 `.awsl.json` 里加 `browser` 块，即可启用 `browser-verify` 内置 provider —— 验证阶段会通过 `browser-bridge-cli` 用真实浏览器打开页面，断言渲染正常并截图：
+
+```json
+{
+  "browser": {
+    "previewUrl": "http://localhost:5173",
+    "selectors": ["#app", "main"],
+    "timeout": 60000
+  }
+}
+```
+
+| 字段 | 必填 | 说明 |
+|------|------|------|
+| `previewUrl` | 是 | 运行中的前端地址；不填则该 provider 静默不启用 |
+| `selectors` | 否 | 必须存在的 CSS 选择器数组（缺失即判失败） |
+| `timeout` | 否 | provider 超时毫秒数 |
+
+未配置 `previewUrl` 也未在共享内存写 `preview_url`、或浏览器未配对时，该 provider 优雅跳过，绝不阻塞纯后端项目。详见「Guardian 技能 → 浏览器验证」一节。
+
 ## 5. 自定义 Agent 团队
 
 在 `agents/` 目录放 markdown 文件，CC 会读取并注入到对应 role 的子 agent prompt。
@@ -649,8 +671,8 @@ Guardian 是质量保证层，按 role 自动注入到每个子 agent：
 | Role | 自动注入的 Guardian 技能 |
 |------|------------------------|
 | coder | TDD (RED-GREEN-REFACTOR) — 先写测试，再写实现 |
-| reviewer | 逐任务代码审查 — 每个 coder 任务完成后立即读取 git diff，逐行检查反模式清单 |
-| tester | 系统化调试 — 复现→隔离→根因→修复 |
+| reviewer | 逐任务代码审查 — 每个 coder 任务完成后立即读取 git diff，逐行检查反模式清单；**浏览器验证** |
+| tester | 系统化调试 — 复现→隔离→根因→修复；**浏览器验证** |
 
 **TDD 流程（coder 自动执行）：**
 1. 写失败测试 → 2. 确认 RED → 3. 写最少代码通过 → 4. 确认 GREEN → 5. 重构
@@ -671,6 +693,36 @@ Guardian 是质量保证层，按 role 自动注入到每个子 agent：
 - `[WARN]` → 记录但不阻断
 - `[PASS]` → 通过
 
+**浏览器验证（tester / reviewer 自动执行，前端任务）：**
+
+前端任务不能只看源码 —— 该技能让 tester/reviewer 通过 `browser-bridge-cli` 驱动用户**真实浏览器**，在新标签页打开运行中的页面，做真实渲染验证：
+
+1. **配置预览地址**（二选一，没有则跳过浏览器验证，不报错）：
+   - `.awsl.json` 里写 `browser.previewUrl`，例如：
+     ```json
+     {
+       "browser": {
+         "previewUrl": "http://localhost:5173",
+         "selectors": ["#app", "main"],
+         "timeout": 60000
+       }
+     }
+     ```
+   - 或让 agent 把启动的地址写进共享内存：`memory_write preview_url "http://localhost:5173"`（确定性门禁会从落盘的 `.planning/CHECKPOINT.json` 里读到它）。
+2. **连接检查**：先 `browser-bridge-cli info`，未配对浏览器则优雅跳过（不在循环里重试）。
+3. **新标签打开**：用 `new-tab`（而非 `navigate`）打开，避免劫持用户当前正在看的标签；完事 `close-tab`。
+4. **健康断言**：`eval` 检查 `document.title`、`body.innerText` 长度（非空白）、根元素 `#app/#root/main` 存在、无框架报错遮罩（Vite/Next/webpack overlay）；`network` 查 4xx/5xx 失败请求。
+5. **截图存档**：`screenshot -o .planning/screenshots/<task>.png`，供人肉眼复核。
+
+**两种生效形态：**
+- **Agent 驱动（本技能）**：tester/reviewer 在工作中自行起浏览器看，灵活判断。
+- **代码级门禁（`browser-verify` provider）**：阶段 3 验证时，若解析到预览 URL，自动执行上述检查并写入 `VERIFICATION.md`（截图见 `.planning/screenshots/`）。配置见「自定义验证 provider」一节的 `.awsl.json`。
+
+**注意事项（gotchas）：**
+- 这驱动的是用户**真实、已登录**的浏览器。读取/eval 检查/截图安全；**禁止**为"验证"去提交表单、点击购买/支付/发送或改动账户状态（除非任务明确要求并在报告中注明）。
+- builtin 引擎的沙箱已为 tester/reviewer 放行 `browser-bridge-cli ` 前缀（见下一节白名单）。
+- 截图无法被 builtin 引擎"看见"；builtin 下以 DOM/console 断言为主，截图作为人工复核产物。claude-code 引擎可直接读图做视觉确认。
+
 ## 9. 沙箱配置（内置引擎）
 
 内置引擎（`--engine builtin`）默认对每个智能体启用沙箱，限制写路径和 bash 命令。
@@ -690,8 +742,8 @@ await executeTeam(goal, agents, cwd, model, concurrency, {
 | 角色 | 写路径 | Bash 模式 | 说明 |
 |------|--------|-----------|------|
 | `coder` | `[cwd]` | 黑名单（denylist） | 禁止 `rm -rf /`、`sudo`、`mkfs` 等危险命令，其他放行 |
-| `tester` | `[cwd]` | 白名单（allowlist） | 只允许 `npm test`、`npx tsc`、`npx vitest`、`node`、`cat`、`ls` 等 |
-| `reviewer` | `[cwd]` | 白名单（allowlist） | 只允许 `cat`、`ls`、`grep`、`git log`、`git diff`、`git show` |
+| `tester` | `[cwd]` | 白名单（allowlist） | 只允许 `npm test`、`npx tsc`、`npx vitest`、`node`、`cat`、`ls`、`browser-bridge-cli ` 等 |
+| `reviewer` | `[cwd]` | 白名单（allowlist） | 只允许 `cat`、`ls`、`grep`、`git log`、`git diff`、`git show`、`browser-bridge-cli ` |
 | `architect` | `[cwd]` | 白名单（allowlist） | 只允许 `cat`、`ls`、`grep`、`find`、`tree` |
 | `planner` | `[cwd]` | 白名单（allowlist） | 只允许 `cat`、`ls`、`find`、`wc` |
 

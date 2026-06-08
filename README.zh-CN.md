@@ -253,6 +253,7 @@ tools: read,grep,glob,bash
 | **任务队列（睡前模式）** | 排队多个目标 → `awsl queue start` → 无人值守顺序执行，自带限额恢复 |
 | **灵活计划解析** | 规划师输出支持 JSON、XML、Markdown 三种格式 — 不同模型的格式差异也能正确解析 |
 | **验证器 provider** | 并行执行，每个 provider 独立超时，5 分钟结果缓存。内置 provider：tsc（120s）、npm test（180s）、eslint（60s）、build（180s）、prettier（60s）、audit（30s）、pytest（180s）、mypy（120s）、ruff（60s）、go vet（60s）、go test（180s）、cargo clippy（120s）、cargo test（180s）。支持从 `.planning/verify.json` 或 `.awsl.json` 加载自定义 provider |
+| **浏览器验证 provider** | **前端**页面 —— 当 `.awsl.json` 设了 `browser.previewUrl`（或 agent 把 `preview_url` 写进共享内存）时，通过 `browser-bridge-cli` 在用户真实浏览器里打开运行中的应用，断言其正常渲染（非空白、无报错遮罩、无 4xx/5xx），并把截图存到 `.planning/screenshots/`。未配置 URL 或未配对浏览器时优雅跳过 |
 | **静态审查规则** | `awsl review` 新增规则：未使用的 import 检测、函数过长检测（>50 行）、嵌套过深检测（>4 层）、重复代码块检测（6+ 行相同代码） |
 | **验证报告** | 每个检查项带耗时（durationMs）、通过率百分比、总验证耗时、分阶段汇总 |
 | **原子文件写入** | 所有状态文件通过临时文件 + 重命名模式写入，防止崩溃时文件损坏 |
@@ -826,14 +827,16 @@ Guardian 技能根据智能体角色自动激活：
 | `coder` | TDD（红/绿/重构）、系统化调试 |
 | `architect` | 苏格拉底式头脑风暴 |
 | `planner` | 微任务规划 |
-| `reviewer` | 逐任务代码审查（git diff + 反模式清单）、质量门禁 |
-| `tester` | 系统化调试 |
+| `reviewer` | 逐任务代码审查（git diff + 反模式清单）、质量门禁、浏览器验证 |
+| `tester` | 系统化调试、浏览器验证 |
 
 **TDD** — 强制执行 红-绿-重构。先写失败测试，最少代码使其通过，然后重构。
 
 **逐任务代码审查** — 每个编码任务完成后，审查者立即收到真实 `git diff`，逐行检查反模式清单：设计缺陷、竞态条件、busy-wait、过期锁、delta/merge 混淆、缺失 `finally` 块等。严重发现在代码提交前就阻断任务。阶段 3 现在专注于自动化验证（tsc、npm test、eslint）。
 
 **苏格拉底式头脑风暴** — 通过针对性问题探索需求，挑战假设，记录决策。
+
+**浏览器验证** — 对于前端任务，tester/reviewer 不只看源码：它通过 [`browser-bridge-cli`](https://www.npmjs.com/package/browser-bridge-cli) 驱动用户的**真实浏览器**，在新标签页打开正在运行的页面，断言其正常渲染（非空白、无框架报错遮罩）、检查失败的 4xx/5xx 网络请求，并把截图保存到 `.planning/screenshots/`。预览地址来自 `.awsl.json` 的 `browser.previewUrl` 或共享内存键 `preview_url`。若桥接未连接则优雅跳过（绝不阻塞纯后端项目）。这同时作为代码级门禁强制执行 —— 见下方 **`browser-verify`** 验证器 provider。
 
 ## 沙箱（内置引擎）
 
@@ -852,8 +855,8 @@ Guardian 技能根据智能体角色自动激活：
 | 角色 | 写路径 | Bash 模式 | 模式列表 |
 |------|--------|-----------|----------|
 | `coder` | `[cwd]` | 黑名单 | `rm -rf /`、`sudo `、`mkfs`、`dd if=`、`chmod 777`、`> /dev/sd` |
-| `tester` | `[cwd]` | 白名单 | `npm test`、`npx tsc`、`npx vitest`、`npx jest`、`node `、`cat `、`ls`、`grep `、`find ` |
-| `reviewer` | `[cwd]` | 白名单 | `cat `、`ls`、`grep `、`find `、`git log`、`git diff`、`git show` |
+| `tester` | `[cwd]` | 白名单 | `npm test`、`npx tsc`、`npx vitest`、`npx jest`、`node `、`cat `、`ls`、`grep `、`find `、`browser-bridge-cli ` |
+| `reviewer` | `[cwd]` | 白名单 | `cat `、`ls`、`grep `、`find `、`git log`、`git diff`、`git show`、`browser-bridge-cli ` |
 | `architect` | `[cwd]` | 白名单 | `cat `、`ls`、`grep `、`find `、`tree ` |
 | `planner` | `[cwd]` | 白名单 | `cat `、`ls`、`find `、`wc ` |
 

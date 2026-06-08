@@ -134,11 +134,13 @@ npm unlink -g awsl-agent-core
   agents/                      ← 自定义 Agent 定义
     react-dev.md
     security-reviewer.md
+  .awsl.json                   ← 可选项目配置（自定义 verify provider、浏览器预览地址等）
   .planning/                   ← AWSL 运行产物（自动生成）
     PLAN.md
     WAVES.md
     STATE.md
     VERIFICATION.md
+    screenshots/               ← 浏览器验证截图（启用 browser-verify 时生成）
     .lock                      ← 并发锁（运行中存在，结束自动删除）
 ```
 
@@ -177,6 +179,50 @@ description: 项目专属开发者
 ```
 
 `/awsl` 执行时会自动读取 `agents/` 目录。
+
+---
+
+## 启用浏览器验证（前端，可选）
+
+让 tester / reviewer 在验证前端任务时，**起真实浏览器打开页面看**（断言渲染、查报错、截图），需要额外装 **browser-bridge**。纯后端项目可跳过——没配置时该能力静默不启用。
+
+### 要装什么
+
+| 组件 | 作用 | 安装/启动 |
+|------|------|-----------|
+| `browser-bridge-cli` | 终端 ↔ 浏览器的命令行 | `npm i -g browser-bridge-cli` |
+| 桥接服务器 | 本地 `127.0.0.1:52853` 中转 | `browser-bridge-cli server start`（单独窗口/后台常驻） |
+| 浏览器扩展 | 在你已登录的 Chrome/Edge 里执行指令 | `chrome://extensions` → 开发者模式 → 加载已解压扩展（扩展目录见 browser-bridge 文档） |
+| 配对 | 把扩展和服务器绑定（一次性） | `browser-bridge-cli server gen-pair` 拿 6 位码 → 扩展弹窗里开开关并输入 |
+
+验证配对成功：
+```bash
+browser-bridge-cli info     # activeClient 不为 null
+browser-bridge-cli tabs     # 能列出当前标签页
+```
+> 配对是持久的：日常只要保证 `server start` 进程在跑即可，不必每次重新配对。
+
+### 怎么用
+
+在**目标前端项目根目录**放 `.awsl.json`，告诉 AWSL 运行中的预览地址：
+```json
+{
+  "browser": {
+    "previewUrl": "http://localhost:5173",
+    "selectors": ["#app"],
+    "timeout": 60000
+  }
+}
+```
+- `previewUrl`（必填）：跑起来的前端地址；不填则浏览器验证不启用。
+- `selectors`（可选）：必须存在的元素，缺失即判失败。
+- 也可让 agent 在运行时把地址写进共享内存键 `preview_url`（适合 agent 自己起 dev server 的场景）。
+
+两处自动生效，**无需改任何代码**：
+1. **CC 模式**（`/awsl`、`/awsl-go`、`/awsl-quick`）：reviewer/tester 的提示词里已注入"浏览器验证"步骤；`node cli.js verify` 阶段也会自动跑浏览器门禁。
+2. **终端模式**（`awsl run`）：tester/reviewer 角色自动激活 `browser-verify` Guardian 技能 + 验证阶段的 `browser-verify` provider。
+
+> ⚠ 改了源码后必须重新 `npm run build` 并 `node dist/cli.js init --global`，CC 模式的 SKILL.md 才会更新。
 
 ---
 

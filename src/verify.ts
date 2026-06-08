@@ -527,6 +527,161 @@ const SecurityScanProvider: VerifyProvider = {
 	},
 };
 
+// ─── Browser Verify Provider ────────────────────────────────
+// Opens the running frontend in the user's real browser (via browser-bridge-cli),
+// asserts the page renders without errors, and saves a screenshot artifact.
+// Strictly opt-in: only runs when a preview URL is resolvable, so it never
+// interferes with backend-only projects.
+
+interface BrowserVerifyConfig {
+	previewUrl: string;
+	/** Optional CSS selectors that MUST exist on the page for it to pass. */
+	selectors?: string[];
+	timeout?: number;
+}
+
+/**
+ * Resolve the frontend preview URL from (1) .awsl.json → browser.previewUrl,
+ * then (2) the persisted shared memory (.planning/CHECKPOINT.json → memory.preview_url).
+ * Returns null when no URL is configured (provider then stays dormant).
+ */
+function loadBrowserConfig(cwd: string): BrowserVerifyConfig | null {
+	// 1. .awsl.json browser block
+	const awslJsonPath = path.join(cwd, ".awsl.json");
+	if (fs.existsSync(awslJsonPath)) {
+		try {
+			const data = JSON.parse(fs.readFileSync(awslJsonPath, "utf-8"));
+			const b = data.browser;
+			if (b && typeof b.previewUrl === "string" && b.previewUrl) {
+				return {
+					previewUrl: b.previewUrl,
+					selectors: Array.isArray(b.selectors) ? b.selectors.filter((s: unknown) => typeof s === "string") : undefined,
+					timeout: typeof b.timeout === "number" ? b.timeout : undefined,
+				};
+			}
+		} catch {
+			log.warn("verify", "Failed to parse .awsl.json for browser config");
+		}
+	}
+
+	// 2. Shared memory (persisted in CHECKPOINT.json) — an agent may have stored
+	//    the URL it started the dev server on under the "preview_url" key.
+	const checkpointPath = path.join(cwd, ".planning", "CHECKPOINT.json");
+	if (fs.existsSync(checkpointPath)) {
+		try {
+			const data = JSON.parse(fs.readFileSync(checkpointPath, "utf-8"));
+			const url = data?.memory?.preview_url?.value;
+			if (typeof url === "string" && url.trim()) {
+				return { previewUrl: url.trim() };
+			}
+		} catch {
+			/* ignore malformed checkpoint */
+		}
+	}
+
+	return null;
+}
+
+function bbRun(args: string, cwd: string, timeoutMs: number): { ok: boolean; out: string } {
+	try {
+		const out = execSync(`browser-bridge-cli ${args}`, {
+			cwd, encoding: "utf-8", timeout: timeoutMs, stdio: ["pipe", "pipe", "pipe"],
+		});
+		return { ok: true, out };
+	} catch (e: any) {
+		return { ok: false, out: ((e.stdout ?? "") + (e.stderr ?? "")).toString() };
+	}
+}
+
+const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
+
+const BrowserVerifyProvider: VerifyProvider = {
+	name: "browser-verify",
+	timeout: 90_000,
+	detect(cwd: string): boolean {
+		return loadBrowserConfig(cwd) !== null;
+	},
+	async execute(cwd: string): Promise<VerifyItem[]> {
+		const start = Date.now();
+		const cfg = loadBrowserConfig(cwd);
+		if (!cfg) return [];
+		const url = cfg.previewUrl;
+		const finish = (passed: boolean, output: string): VerifyItem[] =>
+			[{ taskId: "browser-verify", command: `browser-bridge: ${url}`, passed, output: output.slice(0, 2000), durationMs: Date.now() - start }];
+
+		// 1. Bridge connectivity — graceful skip if no browser is paired.
+		const info = bbRun("info", cwd, 10_000);
+		const connected = info.ok && /"activeClient"\s*:\s*"[^"]+"/.test(info.out);
+		if (!connected) {
+			log.warn("verify", "browser-verify: bridge not connected — skipped");
+			return finish(true, `SKIPPED — browser bridge not connected (run \`browser-bridge-cli info\`). Configured URL: ${url}`);
+		}
+
+		// 2. Open in a fresh tab so the user's active tab is never hijacked.
+		const opened = bbRun(`new-tab "${url}"`, cwd, 15_000);
+		const tabId = (opened.out.match(/Created tab (\d+)/) || [])[1];
+		if (!tabId) {
+			return finish(false, `Failed to open tab for ${url}\n${opened.out}`);
+		}
+
+		try {
+			// 3. Poll for the page to be genuinely ready, capturing health each time.
+			//    `new-tab` returns before navigation finishes, so a naive readyState
+			//    check can catch the initial about:blank ("complete" + empty body).
+			//    Require: document complete, navigated away from about:blank, and the
+			//    body actually has content — then reuse that last sample as `health`.
+			const healthEval = `eval "JSON.stringify({ready:document.readyState,href:location.href,title:document.title,textLen:document.body?document.body.innerText.length:0,root:!!document.querySelector('#app,#root,main,[data-reactroot]'),overlay:!!document.querySelector('vite-error-overlay,#nextjs__container_errors,.error-overlay,#webpack-dev-server-client-overlay'),bodyStart:document.body?document.body.innerText.slice(0,80):''})" -t ${tabId}`;
+			let health: any = {};
+			await sleep(1000);
+			for (let i = 0; i < 15; i++) {
+				const check = bbRun(healthEval, cwd, 10_000);
+				try { health = JSON.parse(check.out.trim()); } catch { health = {}; }
+				const ready = health.ready === "complete"
+					&& typeof health.href === "string" && !health.href.startsWith("about:")
+					&& typeof health.textLen === "number" && health.textLen > 10;
+				if (ready) break;
+				await sleep(1000);
+			}
+
+			// 5. Screenshot artifact.
+			const shotDir = path.join(cwd, ".planning", "screenshots");
+			try { fs.mkdirSync(shotDir, { recursive: true }); } catch { /* ignore */ }
+			const shotPath = path.join(".planning", "screenshots", `browser-verify-${tabId}.png`);
+			bbRun(`screenshot -o "${shotPath}" -t ${tabId}`, cwd, 20_000);
+
+			// 6. Failed network requests (4xx/5xx).
+			const net = bbRun(`network -l 50 -t ${tabId}`, cwd, 8_000);
+			const failedReq = (net.out.match(/\b(4\d\d|5\d\d)\b/g) || []).length;
+
+			// Verdict.
+			const problems: string[] = [];
+			if (!health.title) problems.push("page has no <title>");
+			if (typeof health.textLen === "number" && health.textLen < 20) problems.push(`page looks blank (textLen=${health.textLen})`);
+			if (health.overlay) problems.push("framework error overlay present");
+			// Note: a missing SPA root (#app/#root/main) is NOT a failure on its own —
+			// server-rendered/static pages legitimately have none. The blank-page check
+			// above and the user's explicit `selectors` are the real gates.
+			const missing = (cfg.selectors ?? []).filter(sel => {
+				const q = bbRun(`query "${sel.replace(/"/g, '\\"')}" -t ${tabId}`, cwd, 8_000);
+				return !q.ok || /\[\s*\]/.test(q.out) || /not found|no match/i.test(q.out);
+			});
+			for (const sel of missing) problems.push(`required selector not found: ${sel}`);
+
+			const passed = problems.length === 0;
+			const lines = [
+				`URL: ${url}`,
+				`Title: ${health.title ?? "(none)"} | textLen: ${health.textLen ?? "?"} | root: ${!!health.root} | errorOverlay: ${!!health.overlay}`,
+				`Failed network requests (4xx/5xx): ${failedReq}`,
+				`Screenshot: ${shotPath}`,
+				passed ? "Result: PASS — page renders without errors" : `Result: FAIL — ${problems.join("; ")}`,
+			];
+			return finish(passed, lines.join("\n"));
+		} finally {
+			bbRun(`close-tab ${tabId}`, cwd, 8_000);
+		}
+	},
+};
+
 /** All built-in general-check providers. */
 const GENERAL_PROVIDERS: VerifyProvider[] = [
 	TypeScriptProvider,
@@ -544,6 +699,7 @@ const GENERAL_PROVIDERS: VerifyProvider[] = [
 	GoTestProvider,
 	CargoClippyProvider,
 	CargoTestProvider,
+	BrowserVerifyProvider,
 	GitDiffProvider,
 ];
 

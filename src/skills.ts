@@ -150,6 +150,73 @@ Suggestion: specific fix
 - Minor findings → noted but doesn't block`,
 };
 
+export const SKILL_BROWSER_VERIFY: Skill = {
+	name: "browser-verify",
+	description: "Verify frontend pages in a real browser via browser-bridge",
+	activatesFor: ["tester", "reviewer"],
+	instructions: `## Guardian Skill: Browser Verification (Frontend)
+
+When the task touches a **frontend page** (HTML/CSS/React/Vue/Svelte/etc.), you MUST
+not declare it done from source code alone — open the running page in a real browser
+and confirm it actually renders and works. You drive the user's already-open browser
+through the \`browser-bridge-cli\` command (it reuses their real, logged-in session).
+
+### Step 0 — Resolve the preview URL
+Find the URL of the running app, in this order:
+1. \`memory_read\` the key \`preview_url\` (an earlier agent may have stored it).
+2. Read \`.awsl.json\` → \`browser.previewUrl\`.
+3. If neither exists and you start a dev server yourself, store the URL you used:
+   \`memory_write preview_url "http://localhost:5173"\` so reviewers and the
+   verification gate can reuse it.
+
+If you cannot determine a URL and cannot start the app, SKIP browser checks and say
+so in your report — do NOT fail the task for a missing URL.
+
+### Step 1 — Check the bridge is connected
+\`\`\`
+browser-bridge-cli info      # must show an activeClient (not null)
+\`\`\`
+If the bridge is down or no browser is paired, do NOT retry in a loop. Report
+"browser bridge not connected — visual verification skipped" and continue with the
+non-browser parts of your task.
+
+### Step 2 — Open the page WITHOUT hijacking the user's tab
+Use a fresh tab so you never disturb what the user is looking at:
+\`\`\`
+browser-bridge-cli new-tab "<previewUrl>"     # note the "Created tab <id>"
+browser-bridge-cli tabs                         # confirm the tab + its id
+\`\`\`
+Always \`close-tab <id>\` when you are done.
+
+### Step 3 — Assert the page is actually healthy (not blank, not erroring)
+Prefer programmatic DOM/console checks (these work even when you cannot see images):
+\`\`\`
+browser-bridge-cli eval "JSON.stringify({title:document.title, textLen:document.body.innerText.length, root:!!document.querySelector('#app,#root,main'), overlay:!!document.querySelector('vite-error-overlay,#nextjs__container_errors,.error-overlay')})" -t <id>
+\`\`\`
+A page PASSES only if: it has a title, \`textLen\` is non-trivial (not a blank page),
+the expected root element exists, and there is NO framework error overlay. Also use
+\`browser-bridge-cli network -l 50 -t <id>\` to spot failed (4xx/5xx) requests, and
+\`query "<css>"\` to assert task-specific elements (the button/form/text you built).
+
+### Step 4 — Capture a screenshot artifact
+\`\`\`
+browser-bridge-cli screenshot -o .planning/screenshots/<task-id>.png -t <id>
+\`\`\`
+Save it under \`.planning/screenshots/\` so a human can eyeball the result. If you run
+under an engine that can read images, open the screenshot and visually confirm layout
+(no overlap, no truncation, responsive looks right).
+
+### Step 5 — Report
+List, per page checked: the URL, PASS/FAIL, what you asserted, the screenshot path,
+and any console/network errors. A frontend task with no passing browser check (and no
+documented skip reason) is NOT done.
+
+### Safety
+This drives the user's REAL browser. Reading, eval-for-inspection, query and
+screenshot are safe. Do NOT submit forms, click buy/pay/send, or change account state
+to "verify" unless the task explicitly requires it and you note it in your report.`,
+};
+
 export const SKILL_PLANNING: Skill = {
 	name: "planning",
 	description: "Break work into micro-tasks with verify criteria",
@@ -208,6 +275,7 @@ const BUILTIN_SKILLS: Skill[] = [
 	SKILL_SYSTEMATIC_DEBUG,
 	SKILL_BRAINSTORM,
 	SKILL_CODE_REVIEW,
+	SKILL_BROWSER_VERIFY,
 	SKILL_PLANNING,
 	SKILL_SUBAGENT_DEV,
 ];

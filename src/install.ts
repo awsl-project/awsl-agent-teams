@@ -54,6 +54,18 @@ const GUARDIAN_REVIEW = `## Guardian: Two-Stage Code Review
 ### Output: [PASS/FAIL/WARN] Category: Description (severity: critical/major/minor)
 - ANY critical finding → task FAILS`;
 
+const GUARDIAN_BROWSER = `## Guardian: Browser Verification (frontend)
+For any FRONTEND page, do NOT trust source code alone — open the running page in the
+user's REAL browser via the \`browser-bridge-cli\` command (it reuses their logged-in session):
+1. Preview URL: read \`browser.previewUrl\` from \`.awsl.json\`, or a \`preview_url\` an
+   earlier task stored. If none and you cannot start the app, SKIP and say so — do not fail for a missing URL.
+2. \`browser-bridge-cli info\` — if no browser is paired, skip gracefully (do NOT retry in a loop).
+3. \`browser-bridge-cli new-tab "<url>"\` — use a FRESH tab so you never hijack the user's active tab; \`close-tab <id>\` when done.
+4. Assert health via \`eval\`: page has a title, \`document.body.innerText.length\` is non-trivial (not blank), and there is NO framework error overlay (Vite/Next/webpack). Use \`network -l 50\` to catch 4xx/5xx requests and \`query "<css>"\` to assert the elements your task built.
+5. \`browser-bridge-cli screenshot -o .planning/screenshots/<task>.png -t <id>\` — then READ the screenshot and visually confirm layout (no overlap/truncation, responsive looks right).
+6. Report per page: URL, PASS/FAIL, what you asserted, screenshot path, console/network errors. A frontend task with no passing browser check (and no documented skip reason) is NOT done.
+Safety: read / eval-for-inspection / query / screenshot only. Never submit forms, click buy/pay/send, or change account state just to "verify".`;
+
 // ── Skill Definitions ──
 
 function buildSkills(cliPath: string): SkillDef[] {
@@ -152,8 +164,10 @@ Each Agent call:
 ${GUARDIAN_TDD}
      - **reviewer** →
 ${GUARDIAN_REVIEW}
+${GUARDIAN_BROWSER}
      - **tester** →
 ${GUARDIAN_DEBUG}
+${GUARDIAN_BROWSER}
   4. Custom agent prompt from \`agents/*.md\` if matching role exists
   5. "When done, summarize: what you did, files changed, test results."
 
@@ -224,6 +238,7 @@ Read \`.planning/WAVES.md\`. Launch tasks via Agent tool (parallel if independen
 ${GUARDIAN_TDD}
 - **reviewer** →
 ${GUARDIAN_REVIEW}
+${GUARDIAN_BROWSER}
 
 ## Step 4: Verify
 \`\`\`bash
@@ -289,8 +304,10 @@ node "${cliPath}" track go
 ${GUARDIAN_TDD}
    - **reviewer** →
 ${GUARDIAN_REVIEW}
+${GUARDIAN_BROWSER}
    - **tester** →
 ${GUARDIAN_DEBUG}
+${GUARDIAN_BROWSER}
 4. Verify: \`node "${cliPath}" verify\`
 5. Fix failures, re-verify
 6. Git commit. Update STATE.md. Report results.

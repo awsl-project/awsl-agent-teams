@@ -253,6 +253,7 @@ Phase 4:  Re-plan       on task failure → retry 2x → replan with different a
 | **Task queue (sleep mode)** | Queue multiple goals → `awsl queue start` → unattended sequential execution with auto rate-limit recovery |
 | **Flexible plan parsing** | Planner output parsed as JSON, XML, or markdown — robust against format variations from different models |
 | **Verify providers** | Auto-detected per-language: **TypeScript** (tsc), **Node.js** (npm test, eslint, prettier, npm audit), **Python** (pytest, mypy, ruff), **Go** (go vet, go test, go build), **Rust** (cargo clippy, cargo test, cargo build). Parallel execution with per-provider timeouts (30s–180s) and 5-minute result caching |
+| **Browser verify provider** | **Frontend** pages — when `browser.previewUrl` is set in `.awsl.json` (or an agent stored `preview_url` in shared memory), opens the running app in the user's real browser via `browser-bridge-cli`, asserts it renders (non-blank, no error overlay, no 4xx/5xx), and saves a screenshot to `.planning/screenshots/`. Skips gracefully when no URL is configured or no browser is paired |
 | **Custom verify providers** | Define project-specific checks in `.planning/verify.json` or `.awsl.json` — any command, custom timeout, custom name |
 | **Timed verification reports** | Per-check timing (durationMs), pass rate percentage, total verification time, and stage summaries in VERIFICATION.md |
 | **Static review rules** | Built-in detections: unused imports, function-too-long (>50 lines), nesting-too-deep (>4 levels), duplicate code (6+ identical consecutive lines) |
@@ -832,14 +833,16 @@ Guardian skills auto-activate based on agent role:
 | `coder` | TDD (red/green/refactor), Systematic Debug |
 | `architect` | Socratic Brainstorm |
 | `planner` | Micro-Task Planning |
-| `reviewer` | Per-Task Code Review (git diff + checklist), Quality Gate |
-| `tester` | Systematic Debug |
+| `reviewer` | Per-Task Code Review (git diff + checklist), Quality Gate, Browser Verify |
+| `tester` | Systematic Debug, Browser Verify |
 
 **TDD** — Enforces RED-GREEN-REFACTOR. Write failing test first. Minimal code to pass. Refactor.
 
 **Per-Task Code Review** — After each coder task completes, the reviewer immediately receives the actual `git diff` and reads it line-by-line against a specific checklist: design flaws, race conditions, busy-waits, stale locks, delta/merge confusion, missing `finally` blocks, and more. Critical findings block the commit — the task is marked failed before any code is committed. Phase 3 now focuses solely on automated verification (tsc, npm test, eslint).
 
 **Socratic Brainstorm** — Explore requirements through targeted questions. Challenge assumptions. Document decisions.
+
+**Browser Verify** — For frontend tasks, the tester/reviewer doesn't trust source code alone: it drives the user's **real browser** via [`browser-bridge-cli`](https://www.npmjs.com/package/browser-bridge-cli) to open the running page in a fresh tab, assert it renders without a blank screen or framework error overlay, check for failed (4xx/5xx) network requests, and save a screenshot to `.planning/screenshots/`. The preview URL comes from `.awsl.json` → `browser.previewUrl` or the shared-memory key `preview_url`. If the bridge isn't connected, the check is skipped gracefully (it never blocks backend-only projects). This is also enforced as a code-level gate — see the **`browser-verify`** verification provider below.
 
 ## Sandbox (Builtin Engine)
 
@@ -858,8 +861,8 @@ The builtin engine enforces a sandbox policy on every agent. Write operations ar
 | Role | Write Paths | Bash Mode | Patterns |
 |------|------------|-----------|----------|
 | `coder` | `[cwd]` | denylist | `rm -rf /`, `sudo `, `mkfs`, `dd if=`, `chmod 777`, `> /dev/sd` |
-| `tester` | `[cwd]` | allowlist | `npm test`, `npx tsc`, `npx vitest`, `npx jest`, `node `, `cat `, `ls`, `grep `, `find ` |
-| `reviewer` | `[cwd]` | allowlist | `cat `, `ls`, `grep `, `find `, `git log`, `git diff`, `git show` |
+| `tester` | `[cwd]` | allowlist | `npm test`, `npx tsc`, `npx vitest`, `npx jest`, `node `, `cat `, `ls`, `grep `, `find `, `browser-bridge-cli ` |
+| `reviewer` | `[cwd]` | allowlist | `cat `, `ls`, `grep `, `find `, `git log`, `git diff`, `git show`, `browser-bridge-cli ` |
 | `architect` | `[cwd]` | allowlist | `cat `, `ls`, `grep `, `find `, `tree ` |
 | `planner` | `[cwd]` | allowlist | `cat `, `ls`, `find `, `wc ` |
 

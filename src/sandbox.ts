@@ -98,11 +98,15 @@ const CODER_DENY_PATTERNS = [
 const TESTER_ALLOW = [
 	"npm test", "npm run test", "npx tsc", "npx vitest", "npx jest",
 	"node ", "cat ", "ls", "head ", "tail ", "grep ", "find ", "wc ",
+	// browser-verify Guardian skill: drive the real browser to verify frontend pages
+	"browser-bridge-cli ",
 ]
 
 const REVIEWER_ALLOW = [
 	"cat ", "ls", "head ", "tail ", "grep ", "find ", "wc ",
 	"git log", "git diff", "git show",
+	// browser-verify Guardian skill: drive the real browser to verify frontend pages
+	"browser-bridge-cli ",
 ]
 
 const ARCHITECT_ALLOW = [
