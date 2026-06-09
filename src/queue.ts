@@ -9,7 +9,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { execSync, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import { executeTeam, type ExecuteOptions } from "./orchestrator.js";
 import { type Engine, detectEngine } from "./runner.js";
 import { loadAgents } from "./agents.js";
@@ -17,22 +17,18 @@ import { discussTeam } from "./discuss.js";
 import { RunContext } from "./context.js";
 import { log } from "./log.js";
 import { appendHistory } from "./history.js";
-import { atomicCommit } from "./planning.js";
+import { atomicCommit, safePush } from "./planning.js";
 import { atomicWriteFileSync, withFileLock, withFileLockAsync } from "./fs-utils.js";
 import { scheduleQueueRun, cancelScheduledRun } from "./scheduler.js";
 import { trackInvocation } from "./invocations.js";
 
 // ─── Git Push Helper ────────────────────────────────────────
 
+// Queue auto-push is an explicit per-task opt-in (sleep mode), so it may run on
+// main/master. Delegate to safePush for force-protection + upstream handling,
+// but allow protected branches here since the user deliberately enabled it.
 function gitPush(cwd: string): boolean {
-	try {
-		execSync("git push", { cwd, stdio: "pipe", timeout: 60000 });
-		log.info("git", "Pushed to remote");
-		return true;
-	} catch (e: any) {
-		log.warn("git", `Push failed: ${e.message?.slice(0, 200) ?? e}`);
-		return false;
-	}
+	return safePush(cwd, { allowProtected: true }).pushed;
 }
 
 // ─── Interfaces for queue plan ──────────────────────────────

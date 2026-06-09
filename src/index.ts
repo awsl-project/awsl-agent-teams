@@ -10,9 +10,9 @@ export { validatePlan, type ValidatedTask, type ValidationResult } from "./valid
 export { runFullVerification, runStaticReview, runRegressionTest, type VerifyResult, type VerifyItem, type ReviewResult, type ReviewFinding } from "./verify.js";
 export { runAgent, runParallel, detectEngine, isRateLimitError, type RunResult, type Engine } from "./runner.js";
 export { SharedMemory } from "./memory.js";
-export { createPlanningDir, parseStructuredTasks, parseStructuredTasksChecked, detectDependencyCycles, atomicCommit, saveCheckpoint, loadCheckpoint, clearCheckpoint, type PlanningDir, type StructuredTask, type CheckpointData, type ParseResult, type CycleDetectionResult } from "./planning.js";
+export { createPlanningDir, parseStructuredTasks, parseStructuredTasksChecked, detectDependencyCycles, atomicCommit, sanitizeCommitMessage, safePush, saveCheckpoint, loadCheckpoint, clearCheckpoint, type PlanningDir, type StructuredTask, type CheckpointData, type ParseResult, type CycleDetectionResult, type SafePushOptions, type SafePushResult } from "./planning.js";
 export { TaskQueue, type QueueTask, type QueueData, type PlannedTask } from "./queue.js";
-export { SkillRegistry, type Skill, SKILL_TDD, SKILL_SYSTEMATIC_DEBUG, SKILL_BRAINSTORM, SKILL_CODE_REVIEW, SKILL_BROWSER_VERIFY, SKILL_PLANNING, SKILL_SUBAGENT_DEV } from "./skills.js";
+export { SkillRegistry, type Skill, SKILL_TDD, SKILL_SYSTEMATIC_DEBUG, SKILL_BRAINSTORM, SKILL_CODE_REVIEW, SKILL_BROWSER_VERIFY, SKILL_FRONTEND, SKILL_BACKEND, SKILL_CLEAN_GIT, SKILL_PLANNING, SKILL_SUBAGENT_DEV } from "./skills.js";
 export { runInstaller } from "./install.js";
 export { acquireLock, releaseLock, forceReleaseLock, checkLock, formatLockInfo, type LockInfo } from "./lock.js";
 export { RunContext, type RunContextOptions } from "./context.js";

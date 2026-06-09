@@ -26,21 +26,32 @@ function color(name: string): string {
 }
 
 export const log = {
+	/** When true, suppress all console output (TUI mode). */
+	_muted: false,
+
+	mute()   { this._muted = true; },
+	unmute() { this._muted = false; },
+
 	info(source: string, msg: string) {
+		if (this._muted) return;
 		console.error(`${DIM}[${ts()}]${RESET} ${color(source)}[${source}]${RESET} ${msg}`);
 	},
 	warn(source: string, msg: string) {
+		if (this._muted) return;
 		console.error(`\x1b[33m[${ts()}]${RESET} ${color(source)}[${source}]${RESET} ${msg}`);
 	},
 	error(source: string, msg: string) {
+		if (this._muted) return;
 		console.error(`\x1b[31m[${ts()}]${RESET} ${color(source)}[${source}]${RESET} \x1b[31m${msg}${RESET}`);
 	},
 	debug(source: string, msg: string) {
+		if (this._muted) return;
 		if (process.env.DEBUG) {
 			console.error(`${DIM}[${ts()}] [${source}] ${msg}${RESET}`);
 		}
 	},
 	section(title: string) {
+		if (this._muted) return;
 		const line = "─".repeat(60);
 		console.error(`\n${BOLD}${line}${RESET}`);
 		console.error(`${BOLD}  ${title}${RESET}`);

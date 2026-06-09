@@ -21,7 +21,7 @@ import type { SandboxPolicy } from "./sandbox.js";
 import { SharedMemory } from "./memory.js";
 import { log } from "./log.js";
 import { type RunResult, type Engine, runAgent, runParallel, detectEngine } from "./runner.js";
-import { createPlanningDir, parseStructuredTasks, detectDependencyCycles, atomicCommit, saveCheckpoint, loadCheckpoint, clearCheckpoint, type StructuredTask, type PlanningDir, type CheckpointData } from "./planning.js";
+import { createPlanningDir, parseStructuredTasks, detectDependencyCycles, atomicCommit, safePush, saveCheckpoint, loadCheckpoint, clearCheckpoint, type StructuredTask, type PlanningDir, type CheckpointData } from "./planning.js";
 import { SkillRegistry } from "./skills.js";
 import { runFullVerification, runRegressionTest } from "./verify.js";
 import type { WaveInfo, WaveTaskDetail } from "./history.js";
@@ -99,6 +99,8 @@ export interface ExecuteOptions {
 	replan?: boolean;
 	/** Auto git commit per task. Default false. */
 	autoCommit?: boolean;
+	/** Auto git push (current branch only, never force) after full success. Default false. */
+	autoPush?: boolean;
 	/** Enable verification phase. Default true. */
 	verify?: boolean;
 	/** Enable research phase. Default false (auto-detected). */
@@ -347,6 +349,7 @@ export async function executeTeam(
 	const hooks = options?.hooks ?? [];
 	const replanEnabled = options?.replan ?? false;
 	const autoCommit = options?.autoCommit ?? true;
+	const autoPush = options?.autoPush ?? false;
 	const verifyEnabled = options?.verify ?? true;
 	const brainstormEnabled = options?.brainstorm ?? false;
 	const qualityGate = options?.qualityGate ?? true;
@@ -1130,6 +1133,14 @@ Report format: [PASS/FAIL/WARN] description (severity: critical/major/minor)`;
 		clearCheckpoint(cwd);
 	} else {
 		log.info("checkpoint", "Keeping checkpoint for resume (not all tasks succeeded)");
+	}
+
+	// Auto-push: only on full success, only the current branch, never force.
+	// Partial/failed runs are NOT pushed — broken state stays local for resume.
+	if (autoPush && success && autoCommit) {
+		safePush(cwd);
+	} else if (autoPush && !success) {
+		log.info("git", "Push skipped: run did not fully succeed");
 	}
 
 	planning.write("STATE.md", `# Project State

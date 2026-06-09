@@ -670,9 +670,11 @@ Guardian 是质量保证层，按 role 自动注入到每个子 agent：
 
 | Role | 自动注入的 Guardian 技能 |
 |------|------------------------|
-| coder | TDD (RED-GREEN-REFACTOR) — 先写测试，再写实现 |
-| reviewer | 逐任务代码审查 — 每个 coder 任务完成后立即读取 git diff，逐行检查反模式清单；**浏览器验证** |
+| coder | TDD (RED-GREEN-REFACTOR) — 先写测试，再写实现；**前端实现**、**后端实现**、**洁净 Git** |
+| reviewer | 逐任务代码审查 — 每个 coder 任务完成后立即读取 git diff，逐行检查反模式清单；**浏览器验证**、**洁净 Git** |
 | tester | 系统化调试 — 复现→隔离→根因→修复；**浏览器验证** |
+
+这些技能拼成你要的完整工作流：**前端实现 / 后端实现（写）→ TDD / 系统化调试（测）→ 浏览器验证（验）→ 洁净 Git（提交+推送）**。
 
 **TDD 流程（coder 自动执行）：**
 1. 写失败测试 → 2. 确认 RED → 3. 写最少代码通过 → 4. 确认 GREEN → 5. 重构
@@ -722,6 +724,53 @@ Guardian 是质量保证层，按 role 自动注入到每个子 agent：
 - 这驱动的是用户**真实、已登录**的浏览器。读取/eval 检查/截图安全；**禁止**为"验证"去提交表单、点击购买/支付/发送或改动账户状态（除非任务明确要求并在报告中注明）。
 - builtin 引擎的沙箱已为 tester/reviewer 放行 `browser-bridge-cli ` 前缀（见下一节白名单）。
 - 截图无法被 builtin 引擎"看见"；builtin 下以 DOM/console 断言为主，截图作为人工复核产物。claude-code 引擎可直接读图做视觉确认。
+
+**前端实现（coder 自动执行，UI 任务）：**
+
+前端编写纪律，目标是产出能被「浏览器验证」直接确认的页面：
+- 组件单一职责，props 全部带类型，不用裸 `any`；能派生的状态不重复存储。
+- **强制四种状态**：任何加载数据的地方都要渲染 加载 / 错误（带重试）/ 空 / 成功，不能只写 happy-path。
+- 对接**真实** API 契约 —— 先读后端类型或共享内存里 backend 的产出，禁止臆造/硬编码响应结构；处理非 2xx 响应。
+- 无障碍 + 响应式基线：语义化标签、每个 input 有 label、键盘可操作、移动优先不溢出。
+- 复用项目既有设计 token / 组件，别擅自引入新 UI 库或套千篇一律的 AI 模板。
+- 收尾把 `preview_url` 写进共享内存，交给 `browser-verify`；前端任务无浏览器验证通过（且无跳过说明）= 未完成。
+
+**后端实现（coder 自动执行，API / 服务 / 数据层任务）：**
+
+后端编写纪律，与 TDD 配合：
+- 分层：route/controller → service → store/model。HTTP 关注点（req/res/status）只在 route 层；service 收普通入参、返普通值/抛错。
+- **边界先校验**：用 schema 在入口校验所有输入，非法输入返 **400** 而非穿透到 DB 变 500。把客户端输入都当敌意：缺字段、错类型、空串、0、负数、超长、注入。
+- HTTP 语义正确且一致：200 读 / 201 建 / 204 删 / 400 / 401 / 403 / 404 / 409 / 422 / 500；统一响应信封，错误带稳定 `code`；**绝不**把堆栈、SQL、内部路径泄露给客户端。
+- 安全：密钥只从 env/config 读，不进代码/日志；共享状态用原子操作/事务防并发；重试可能重复的操作（支付/发送/创建）做幂等；迁移可逆。
+- 完成 = 每个端点都有 happy-path、校验失败(400)、未找到(404)、至少一个边界用例的测试。
+
+**洁净 Git（coder / reviewer 自动执行）：**
+
+提交纪律，核心是**零 AI 痕迹**：
+- 默认不自己碰 git —— 编排器会按任务声明的文件分阶段提交并推送；你只需保持工作区干净、改动不越界。
+- 若确需提交：提交信息绝不含 `Co-Authored-By: Claude`（或任何 `...@anthropic.com` co-author）、`Generated with Claude Code`、`🤖` 尾注、"作为 AI"/工具/模型署名。用 conventional-commit（`type(scope): summary`，祈使语气，标题 ≤ 72 字），一次提交一个逻辑改动。
+- 推送红线：绝不向共享分支 `--force` / `--force-with-lease`；未经确认绝不直推 `main`/`master`（推特性分支让人来开 PR）；绝不 `--no-verify`。
+- 绝不提交：密钥、`.env`、凭证、构建产物、`node_modules`、大二进制 —— 遵守 `.gitignore`。
+
+> 这层不仅是给 agent 的提示词纪律，还有**代码级保证**：`atomicCommit` 对每条提交信息跑 `sanitizeCommitMessage` 剥离 AI 痕迹；`--push` / 队列 `--auto-push` 走 `safePush`（只推当前分支、绝不 force、跳过受保护分支、首推自动设上游）。详见下方「自动推送」。
+
+**自动推送（`awsl run --push` / 队列 `--auto-push`）：**
+
+只有**整个**任务流全部成功（每个任务 done/verified）才推送，且安全设计如下：
+
+| 保证 | 实现 |
+|------|------|
+| 提交信息无 AI 痕迹 | `sanitizeCommitMessage` 剥离 `Co-Authored-By: Claude` / `Generated with Claude Code` / `🤖` 等，保留合法人类 co-author |
+| 只推当前分支 | `safePush` 只推检出分支，无 `--all`/其他 ref；游离 HEAD 拒绝 |
+| 绝不 force | 不用 `--force` / `--force-with-lease` |
+| 跳过受保护分支 | 默认跳过 `main`/`master`（API 可传 `allowProtected` 覆盖；队列 `--auto-push` 已默认放行，因属显式 opt-in） |
+| 首推设上游 | 无上游时 `git push -u origin <branch>` |
+| 仅成功时推 | 部分/失败不推，损坏状态留本地供检查点恢复 |
+
+```bash
+awsl run "构建带认证的 REST API" --engine claude-code --push   # 全成功后自动推送（特性分支）
+awsl queue add "构建支付模块" --auto-push                        # 睡眠模式：单任务完成即推
+```
 
 ## 9. 沙箱配置（内置引擎）
 

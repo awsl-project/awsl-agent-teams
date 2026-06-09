@@ -218,6 +218,8 @@ Terminal Full Pipeline (no API key needed with --engine claude-code/codex):
   --concurrency <n>        Default: 2
   --engine <type>          "claude-code", "codex", or "builtin"
   --stream                 Show real-time agent progress (tools, turns, tokens)
+  --no-commit              Disable per-wave auto-commit (commits are always Claude-trace-free)
+  --push                   Auto-push current branch on full success (never force, skips main/master)
 
 Examples:
   awsl init --global
@@ -1668,6 +1670,7 @@ async function main() {
 	let executePlan = false;
 	let verify = true;
 	let autoCommit = true;
+	let autoPush = false;
 	let force = false;
 	let engine: Engine | undefined;
 	let useTUI = false;
@@ -1694,6 +1697,8 @@ async function main() {
 			verify = false;
 		} else if (arg === "--no-commit") {
 			autoCommit = false;
+		} else if (arg === "--push") {
+			autoPush = true;
 		} else if (arg === "--force") {
 			force = true;
 		} else if (arg === "--engine" && i + 1 < runArgs.length) {
@@ -1755,7 +1760,7 @@ async function main() {
 			const planContent = fs.readFileSync(planPath, "utf-8");
 			const goal = `Execute the following pre-approved plan:\n\n${planContent}`;
 			const result = await executeTeam(goal, agents, cwd, model, concurrency, {
-				brainstorm: false, research: false, verify, autoCommit,
+				brainstorm: false, research: false, verify, autoCommit, autoPush,
 				replan: true, qualityGate: true, engine: detectEngine(engine),
 				hooks: tuiHooks.length > 0 ? tuiHooks : undefined,
 				onStream: streamLogger,
@@ -1786,6 +1791,7 @@ async function main() {
 			research: !quick,
 			verify: !planOnlyMode && verify,
 			autoCommit: !planOnlyMode && autoCommit,
+			autoPush: !planOnlyMode && autoPush,
 			replan: !planOnlyMode && !quick,
 			qualityGate: !planOnlyMode,
 			engine: resolvedEngine,

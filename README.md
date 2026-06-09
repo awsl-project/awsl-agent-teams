@@ -181,7 +181,8 @@ awsl run "goal" --engine <claude-code|codex|builtin> [options]
 | `--quick` | false | Skip brainstorm & research phases |
 | `--concurrency <n>` | 2 | Max parallel agents per wave (recommended: 3-4 for medium/large projects; see BEST_PRACTICES.md for tuning guide) |
 | `--no-verify` | false | Skip ALL verification: per-task code review, provider verification (tsc, npm test, eslint), and auto-fix loop. Task auto-retry still runs (handles execution failures, not verification) |
-| `--no-commit` | false | Skip git commits |
+| `--no-commit` | false | Skip git commits (commits are always free of any AI attribution) |
+| `--push` | false | Auto-push on full success — current branch only, never `--force`, skips `main`/`master` (see [Auto-Push](#auto-push)) |
 | `--plan-only` | false | Generate plan only, don't execute |
 | `--execute-plan` | false | Execute existing `.planning/PLAN.md` |
 | `--force` | false | Override existing lock |
@@ -830,19 +831,40 @@ Guardian skills auto-activate based on agent role:
 
 | Agent Role | Guardian Skills |
 |------------|----------------|
-| `coder` | TDD (red/green/refactor), Systematic Debug |
+| `coder` | TDD (red/green/refactor), Systematic Debug, Frontend, Backend, Clean Git |
 | `architect` | Socratic Brainstorm |
 | `planner` | Micro-Task Planning |
-| `reviewer` | Per-Task Code Review (git diff + checklist), Quality Gate, Browser Verify |
+| `reviewer` | Per-Task Code Review (git diff + checklist), Quality Gate, Browser Verify, Clean Git |
 | `tester` | Systematic Debug, Browser Verify |
 
+Together they form the full code-editing pipeline: **Frontend / Backend (build)** → **TDD / Systematic Debug (test)** → **Browser Verify (verify)** → **Clean Git (commit & push)**.
+
 **TDD** — Enforces RED-GREEN-REFACTOR. Write failing test first. Minimal code to pass. Refactor.
+
+**Frontend** — Frontend-build discipline: typed components, the four mandatory states (loading / error / empty / success), wiring to the *real* API contract, accessibility + responsive baselines, and matching the existing design instead of a generic AI look. Stores the `preview_url` so **Browser Verify** can confirm it in a real browser.
+
+**Backend** — Backend-build discipline: layered route → service → store separation, schema validation at the boundary (reject with 400, not 500), correct/consistent HTTP status codes, no secrets in code or logs, idempotency and concurrency safety. Pairs with TDD so every endpoint ships with happy-path, validation, not-found, and edge-case tests.
+
+**Clean Git** — Commit hygiene with a hard guarantee of **zero AI attribution**: commit messages never contain `Co-Authored-By: Claude`, `Generated with Claude Code`, robot-emoji trailers, or any "as an AI" / tool reference. Atomic, conventional-commit-style messages; never `--force` to a shared branch; never push to `main`/`master` without confirmation; never `--no-verify`. This is also enforced at the code level — `atomicCommit` runs every message through `sanitizeCommitMessage`, and `--push` uses `safePush` (current branch only, never force, skips protected branches). See **Auto-Push** below.
 
 **Per-Task Code Review** — After each coder task completes, the reviewer immediately receives the actual `git diff` and reads it line-by-line against a specific checklist: design flaws, race conditions, busy-waits, stale locks, delta/merge confusion, missing `finally` blocks, and more. Critical findings block the commit — the task is marked failed before any code is committed. Phase 3 now focuses solely on automated verification (tsc, npm test, eslint).
 
 **Socratic Brainstorm** — Explore requirements through targeted questions. Challenge assumptions. Document decisions.
 
 **Browser Verify** — For frontend tasks, the tester/reviewer doesn't trust source code alone: it drives the user's **real browser** via [`browser-bridge-cli`](https://www.npmjs.com/package/browser-bridge-cli) to open the running page in a fresh tab, assert it renders without a blank screen or framework error overlay, check for failed (4xx/5xx) network requests, and save a screenshot to `.planning/screenshots/`. The preview URL comes from `.awsl.json` → `browser.previewUrl` or the shared-memory key `preview_url`. If the bridge isn't connected, the check is skipped gracefully (it never blocks backend-only projects). This is also enforced as a code-level gate — see the **`browser-verify`** verification provider below.
+
+## Auto-Push
+
+`awsl run "goal" --push` pushes your work to the remote once the **entire** run succeeds (every task done/verified). It is built to be safe by construction:
+
+- **Clean commits** — every commit message is run through `sanitizeCommitMessage`, which strips `Co-Authored-By: Claude`, `Generated with Claude Code`, `🤖` trailers, and any other AI/tool attribution. Legitimate human co-authors are kept. The history shows no trace of the assistant.
+- **Current branch only** — `safePush` pushes the checked-out branch and nothing else (no `--all`, no other refs). A detached HEAD is refused.
+- **Never force** — no `--force` / `--force-with-lease`, ever.
+- **Protected branches** — `main` / `master` are skipped by default (pass `allowProtected` via the API to override). Push your feature branch and open a PR.
+- **First push sets upstream** — if the branch has no upstream, `safePush` runs `git push -u origin <branch>`.
+- **Only on success** — a partial or failed run is never pushed; the broken state stays local so you can resume from the checkpoint.
+
+In sleep mode the queue exposes the same behavior via `--auto-push` (see [Auto-Commit & Auto-Push](#auto-commit--auto-push)).
 
 ## Sandbox (Builtin Engine)
 

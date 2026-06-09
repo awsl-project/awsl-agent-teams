@@ -26,30 +26,41 @@ export const SKILL_TDD: Skill = {
 	activatesFor: ["coder"],
 	instructions: `## Guardian Skill: Test-Driven Development (TDD)
 
-You MUST follow the RED-GREEN-REFACTOR cycle strictly:
+You MUST follow the RED-GREEN-REFACTOR cycle strictly.
 
-### RED Phase
-1. Write a failing test FIRST for the feature/behavior
-2. Run the test — confirm it FAILS (red)
-3. If you wrote implementation code before a test, DELETE it and start over
+### Workflow — One Feature at a Time
 
-### GREEN Phase
-4. Write the MINIMUM code to make the test pass
-5. Run the test — confirm it PASSES (green)
-6. Do NOT add extra functionality beyond what the test requires
+1. **Create the test file FIRST** (e.g. \`foo.test.ts\`) BEFORE creating the implementation file.
+2. Write ONE failing test case for the smallest unit of behavior.
+3. Run the test — confirm it FAILS (red). If it passes, your test is wrong.
+4. Create or edit the implementation file — write the MINIMUM code to make the test pass.
+5. Run the test — confirm it PASSES (green).
+6. Write the NEXT test case. Repeat until the feature is complete.
+7. Refactor while green — clean up, extract, rename. Run tests after each change.
 
-### REFACTOR Phase
-7. Clean up the code while keeping tests green
-8. Extract duplicates, rename for clarity, simplify
-9. Run tests again — confirm still green
-10. Commit
+### Mandatory Test Scenarios
 
-### Rules
-- NEVER write implementation before tests
-- One test at a time — small increments
-- Each commit should have: test + minimal implementation
-- If a test is hard to write, the design needs rethinking
-- Target: every public function/endpoint has a test`,
+For every endpoint/function, you MUST test:
+- **Happy path**: valid input → expected output
+- **Validation**: invalid/missing input → proper error (400, not 500)
+- **Not found**: non-existent resource → 404
+- **Edge cases**: empty string, 0, negative numbers, very long strings, special characters
+- **Idempotency**: calling the same operation twice has expected behavior
+
+### Test Quality Rules
+
+- Each test must have a descriptive name: \`it("returns 404 when todo does not exist")\`
+- Each test must have at least ONE \`expect()\` assertion — no empty test bodies
+- Use \`describe()\` blocks to group related tests
+- Test ONE behavior per test — if a test name has "and", split it
+- Always test the response status code AND the response body
+
+### What Gets You Rejected
+
+- Writing implementation code before the test file exists → task FAILS
+- Zero test files → task FAILS
+- Tests that only check status codes but not response bodies → WARN
+- Tests without descriptive names → WARN`,
 };
 
 export const SKILL_SYSTEMATIC_DEBUG: Skill = {
@@ -117,37 +128,73 @@ export const SKILL_CODE_REVIEW: Skill = {
 	instructions: `## Guardian Skill: Two-Stage Code Review
 
 You will receive the actual git diff or file contents. READ THE CODE LINE BY LINE.
-Do NOT rubber-stamp. If you only check "does it compile?" you are failing at your job.
+Your job is to find REAL bugs — not cosmetic issues.
 
-### Stage 1: Spec Compliance
-1. Does the implementation match the task requirements?
-2. Are all done criteria met?
-3. Are there missing features or incomplete implementations?
+### Stage 1: Spec Compliance (Does it work?)
 
-### Stage 2: Code Quality (read the actual code!)
-4. **Design flaws**: busy-waits, polling loops, missing cleanup/dispose, resource leaks
-5. **Concurrency**: race conditions, missing locks, stale state, deadlock potential
-6. **Error handling**: what happens on crash? partial failure? does it corrupt state?
-7. **Edge cases**: empty input, reconnection, timeout, concurrent access
-8. **Security**: injection, unsafe deserialization, secrets in code, missing validation
-9. **Performance**: O(n²) where O(n) suffices, unnecessary allocations, blocking I/O in async
+Check each requirement from the task description. For each one:
+- Is it implemented? (not "partially" — fully or not)
+- Does the implementation handle the stated edge cases?
+- Would a manual test of this feature pass?
 
-### Common Anti-Patterns to Catch
-- \`while (Date.now() - start < N)\` → busy-wait, use Atomics.wait or setTimeout
-- Lock files without stale detection → process crash leaves permanent lock
-- \`status = newData\` when newData is a delta → overwrites instead of merging
-- Missing finally/cleanup blocks → resource leak on error path
-- Ignoring return values of async operations → silent failures
+If ANY requirement is missing or broken → [FAIL] severity: critical.
 
-### Output Format
-[PASS/FAIL/WARN] task_id: Description (severity: critical/major/minor)
-Location: file:line
-Suggestion: specific fix
+### Stage 2: Bug Hunting (Read every line)
 
-### Quality Gate
-- ANY critical finding → task FAILS (must be fixed before commit)
-- Major findings → WARN (should be fixed)
-- Minor findings → noted but doesn't block`,
+For EACH function/handler in the diff, check:
+
+**A. Input handling:**
+- What happens if the input is undefined/null/empty string/0?
+- What happens if required fields are missing?
+- Is the validation BEFORE the business logic (not after)?
+
+**B. Error paths:**
+- Does every \`try\` have a meaningful \`catch\` (not empty)?
+- Does the error response include useful information (not generic "error")?
+- Can an error leave the system in an inconsistent state?
+
+**C. Return values:**
+- Does every code path return a value (no falling through)?
+- Are HTTP status codes correct? (201 for create, 404 for not found, 400 for bad input)
+- Is the response shape consistent across endpoints?
+
+**D. Data integrity:**
+- Can two concurrent requests corrupt shared state?
+- Does deletion actually remove from the store (not just filter a copy)?
+- Are IDs unique and collision-free?
+
+### Severity Decision Tree
+
+\`\`\`
+Will this cause wrong behavior in production?
+  YES → Is data corrupted or lost?
+    YES → critical
+    NO  → major
+  NO  → Is it misleading to future developers?
+    YES → minor
+    NO  → don't report it
+\`\`\`
+
+### Output Format (STRICT — follow exactly)
+
+For each finding:
+\`\`\`
+[FAIL] task_id: <one-line description> (severity: critical)
+Location: file.ts:42
+Bug: <what goes wrong and when>
+Fix: <specific code change>
+\`\`\`
+
+If no issues found:
+\`\`\`
+[PASS] task_id: All requirements met, code quality acceptable
+\`\`\`
+
+### What is NOT a finding
+- Style preferences (single vs double quotes, trailing commas)
+- Missing JSDoc comments
+- "Could be more efficient" without a concrete performance problem
+- Unused imports (linter catches these)`,
 };
 
 export const SKILL_BROWSER_VERIFY: Skill = {
@@ -217,31 +264,167 @@ screenshot are safe. Do NOT submit forms, click buy/pay/send, or change account 
 to "verify" unless the task explicitly requires it and you note it in your report.`,
 };
 
+export const SKILL_FRONTEND: Skill = {
+	name: "frontend",
+	description: "Frontend implementation discipline — structure, a11y, states, API wiring",
+	activatesFor: ["coder"],
+	instructions: `## Guardian Skill: Frontend Implementation
+
+When the task builds a **UI** (HTML/CSS/React/Vue/Svelte/etc.), follow this discipline.
+This skill pairs with \`browser-verify\` — you BUILD here, the tester/reviewer VERIFIES in a
+real browser. Make their job possible: leave a runnable page and a known preview URL.
+
+### Component structure
+- One component = one responsibility. Type every prop/input; no untyped \`any\` props.
+- Derive state, don't duplicate it. Lift state only as high as it must go.
+- Keep side effects (fetch, subscriptions) out of render; clean them up on unmount.
+
+### The four states are MANDATORY (not just the happy path)
+For anything that loads data, you MUST handle and render:
+1. **loading** — a spinner/skeleton, never a blank frozen screen
+2. **error** — a readable message + a retry path, never a silent failure
+3. **empty** — a deliberate "nothing here yet" state, never a broken-looking blank
+4. **success** — the actual content
+
+### Wire to the REAL contract
+- Match the backend's actual response shape and types. Do NOT invent or hardcode a shape.
+- Read the API types/schema (or the \`backend\` agent's output in shared memory) first.
+- Handle non-2xx responses; don't assume every request succeeds.
+
+### Accessibility & responsiveness (baseline, not optional)
+- Semantic HTML (\`button\`, \`label\`, \`nav\`, \`main\`); every input has a label; images have alt.
+- Keyboard-operable: focus states visible, no mouse-only interactions.
+- Mobile-first / responsive — no fixed-pixel layouts that overflow on small screens.
+
+### Match the existing design, avoid generic AI look
+- Reuse the project's existing design tokens, components, and styling approach.
+- Do NOT introduce a new UI library or a generic purple-gradient template unasked.
+
+### Hand off to verification
+After the page builds, start (or confirm) a dev server and store the URL so the
+verification gate and reviewers can reuse it:
+\`memory_write preview_url "http://localhost:5173"\`. A frontend task is NOT done until
+a \`browser-verify\` pass exists (or a documented skip reason).`,
+};
+
+export const SKILL_BACKEND: Skill = {
+	name: "backend",
+	description: "Backend implementation discipline — layering, validation, status codes, safety",
+	activatesFor: ["coder"],
+	instructions: `## Guardian Skill: Backend Implementation
+
+When the task builds an **API / server / data layer**, follow this discipline.
+This skill pairs with \`tdd\` — write the test first, then the minimal handler.
+
+### Layering — keep concerns separate
+- route/controller → service → store/model. HTTP concerns (req/res/status) live ONLY in
+  the route layer. The service layer takes plain args and returns plain values/throws.
+- Don't reach across layers (no SQL in a route handler, no \`res.send\` in a service).
+
+### Validate at the boundary, BEFORE business logic
+- Parse/validate every input with a schema at the edge. Reject bad input with **400**,
+  never let it reach the DB and surface as a 500.
+- Treat all client input as hostile: missing fields, wrong types, empty string, 0,
+  negative, oversized, and injection payloads.
+
+### Correct, consistent HTTP semantics
+- Status codes: 200 read · 201 create · 204 delete · 400 bad input · 401 unauthenticated ·
+  403 forbidden · 404 not found · 409 conflict · 422 unprocessable · 500 unexpected.
+- One consistent response envelope across endpoints; errors carry a stable \`code\` +
+  human message. NEVER leak stack traces, SQL, or internal paths to the client.
+
+### Safety
+- No secrets in code or logs — read from env/config; never log tokens, passwords, PII.
+- Guard shared state against concurrent writes (atomic ops / transactions); don't
+  read-modify-write without protection.
+- Make mutations idempotent where a retry could double-apply (payments, sends, creates).
+- Schema/migrations are explicit and reversible; never mutate prod data ad hoc.
+
+### Done means tested
+Every endpoint has tests for happy path, validation failure (400), not-found (404),
+and at least one edge case — see the \`tdd\` skill.`,
+};
+
+export const SKILL_CLEAN_GIT: Skill = {
+	name: "commit",
+	description: "Clean git hygiene — atomic commits, zero AI attribution, safe push",
+	activatesFor: ["coder", "reviewer"],
+	instructions: `## Guardian Skill: Clean Git Hygiene
+
+The Conductor commits per task/wave and pushes for you. Your job is to leave a clean,
+reviewable working tree — and if you ever do touch git directly, leave NO trace that an
+assistant was involved.
+
+### Default: don't touch git yourself
+- Do NOT run \`git commit\`, \`git push\`, \`git reset\`, or \`git rebase\` unless the task
+  explicitly tells you to. The orchestrator stages your declared files and commits them.
+- Keep your changes scoped to the files the task declared — don't leave unrelated edits.
+
+### If you DO commit — the message must look human-authored
+- NEVER add \`Co-Authored-By: Claude\` (or any \`...@anthropic.com\` co-author).
+- NEVER add \`Generated with Claude Code\`, a \`🤖\` trailer, or any "as an AI" / tool /
+  model attribution anywhere in the subject or body.
+- Conventional-commit style: \`type(scope): summary\` where type ∈
+  feat·fix·refactor·test·docs·chore·build·perf. Imperative mood, subject ≤ 72 chars.
+- One logical change per commit. Explain the WHY in the body when it isn't obvious.
+
+### Pushing is dangerous — hard rules
+- NEVER \`git push --force\` / \`--force-with-lease\` to a shared branch.
+- NEVER push directly to \`main\` / \`master\` without explicit confirmation; push the
+  working branch and let a human open the PR.
+- NEVER use \`--no-verify\` — do not skip commit/push hooks.
+
+### Never commit
+- Secrets, \`.env\`, credentials, tokens.
+- Build artifacts, \`node_modules\`, large binaries — respect \`.gitignore\`.`,
+};
+
 export const SKILL_PLANNING: Skill = {
 	name: "planning",
 	description: "Break work into micro-tasks with verify criteria",
 	activatesFor: ["planner"],
 	instructions: `## Guardian Skill: Micro-Task Planning
 
-Each task you create should be completable in 2-5 minutes by an agent.
-
 ### Task Sizing Rules
-- ONE deliverable per task (one function, one endpoint, one component)
+- ONE deliverable per task — one function, one endpoint, one component
 - MAX 2-3 files modified per task
-- Each task independently verifiable
-- Each task independently committable
+- Each task independently verifiable and committable
+- Tasks in the same wave MUST be independent (no shared file writes)
 
-### Task Quality Checklist
-- [ ] Clear action (what to do, not what to think about)
-- [ ] Specific files listed
-- [ ] Concrete verify step (test command or check)
-- [ ] Definition of done (observable outcome)
-- [ ] Dependencies are minimal and explicit
+### Every Task MUST Have These Fields
+
+\`\`\`json
+{
+  "id": "task_N",
+  "description": "Create POST /todos endpoint with Zod validation",
+  "assignee": "coder",
+  "dependencies": ["task_1"],
+  "files": ["src/routes/todos.ts", "src/routes/todos.test.ts"],
+  "verify": "npx vitest run src/routes/todos.test.ts",
+  "doneCriteria": "POST /todos returns 201 with valid input, 400 with invalid input. Tests pass."
+}
+\`\`\`
+
+### Verify Field Rules
+- MUST be a runnable command (not prose)
+- MUST target the specific test file for this task
+- Good: \`npx vitest run src/store.test.ts\`
+- Bad: \`check that it works\` or \`npm test\` (too broad)
+
+### Task Ordering Template
+
+For a typical REST API, use this wave structure:
+1. **Wave 1** (parallel): project setup + types/schemas + store/model
+2. **Wave 2** (parallel): route handlers (one task per endpoint group)
+3. **Wave 3** (parallel): middleware + error handling
+4. **Wave 4**: integration tests (depends on all routes)
+5. **Wave 5**: final cleanup + documentation
 
 ### Anti-Patterns
-- "Implement the auth module" ← too big, split into: schema, handler, middleware, tests
-- "Set up the project" ← vague, be specific: init package.json, add tsconfig, create entry point
-- Task with 5+ dependencies ← redesign to parallelize more`,
+- "Implement the auth module" → split into: schemas, store, register endpoint, login endpoint, auth middleware, tests
+- "Set up the project" → specify exactly: init package.json with dependencies X Y Z, create tsconfig with strict:true, create src/index.ts entry point
+- Task with 5+ dependencies → redesign to parallelize
+- Two tasks writing the same file → merge into one or create interface first`,
 };
 
 export const SKILL_SUBAGENT_DEV: Skill = {
@@ -276,6 +459,9 @@ const BUILTIN_SKILLS: Skill[] = [
 	SKILL_BRAINSTORM,
 	SKILL_CODE_REVIEW,
 	SKILL_BROWSER_VERIFY,
+	SKILL_FRONTEND,
+	SKILL_BACKEND,
+	SKILL_CLEAN_GIT,
 	SKILL_PLANNING,
 	SKILL_SUBAGENT_DEV,
 ];

@@ -181,7 +181,8 @@ awsl run "目标" --engine <claude-code|codex|builtin> [选项]
 | `--quick` | false | 跳过头脑风暴和调研阶段 |
 | `--concurrency <n>` | 2 | 每波次最大并行智能体数（推荐中大型项目用 3-4；详见 BEST_PRACTICES.md 并发调优章节） |
 | `--no-verify` | false | 跳过所有验证步骤：逐任务代码审查、代码验证 (tsc、npm test、eslint) 和自动修复循环。任务自动重试仍然运行（处理执行失败而非验证） |
-| `--no-commit` | false | 跳过 git 提交 |
+| `--no-commit` | false | 跳过 git 提交（提交信息始终不含任何 AI 痕迹） |
+| `--push` | false | 全部成功后自动推送 —— 只推当前分支、绝不 `--force`、跳过 `main`/`master`（见 [自动推送](#自动推送)） |
 | `--plan-only` | false | 仅生成计划，不执行 |
 | `--execute-plan` | false | 执行已有的 `.planning/PLAN.md` |
 | `--force` | false | 覆盖已有锁 |
@@ -824,19 +825,40 @@ Guardian 技能根据智能体角色自动激活：
 
 | 智能体角色 | Guardian 技能 |
 |------------|----------------|
-| `coder` | TDD（红/绿/重构）、系统化调试 |
+| `coder` | TDD（红/绿/重构）、系统化调试、前端实现、后端实现、洁净 Git |
 | `architect` | 苏格拉底式头脑风暴 |
 | `planner` | 微任务规划 |
-| `reviewer` | 逐任务代码审查（git diff + 反模式清单）、质量门禁、浏览器验证 |
+| `reviewer` | 逐任务代码审查（git diff + 反模式清单）、质量门禁、浏览器验证、洁净 Git |
 | `tester` | 系统化调试、浏览器验证 |
 
+这些技能合在一起构成完整的代码编辑流水线：**前端 / 后端（编写）** → **TDD / 系统化调试（测试）** → **浏览器验证（验证）** → **洁净 Git（提交并推送）**。
+
 **TDD** — 强制执行 红-绿-重构。先写失败测试，最少代码使其通过，然后重构。
+
+**前端实现** — 前端编写纪律：组件 props 全部带类型、强制四种状态（加载 / 错误 / 空 / 成功）、对接**真实**的 API 契约、无障碍与响应式基线，并复用项目已有设计而非套用千篇一律的 AI 模板。会把 `preview_url` 写入共享内存，供**浏览器验证**在真实浏览器中确认。
+
+**后端实现** — 后端编写纪律：route → service → store 分层、在边界处做 schema 校验（非法输入返回 400 而非 500）、HTTP 状态码正确且一致、代码与日志中绝不出现密钥、幂等与并发安全。与 TDD 配合，每个端点都带 happy-path、校验失败、未找到、边界用例的测试。
+
+**洁净 Git** — 提交纪律，硬性保证**零 AI 痕迹**：提交信息绝不包含 `Co-Authored-By: Claude`、`Generated with Claude Code`、🤖 机器人尾注或任何"作为 AI" / 工具引用。原子化、conventional-commit 风格；绝不向共享分支 `--force`；未经确认绝不推送 `main`/`master`；绝不 `--no-verify`。这同时在代码级强制执行 —— `atomicCommit` 会把每条信息过一遍 `sanitizeCommitMessage`，`--push` 走 `safePush`（只推当前分支、绝不 force、跳过受保护分支）。见下方 **自动推送**。
 
 **逐任务代码审查** — 每个编码任务完成后，审查者立即收到真实 `git diff`，逐行检查反模式清单：设计缺陷、竞态条件、busy-wait、过期锁、delta/merge 混淆、缺失 `finally` 块等。严重发现在代码提交前就阻断任务。阶段 3 现在专注于自动化验证（tsc、npm test、eslint）。
 
 **苏格拉底式头脑风暴** — 通过针对性问题探索需求，挑战假设，记录决策。
 
 **浏览器验证** — 对于前端任务，tester/reviewer 不只看源码：它通过 [`browser-bridge-cli`](https://www.npmjs.com/package/browser-bridge-cli) 驱动用户的**真实浏览器**，在新标签页打开正在运行的页面，断言其正常渲染（非空白、无框架报错遮罩）、检查失败的 4xx/5xx 网络请求，并把截图保存到 `.planning/screenshots/`。预览地址来自 `.awsl.json` 的 `browser.previewUrl` 或共享内存键 `preview_url`。若桥接未连接则优雅跳过（绝不阻塞纯后端项目）。这同时作为代码级门禁强制执行 —— 见下方 **`browser-verify`** 验证器 provider。
+
+## 自动推送
+
+`awsl run "目标" --push` 会在**整个**任务流全部成功后（每个任务都 done/verified）把成果推送到远端。它在设计上就是安全的：
+
+- **洁净提交** — 每条提交信息都会经过 `sanitizeCommitMessage`，剥除 `Co-Authored-By: Claude`、`Generated with Claude Code`、`🤖` 尾注以及任何 AI/工具署名；合法的人类 co-author 会保留。历史中看不到任何助手痕迹。
+- **只推当前分支** — `safePush` 只推送当前检出的分支，不推其他引用（无 `--all`）；游离 HEAD 会被拒绝。
+- **绝不 force** — 永远不用 `--force` / `--force-with-lease`。
+- **受保护分支** — 默认跳过 `main` / `master`（可通过 API 的 `allowProtected` 覆盖）。请推送特性分支并发 PR。
+- **首次推送自动设上游** — 分支无上游时执行 `git push -u origin <branch>`。
+- **仅成功时推送** — 部分成功或失败的任务流绝不推送，损坏状态留在本地以便从检查点恢复。
+
+睡眠模式下队列通过 `--auto-push` 提供相同行为（见 [自动提交与自动推送](#自动提交与自动推送)）。
 
 ## 沙箱（内置引擎）
 

@@ -4,7 +4,7 @@
  * Run: npx tsx src/skills.test.ts
  */
 
-import { SkillRegistry, SKILL_BROWSER_VERIFY } from "./skills.js";
+import { SkillRegistry, SKILL_BROWSER_VERIFY, SKILL_FRONTEND, SKILL_BACKEND, SKILL_CLEAN_GIT } from "./skills.js";
 
 // ─── Test helpers ────────────────────────────────────────────
 
@@ -62,6 +62,41 @@ function testExplicitSkillStillWorks() {
 	console.log("✓ testExplicitSkillStillWorks");
 }
 
+function testFrontendBackendActivateForCoder() {
+	const reg = new SkillRegistry();
+	assertEqual(SKILL_FRONTEND.name, "frontend", "frontend skill name");
+	assertEqual(SKILL_BACKEND.name, "backend", "backend skill name");
+	assert(reg.forRole("coder").some(s => s.name === "frontend"), "coder gets frontend");
+	assert(reg.forRole("coder").some(s => s.name === "backend"), "coder gets backend");
+	// Frontend pairs with browser-verify; backend pairs with tdd
+	assert(SKILL_FRONTEND.instructions.includes("browser-verify"), "frontend references browser-verify");
+	assert(SKILL_BACKEND.instructions.includes("tdd"), "backend references tdd");
+	console.log("✓ testFrontendBackendActivateForCoder");
+}
+
+function testCleanGitSkill() {
+	const reg = new SkillRegistry();
+	assertEqual(SKILL_CLEAN_GIT.name, "commit", "clean-git skill name");
+	assert(reg.get("commit") !== undefined, "registry has commit skill");
+	assert(reg.forRole("coder").some(s => s.name === "commit"), "coder gets commit");
+	assert(reg.forRole("reviewer").some(s => s.name === "commit"), "reviewer gets commit");
+	// The whole point: it forbids AI attribution in commit messages.
+	const i = SKILL_CLEAN_GIT.instructions;
+	assert(/Co-Authored-By: Claude/i.test(i), "commit skill names the Co-Authored-By trailer to forbid");
+	assert(/Generated with Claude Code/i.test(i), "commit skill names the Generated-with line to forbid");
+	assert(/--force/i.test(i), "commit skill forbids force push");
+	console.log("✓ testCleanGitSkill");
+}
+
+function testNewSkillsInBuildInstructionsForCoder() {
+	const reg = new SkillRegistry();
+	const instr = reg.buildInstructions("coder");
+	assert(instr.includes("Frontend Implementation"), "coder instructions include Frontend Implementation");
+	assert(instr.includes("Backend Implementation"), "coder instructions include Backend Implementation");
+	assert(instr.includes("Clean Git Hygiene"), "coder instructions include Clean Git Hygiene");
+	console.log("✓ testNewSkillsInBuildInstructionsForCoder");
+}
+
 // ─── Runner ──────────────────────────────────────────────────
 
 const tests = [
@@ -71,6 +106,9 @@ const tests = [
 	testDoesNotActivateForCoder,
 	testBuildInstructionsInjectsForTester,
 	testExplicitSkillStillWorks,
+	testFrontendBackendActivateForCoder,
+	testCleanGitSkill,
+	testNewSkillsInBuildInstructionsForCoder,
 ];
 
 let passed = 0;

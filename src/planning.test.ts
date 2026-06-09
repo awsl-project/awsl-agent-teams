@@ -1,6 +1,39 @@
 import { test } from "node:test";
 import * as assert from "node:assert/strict";
-import { parseStructuredTasks, parseStructuredTasksChecked, detectDependencyCycles, type StructuredTask } from "./planning.js";
+import { parseStructuredTasks, parseStructuredTasksChecked, detectDependencyCycles, sanitizeCommitMessage, type StructuredTask } from "./planning.js";
+
+test("sanitizeCommitMessage strips Co-Authored-By: Claude trailer", () => {
+	const raw = "feat: add login\n\nCo-Authored-By: Claude <noreply@anthropic.com>";
+	const out = sanitizeCommitMessage(raw);
+	assert.equal(out, "feat: add login");
+	assert.ok(!/claude/i.test(out));
+	assert.ok(!/anthropic/i.test(out));
+});
+
+test("sanitizeCommitMessage strips Generated with Claude Code + robot emoji", () => {
+	const raw = "fix: handle empty input\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)";
+	const out = sanitizeCommitMessage(raw);
+	assert.equal(out, "fix: handle empty input");
+	assert.ok(!/claude/i.test(out));
+	assert.ok(!/🤖/.test(out));
+});
+
+test("sanitizeCommitMessage keeps a clean human message untouched", () => {
+	const raw = "refactor(store): extract validation helper";
+	assert.equal(sanitizeCommitMessage(raw), raw);
+});
+
+test("sanitizeCommitMessage keeps legitimate human co-authors", () => {
+	const raw = "feat: pairing work\n\nCo-Authored-By: Alice <alice@example.com>";
+	const out = sanitizeCommitMessage(raw);
+	assert.ok(out.includes("Co-Authored-By: Alice <alice@example.com>"));
+});
+
+test("sanitizeCommitMessage collapses blank lines left by stripping", () => {
+	const raw = "feat: thing\n\n\n🤖 Generated with Claude Code\n\n";
+	const out = sanitizeCommitMessage(raw);
+	assert.equal(out, "feat: thing");
+});
 
 test("detectDependencyCycles returns no cycles for valid DAG", () => {
 	const tasks: StructuredTask[] = [
